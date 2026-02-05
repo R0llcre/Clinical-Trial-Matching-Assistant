@@ -14,13 +14,20 @@ router = APIRouter()
 _ENGINE: Optional[Engine] = None
 
 
+def _normalize_db_url(database_url: str) -> str:
+    # Force psycopg driver instead of SQLAlchemy's psycopg2 default.
+    if database_url.startswith("postgresql://"):
+        return database_url.replace("postgresql://", "postgresql+psycopg://", 1)
+    return database_url
+
+
 def _get_engine() -> Engine:
     global _ENGINE
     if _ENGINE is None:
         database_url = os.getenv("DATABASE_URL")
         if not database_url:
             raise RuntimeError("DATABASE_URL not set")
-        _ENGINE = create_engine(database_url, pool_pre_ping=True)
+        _ENGINE = create_engine(_normalize_db_url(database_url), pool_pre_ping=True)
     return _ENGINE
 
 

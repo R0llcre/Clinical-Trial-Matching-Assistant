@@ -32,10 +32,14 @@ def main() -> None:
     page_limit = _env_int("SYNC_PAGE_LIMIT", 1)
     page_size = _env_int("SYNC_PAGE_SIZE", 100)
     interval_seconds = _env_int("SYNC_INTERVAL_SECONDS", 3600)
+    failure_retry_seconds = _env_int("SYNC_FAILURE_RETRY_SECONDS", 30)
     run_once = _env_bool("SYNC_RUN_ONCE", False)
 
     logger.info(
-        "worker started condition=%s status=%s page_limit=%s page_size=%s run_once=%s",
+        (
+            "worker started condition=%s status=%s page_limit=%s page_size=%s "
+            "run_once=%s"
+        ),
         condition,
         status,
         page_limit,
@@ -60,6 +64,10 @@ def main() -> None:
             )
         except Exception:
             logger.exception("sync run failed")
+            if run_once:
+                break
+            time.sleep(failure_retry_seconds)
+            continue
 
         if run_once:
             break
