@@ -88,7 +88,7 @@ export default function Home() {
   return (
     <main>
       <header className="page-header">
-        <span className="kicker">Trial Browse</span>
+        <span className="kicker">Clinical Trial Matching Assistant</span>
         <h1 className="title">Find the right clinical trials, faster.</h1>
         <p className="subtitle">
           Search ClinicalTrials.gov data, review eligibility text, and share

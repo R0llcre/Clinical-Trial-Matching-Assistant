@@ -6,6 +6,10 @@ from app.routes import trials as trials_module
 
 def test_list_trials_ok(monkeypatch) -> None:
     captured = {}
+    schema_checked = {"ok": False}
+
+    def _fake_ensure(engine):
+        schema_checked["ok"] = True
 
     def _fake_search(
         engine,
@@ -47,6 +51,7 @@ def test_list_trials_ok(monkeypatch) -> None:
 
     monkeypatch.setattr(trials_module, "_search_trials", _fake_search)
     monkeypatch.setattr(trials_module, "_get_engine", lambda: object())
+    monkeypatch.setattr(trials_module, "_ensure_trials_table", _fake_ensure)
 
     client = TestClient(app)
     response = client.get("/api/trials?condition=diabetes&page=2&page_size=5")
@@ -61,6 +66,7 @@ def test_list_trials_ok(monkeypatch) -> None:
     assert captured["condition"] == "diabetes"
     assert captured["page"] == 2
     assert captured["page_size"] == 5
+    assert schema_checked["ok"] is True
 
 
 def test_list_trials_validation_error() -> None:
@@ -74,6 +80,11 @@ def test_list_trials_validation_error() -> None:
 
 
 def test_get_trial_ok(monkeypatch) -> None:
+    schema_checked = {"ok": False}
+
+    def _fake_ensure(engine):
+        schema_checked["ok"] = True
+
     def _fake_get(engine, nct_id):
         return {
             "nct_id": nct_id,
@@ -89,6 +100,7 @@ def test_get_trial_ok(monkeypatch) -> None:
 
     monkeypatch.setattr(trials_module, "_get_trial", _fake_get)
     monkeypatch.setattr(trials_module, "_get_engine", lambda: object())
+    monkeypatch.setattr(trials_module, "_ensure_trials_table", _fake_ensure)
 
     client = TestClient(app)
     response = client.get("/api/trials/NCT999")
@@ -97,11 +109,13 @@ def test_get_trial_ok(monkeypatch) -> None:
     payload = response.json()
     assert payload["ok"] is True
     assert payload["data"]["eligibility_text"] == "Eligibility"
+    assert schema_checked["ok"] is True
 
 
 def test_get_trial_not_found(monkeypatch) -> None:
     monkeypatch.setattr(trials_module, "_get_trial", lambda engine, nct_id: None)
     monkeypatch.setattr(trials_module, "_get_engine", lambda: object())
+    monkeypatch.setattr(trials_module, "_ensure_trials_table", lambda engine: None)
 
     client = TestClient(app)
     response = client.get("/api/trials/NCT404")

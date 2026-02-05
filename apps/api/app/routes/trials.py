@@ -13,6 +13,25 @@ router = APIRouter()
 
 _ENGINE: Optional[Engine] = None
 
+_CREATE_TRIALS_TABLE_SQL = """
+CREATE TABLE IF NOT EXISTS trials (
+  id UUID PRIMARY KEY,
+  nct_id TEXT UNIQUE NOT NULL,
+  title TEXT NOT NULL,
+  conditions TEXT[],
+  status TEXT,
+  phase TEXT,
+  eligibility_text TEXT,
+  locations_json JSONB,
+  raw_json JSONB NOT NULL,
+  fetched_at TIMESTAMP NOT NULL,
+  data_timestamp TIMESTAMP NOT NULL,
+  source_version TEXT,
+  created_at TIMESTAMP NOT NULL,
+  updated_at TIMESTAMP NOT NULL
+)
+"""
+
 
 def _normalize_db_url(database_url: str) -> str:
     # Force psycopg driver instead of SQLAlchemy's psycopg2 default.
@@ -29,6 +48,11 @@ def _get_engine() -> Engine:
             raise RuntimeError("DATABASE_URL not set")
         _ENGINE = create_engine(_normalize_db_url(database_url), pool_pre_ping=True)
     return _ENGINE
+
+
+def _ensure_trials_table(engine: Engine) -> None:
+    with engine.begin() as conn:
+        conn.exec_driver_sql(_CREATE_TRIALS_TABLE_SQL)
 
 
 def _error(
@@ -207,6 +231,7 @@ def list_trials(
 
     try:
         engine = _get_engine()
+        _ensure_trials_table(engine)
         trials, total = _search_trials(
             engine,
             condition=condition,
@@ -236,6 +261,7 @@ def get_trial(nct_id: str):
     """Return trial details for a specific NCT ID."""
     try:
         engine = _get_engine()
+        _ensure_trials_table(engine)
         trial = _get_trial(engine, nct_id)
     except (SQLAlchemyError, RuntimeError) as exc:
         return _error("EXTERNAL_API_ERROR", f"Database unavailable: {exc}", 503)
