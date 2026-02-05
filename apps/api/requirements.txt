@@ -1,2 +1,4 @@
 fastapi>=0.100
 uvicorn[standard]>=0.23
+psycopg[binary]>=3.1
+redis>=5.0
