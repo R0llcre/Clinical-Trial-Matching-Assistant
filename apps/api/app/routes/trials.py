@@ -187,6 +187,7 @@ def list_trials(
     page: Optional[str] = None,
     page_size: Optional[str] = None,
 ):
+    """Return a filtered, paginated trial list."""
     try:
         page_num, page_size_num = _parse_pagination(page, page_size)
     except (ValueError, TypeError):
@@ -225,6 +226,7 @@ def list_trials(
 
 @router.get("/api/trials/{nct_id}")
 def get_trial(nct_id: str):
+    """Return trial details for a specific NCT ID."""
     try:
         engine = _get_engine()
         trial = _get_trial(engine, nct_id)
