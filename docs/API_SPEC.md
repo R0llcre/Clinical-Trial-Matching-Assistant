@@ -15,6 +15,7 @@ NOT_FOUND 资源不存在
 EXTERNAL_API_ERROR 外部 API 错误
 RATE_LIMITED 触发限流
 PARSER_FAILED 解析失败
+TRIAL_NOT_FOUND 试验不存在
 
 **Trials**
 GET /api/trials
@@ -41,7 +42,7 @@ GET /api/trials/{nct_id}
 输出
 - TrialDetail
 错误
-- NOT_FOUND
+- TRIAL_NOT_FOUND
 
 **Patients**
 POST /api/patients
