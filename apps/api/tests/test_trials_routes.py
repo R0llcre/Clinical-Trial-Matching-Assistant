@@ -123,4 +123,4 @@ def test_get_trial_not_found(monkeypatch) -> None:
     assert response.status_code == 404
     payload = response.json()
     assert payload["ok"] is False
-    assert payload["error"]["code"] == "NOT_FOUND"
+    assert payload["error"]["code"] == "TRIAL_NOT_FOUND"

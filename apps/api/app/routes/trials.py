@@ -267,6 +267,11 @@ def get_trial(nct_id: str):
         return _error("EXTERNAL_API_ERROR", f"Database unavailable: {exc}", 503)
 
     if not trial:
-        return _error("NOT_FOUND", "trial not found", 404, {"nct_id": nct_id})
+        return _error(
+            "TRIAL_NOT_FOUND",
+            "trial not found",
+            404,
+            {"nct_id": nct_id},
+        )
 
     return _ok(trial)
