@@ -466,6 +466,7 @@ def build_round_batch(
     likely2_quota: int,
     likely1_quota: int,
     hard_negative_quota: int,
+    task_id_prefix: str = "relevance-v2r1",
 ) -> Tuple[List[Dict[str, Any]], Dict[str, Any]]:
     by_query: Dict[str, Dict[str, List[Dict[str, Any]]]] = defaultdict(
         lambda: {"likely_2": [], "likely_1": [], "hard_negative": []}
@@ -521,7 +522,7 @@ def build_round_batch(
     batch_rows: List[Dict[str, Any]] = []
     for idx, row in enumerate(selected, start=1):
         batch_row = dict(row)
-        batch_row["task_id"] = f"relevance-v2r1-{idx:05d}"
+        batch_row["task_id"] = f"{task_id_prefix}-{idx:05d}"
         batch_rows.append(batch_row)
 
     summary["total_rows"] = len(batch_rows)
@@ -560,6 +561,7 @@ def main() -> None:
     parser.add_argument("--likely2-quota", type=int, default=20)
     parser.add_argument("--likely1-quota", type=int, default=30)
     parser.add_argument("--hard-negative-quota", type=int, default=20)
+    parser.add_argument("--task-id-prefix", default="relevance-v2r1")
     args = parser.parse_args()
 
     if args.page_size < 1:
@@ -609,6 +611,7 @@ def main() -> None:
         likely2_quota=args.likely2_quota,
         likely1_quota=args.likely1_quota,
         hard_negative_quota=args.hard_negative_quota,
+        task_id_prefix=args.task_id_prefix,
     )
 
     output_pending = Path(args.output_pending)
@@ -635,6 +638,7 @@ def main() -> None:
                 "likely_1": args.likely1_quota,
                 "hard_negative": args.hard_negative_quota,
             },
+            "task_id_prefix": args.task_id_prefix,
             "query_summary": batch_summary["queries"],
         },
     }

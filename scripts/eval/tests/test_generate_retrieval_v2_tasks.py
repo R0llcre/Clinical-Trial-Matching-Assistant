@@ -87,6 +87,28 @@ def test_build_round_batch_respects_per_query_target_and_fallback() -> None:
     assert {row["nct_id"] for row in batch} == {"N1", "N2", "N3"}
 
 
+def test_build_round_batch_supports_custom_task_id_prefix() -> None:
+    pending_rows = [
+        {
+            "query_id": "Q1",
+            "nct_id": "N1",
+            "band": "likely_2",
+            "heuristic_score": 10.0,
+        }
+    ]
+
+    batch, _ = build_round_batch(
+        pending_rows,
+        target_per_query=1,
+        likely2_quota=1,
+        likely1_quota=0,
+        hard_negative_quota=0,
+        task_id_prefix="relevance-v2r2",
+    )
+
+    assert batch[0]["task_id"] == "relevance-v2r2-00001"
+
+
 def test_load_excluded_pairs_reads_query_nct_keys(tmp_path: Path) -> None:
     path = tmp_path / "exclude.jsonl"
     rows = [

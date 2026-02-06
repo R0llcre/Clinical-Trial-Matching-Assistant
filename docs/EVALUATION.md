@@ -80,3 +80,11 @@ Evaluation
 **V2 复核任务（adjudication）**
 - 从 `annotator_b` 标注中自动抽取复核集（默认规则：全部 label=2 + 每 query 最多 15 条 likely_2 但被标为 1）
 - `python3 scripts/eval/generate_relevance_adjudication_tasks.py --labels eval/annotations/relevance.v2.round1.annotator_b.jsonl --tasks eval/annotation_tasks/relevance.batch_v2_round1.700.jsonl --likely2-label1-per-query 15 --output-jsonl eval/annotation_tasks/relevance.v2.round1.adjudication.annotator_a.jsonl --output-manifest eval/annotation_tasks/manifest.relevance.v2.round1.adjudication.json`
+
+**V2 复核结果回写（生成 round1 final）**
+- 将复核文件覆盖到 round1 基线标签，产出可直接用于评估的 final 文件
+- `python3 scripts/eval/apply_relevance_adjudication.py --base eval/annotations/relevance.v2.round1.annotator_b.jsonl --adjudication eval/annotations/relevance.v2.round1.adjudication.annotator_a.jsonl --output-jsonl eval/annotations/relevance.v2.round1.final.jsonl --output-manifest eval/annotations/manifest.relevance.v2.round1.final.json`
+
+**V2 round2（提高 1/2 密度）**
+- 基于 AACT 重新采样并排除已标注 pair，建议提高 `likely_2` 配额、降低 hard negative
+- `python3 scripts/eval/generate_retrieval_v2_tasks_aact.py --aact-zip /tmp/aact/aact_flatfiles_latest.zip --queries eval/data/queries.jsonl --exclude eval/annotations/relevance.v2.round1.final.jsonl --max-candidates-per-query 1000 --background-per-query 40 --target-per-query 70 --likely2-quota 40 --likely1-quota 25 --hard-negative-quota 5 --task-id-prefix relevance-v2r2 --output-pending eval/annotation_tasks/relevance.pending.v2.round2.jsonl --output-batch eval/annotation_tasks/relevance.batch_v2_round2.700.jsonl --output-manifest eval/annotation_tasks/manifest.relevance_v2_round2.json`

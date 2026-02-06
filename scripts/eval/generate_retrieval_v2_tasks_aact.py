@@ -268,6 +268,7 @@ def main() -> None:
     parser.add_argument("--likely2-quota", type=int, default=20)
     parser.add_argument("--likely1-quota", type=int, default=30)
     parser.add_argument("--hard-negative-quota", type=int, default=20)
+    parser.add_argument("--task-id-prefix", default="relevance-v2r1")
     args = parser.parse_args()
 
     aact_zip = Path(args.aact_zip)
@@ -305,6 +306,7 @@ def main() -> None:
         likely2_quota=args.likely2_quota,
         likely1_quota=args.likely1_quota,
         hard_negative_quota=args.hard_negative_quota,
+        task_id_prefix=args.task_id_prefix,
     )
 
     output_pending = Path(args.output_pending)
@@ -336,6 +338,7 @@ def main() -> None:
                 "likely_1": args.likely1_quota,
                 "hard_negative": args.hard_negative_quota,
             },
+            "task_id_prefix": args.task_id_prefix,
             "query_summary": batch_summary["queries"],
         },
     }

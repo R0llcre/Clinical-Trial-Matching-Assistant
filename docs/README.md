@@ -25,6 +25,7 @@ Docs Index
 - ../scripts/eval/generate_retrieval_v2_tasks.py CTGov API 扩池与分层任务生成脚本
 - ../scripts/eval/generate_retrieval_v2_tasks_aact.py AACT 快照扩池与分层任务生成脚本
 - ../scripts/eval/generate_relevance_adjudication_tasks.py 检索标签复核任务生成脚本
+- ../scripts/eval/apply_relevance_adjudication.py 复核结果回写与 final 标签生成脚本
 - ../eval/data/queries.jsonl M4 查询样本集
 - ../eval/data/trials_sample.jsonl M4 试验解析样本集
 - ../eval/data/patients.jsonl M4 合成患者样本集
