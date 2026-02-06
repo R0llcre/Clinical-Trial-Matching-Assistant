@@ -5,6 +5,16 @@ import pytest
 from services import llm_eligibility_parser as parser
 
 
+def test_parse_criteria_llm_v1_disabled_by_default(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.delenv("LLM_PARSER_ENABLED", raising=False)
+    monkeypatch.setenv("OPENAI_API_KEY", "test-key")
+
+    with pytest.raises(parser.LLMParserError, match="llm parser disabled"):
+        parser.parse_criteria_llm_v1("Adults only")
+
+
 def test_parse_criteria_llm_v1_requires_api_key(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -56,6 +66,14 @@ def test_parse_criteria_llm_v1_accepts_valid_payload(
     assert rules[0]["field"] == "age"
     assert rules[0]["operator"] == ">="
     assert usage["total_tokens"] == 14
+
+
+def test_build_response_format_uses_json_schema() -> None:
+    response_format = parser._build_response_format()
+    assert response_format["type"] == "json_schema"
+    schema = response_format["json_schema"]["schema"]
+    assert schema["type"] == "object"
+    assert "rules" in schema["properties"]
 
 
 def test_parse_criteria_llm_v1_rejects_invalid_schema(

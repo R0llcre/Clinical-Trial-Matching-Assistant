@@ -98,7 +98,7 @@ def parse_criteria_llm_v1(
 
 
 def _llm_parser_enabled() -> bool:
-    raw = os.getenv("LLM_PARSER_ENABLED", "1")
+    raw = os.getenv("LLM_PARSER_ENABLED", "0")
     return raw.strip().lower() in {"1", "true", "yes", "on"}
 
 
@@ -114,7 +114,7 @@ def _post_chat_completion(*, api_key: str, eligibility_text: str) -> Dict[str, A
     body = {
         "model": model,
         "temperature": 0,
-        "response_format": {"type": "json_object"},
+        "response_format": _build_response_format(),
         "messages": [
             {
                 "role": "system",
@@ -148,6 +148,62 @@ def _post_chat_completion(*, api_key: str, eligibility_text: str) -> Dict[str, A
             return response.json()
     except (httpx.RequestError, httpx.HTTPStatusError, ValueError) as exc:
         raise LLMParserError(f"llm request failed: {exc}") from exc
+
+
+def _build_response_format() -> Dict[str, Any]:
+    return {
+        "type": "json_schema",
+        "json_schema": {
+            "name": "eligibility_rules_v1",
+            "strict": True,
+            "schema": {
+                "type": "object",
+                "additionalProperties": False,
+                "properties": {
+                    "rules": {
+                        "type": "array",
+                        "items": {
+                            "type": "object",
+                            "additionalProperties": False,
+                            "properties": {
+                                "id": {"type": "string"},
+                                "type": {"type": "string"},
+                                "field": {"type": "string"},
+                                "operator": {"type": "string"},
+                                "value": {},
+                                "unit": {"type": ["string", "null"]},
+                                "time_window": {"type": ["string", "null"]},
+                                "certainty": {"type": "string"},
+                                "evidence_text": {"type": "string"},
+                                "source_span": {
+                                    "type": ["object", "null"],
+                                    "additionalProperties": False,
+                                    "properties": {
+                                        "start": {"type": "integer"},
+                                        "end": {"type": "integer"},
+                                    },
+                                    "required": ["start", "end"],
+                                },
+                            },
+                            "required": [
+                                "id",
+                                "type",
+                                "field",
+                                "operator",
+                                "value",
+                                "unit",
+                                "time_window",
+                                "certainty",
+                                "evidence_text",
+                                "source_span",
+                            ],
+                        },
+                    }
+                },
+                "required": ["rules"],
+            },
+        },
+    }
 
 
 def _read_timeout_seconds() -> float:
