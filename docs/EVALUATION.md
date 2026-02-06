@@ -71,3 +71,12 @@ Evaluation
 
 **扩样任务清单生成（2000 检索 + 200 解析）**
 - `python3 scripts/eval/generate_annotation_tasks.py --source eval/annotations/relevance.annotator_a.jsonl --target-retrieval-pairs 2000 --target-parsing-trials 200 --output-retrieval eval/annotation_tasks/relevance.pending.2000.jsonl --output-parsing eval/annotation_tasks/parsing.pending.200.jsonl --output-manifest eval/annotation_tasks/manifest.large_scale.json`
+
+**V2 扩池（AACT 快照）与首批 700 任务**
+- 下载最新 AACT flatfiles：`mkdir -p /tmp/aact && cd /tmp/aact && curl -L --fail -o aact_flatfiles_latest.zip https://ctti-aact.nyc3.digitaloceanspaces.com/je8x1y6mzswfseyc1q7i09ebtqb7`
+- 生成 v2 候选池与首批任务：
+- `python3 scripts/eval/generate_retrieval_v2_tasks_aact.py --aact-zip /tmp/aact/aact_flatfiles_latest.zip --queries eval/data/queries.jsonl --max-candidates-per-query 220 --background-per-query 40 --target-per-query 70 --likely2-quota 20 --likely1-quota 30 --hard-negative-quota 20 --output-pending eval/annotation_tasks/relevance.pending.v2.jsonl --output-batch eval/annotation_tasks/relevance.batch_v2_round1.700.jsonl --output-manifest eval/annotation_tasks/manifest.relevance_v2_round1.json`
+
+**V2 复核任务（adjudication）**
+- 从 `annotator_b` 标注中自动抽取复核集（默认规则：全部 label=2 + 每 query 最多 15 条 likely_2 但被标为 1）
+- `python3 scripts/eval/generate_relevance_adjudication_tasks.py --labels eval/annotations/relevance.v2.round1.annotator_b.jsonl --tasks eval/annotation_tasks/relevance.batch_v2_round1.700.jsonl --likely2-label1-per-query 15 --output-jsonl eval/annotation_tasks/relevance.v2.round1.adjudication.annotator_a.jsonl --output-manifest eval/annotation_tasks/manifest.relevance.v2.round1.adjudication.json`

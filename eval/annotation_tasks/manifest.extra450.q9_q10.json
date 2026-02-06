@@ -1,0 +1,10 @@
+{
+  "source": "eval/annotations/relevance.annotator_a.jsonl",
+  "base_pending": "eval/annotation_tasks/relevance.pending.2000.jsonl",
+  "output": "eval/annotation_tasks/relevance.pending.extra450.q9_q10.jsonl",
+  "extra_task_count": 450,
+  "query_distribution": {
+    "Q0009": 202,
+    "Q0010": 248
+  }
+}
