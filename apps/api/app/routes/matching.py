@@ -5,6 +5,7 @@ from typing import Any, Dict, Optional
 
 from fastapi import APIRouter
 from fastapi.responses import JSONResponse
+from psycopg.types.json import Json
 from sqlalchemy import text
 from sqlalchemy.engine import Engine, create_engine
 from sqlalchemy.exc import SQLAlchemyError
@@ -149,8 +150,8 @@ def _save_match_result(
                 "id": match_id,
                 "user_id": None,
                 "patient_profile_id": patient_profile_id,
-                "query_json": {"filters": filters, "top_k": top_k},
-                "results_json": results,
+                "query_json": Json({"filters": filters, "top_k": top_k}),
+                "results_json": Json(results),
                 "created_at": dt.datetime.utcnow(),
             },
         )
@@ -170,8 +171,8 @@ def _get_match_by_id(engine: Engine, match_id: str) -> Optional[Dict[str, Any]]:
     if not row:
         return None
     return {
-        "id": row["id"],
-        "patient_profile_id": row["patient_profile_id"],
+        "id": str(row["id"]),
+        "patient_profile_id": str(row["patient_profile_id"]),
         "query_json": row["query_json"],
         "results": row["results_json"],
         "created_at": (
