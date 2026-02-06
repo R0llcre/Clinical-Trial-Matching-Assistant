@@ -35,6 +35,25 @@ def test_compute_retrieval_metrics_simple_case() -> None:
 
     assert metrics["top_k_hitrate"] == pytest.approx(1.0)
     assert 0.0 <= metrics["ndcg_at_k"] <= 1.0
+    assert metrics["evaluated_queries"] == 1
+    assert metrics["skipped_queries"] == 0
+
+
+def test_compute_retrieval_metrics_skips_query_without_relevant() -> None:
+    query_ids = ["Q1", "Q2"]
+    rankings = {"Q1": ["N1"], "Q2": ["N2"]}
+    relevance = {("Q1", "N1"): 2, ("Q2", "N2"): 0}
+
+    metrics = compute_retrieval_metrics(
+        query_ids,
+        rankings,
+        relevance,
+        top_k=1,
+        relevant_threshold=1,
+    )
+
+    assert metrics["evaluated_queries"] == 1
+    assert metrics["skipped_queries"] == 1
 
 
 def test_rule_signature_normalizes_value_and_unit() -> None:

@@ -146,16 +146,28 @@ def compute_retrieval_metrics(
     *,
     top_k: int = 10,
     relevant_threshold: int = 1,
+    ignore_queries_without_relevant: bool = True,
 ) -> Dict[str, float]:
     if not query_ids:
-        return {"top_k_hitrate": 0.0, "ndcg_at_k": 0.0}
+        return {
+            "top_k_hitrate": 0.0,
+            "ndcg_at_k": 0.0,
+            "evaluated_queries": 0,
+            "skipped_queries": 0,
+        }
 
     hit_count = 0
     ndcgs: List[float] = []
+    evaluated_queries = 0
 
     for query_id in query_ids:
         ranked = rankings.get(query_id, [])
         rels = [int(relevance.get((query_id, nct_id), 0)) for nct_id in ranked]
+        has_relevant = any(rel >= relevant_threshold for rel in rels)
+        if ignore_queries_without_relevant and not has_relevant:
+            continue
+
+        evaluated_queries += 1
         rels_for_hit = rels[:top_k]
 
         if any(rel >= relevant_threshold for rel in rels_for_hit):
@@ -164,9 +176,22 @@ def compute_retrieval_metrics(
         # Add known-but-unranked annotated items as zeros is not needed for nDCG ratio.
         ndcgs.append(ndcg_at_k(rels, top_k))
 
-    hitrate = hit_count / len(query_ids)
+    if evaluated_queries == 0:
+        return {
+            "top_k_hitrate": 0.0,
+            "ndcg_at_k": 0.0,
+            "evaluated_queries": 0,
+            "skipped_queries": len(query_ids),
+        }
+
+    hitrate = hit_count / evaluated_queries
     avg_ndcg = sum(ndcgs) / len(ndcgs)
-    return {"top_k_hitrate": round(hitrate, 4), "ndcg_at_k": round(avg_ndcg, 4)}
+    return {
+        "top_k_hitrate": round(hitrate, 4),
+        "ndcg_at_k": round(avg_ndcg, 4),
+        "evaluated_queries": evaluated_queries,
+        "skipped_queries": len(query_ids) - evaluated_queries,
+    }
 
 
 def _normalize_value(value: Any) -> str:

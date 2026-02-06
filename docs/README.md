@@ -17,6 +17,7 @@ Docs Index
 - eval/ANNOTATION_TEMPLATE.relevance.jsonl 检索相关性标注模板
 - eval/ANNOTATION_TEMPLATE.rules.jsonl 规则质量标注模板
 - ../scripts/eval/run_evaluation.py M4 指标计算脚本
+- ../scripts/eval/generate_evaluation_report.py M4 评估报告生成脚本
 - ../eval/data/queries.jsonl M4 查询样本集
 - ../eval/data/trials_sample.jsonl M4 试验解析样本集
 - ../eval/data/patients.jsonl M4 合成患者样本集
