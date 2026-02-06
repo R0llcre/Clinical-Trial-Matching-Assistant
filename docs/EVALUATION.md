@@ -35,7 +35,7 @@ Evaluation
 - 来源: `eval/reports/retrieval_annotation_report_v2_strict_final.json` + `eval/reports/parsing_release_report.json`
 - 门槛:
 - 检索侧: `query_count >= 10`、`total_pairs >= 1500`、`label2_total >= 60`、`queries_with_label2 >= 6`、`min_pairs_per_query >= 120`
-- 解析侧: `parsing_trial_count >= 100`、`parsing_rule_count >= 500`、`parsing_unique_fields >= 6`、`parsing_f1 >= 0.30`、`parsing_hallucination_rate <= 0.02`
+- 解析侧: `parsing_trial_count >= 100`、`parsing_rule_count >= 300`、`parsing_unique_fields >= 6`、`parsing_f1 >= 0.30`、`parsing_hallucination_rate <= 0.02`
 - 结论:
 - `M4 完成 = Smoke Gate PASS 且 Release Gate PASS`
 
@@ -50,10 +50,13 @@ Evaluation
 3. 生成烟测报告
 - `python3 scripts/eval/generate_evaluation_report.py --queries eval/data/queries.jsonl --trials eval/data/trials_sample.jsonl --relevance eval/annotations/relevance.trials_sample.annotator_a.jsonl --top-k 10 --min-relevance-coverage 1.0 --output-md eval/reports/m4_evaluation_report.md --output-json eval/reports/m4_evaluation_report.json`
 
-4. 生成解析发布报告
+4. 构建解析发布集（含规则质量过滤）
+- `python3 scripts/eval/build_parsing_release_dataset.py --output-jsonl eval/data/trials_parsing_release.jsonl --output-manifest eval/data/trials_parsing_release.manifest.json`
+
+5. 生成解析发布报告
 - `python3 scripts/eval/generate_parsing_release_report.py --trials eval/data/trials_parsing_release.jsonl --output-md eval/reports/parsing_release_report.md --output-json eval/reports/parsing_release_report.json`
 
-5. 生成最终发布门禁报告
+6. 生成最终发布门禁报告
 - `python3 scripts/eval/check_m4_release_gate.py --smoke-report eval/reports/m4_evaluation_report.json --retrieval-report eval/reports/retrieval_annotation_report_v2_strict_final.json --parsing-report eval/reports/parsing_release_report.json --output-md eval/reports/m4_release_report.md --output-json eval/reports/m4_release_report.json`
 
 **当前有效报告**

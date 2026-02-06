@@ -1,32 +1,32 @@
 {
-  "generated_at_utc": "2026-02-06T16:29:18.564604+00:00",
+  "generated_at_utc": "2026-02-06T16:38:00.424675+00:00",
   "dataset": {
     "trial_count": 100,
-    "gold_rule_count": 525,
+    "gold_rule_count": 358,
     "unique_fields": 7,
     "field_distribution": {
-      "age": 141,
-      "condition": 221,
-      "history": 81,
+      "age": 44,
+      "condition": 216,
+      "history": 19,
       "lab": 1,
-      "medication": 5,
+      "medication": 2,
       "procedure": 2,
       "sex": 74
     },
     "rules_per_trial": {
-      "min": 2,
-      "median": 4.0,
-      "max": 16
+      "min": 0,
+      "median": 3.0,
+      "max": 15
     }
   },
   "metrics": {
     "parsing": {
-      "precision": 0.3902,
-      "recall": 0.3192,
-      "f1": 0.3512,
-      "tp": 151,
-      "fp": 236,
-      "fn": 322
+      "precision": 0.2842,
+      "recall": 0.3303,
+      "f1": 0.3056,
+      "tp": 110,
+      "fp": 277,
+      "fn": 223
     },
     "hallucination": {
       "hallucination_rate": 0.0,

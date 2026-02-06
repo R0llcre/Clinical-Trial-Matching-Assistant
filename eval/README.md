@@ -33,6 +33,7 @@ Eval Assets
 - `eval/annotations/relevance.v2.round1_round2_round3b_round4.merged.jsonl`
 - 解析发布集:
 - `eval/data/trials_parsing_release.jsonl`
+- 生成脚本: `scripts/eval/build_parsing_release_dataset.py`（对原始标注做规则质量过滤）
 
 目录说明
 - `eval/data/`:

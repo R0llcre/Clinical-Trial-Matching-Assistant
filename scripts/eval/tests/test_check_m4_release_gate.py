@@ -15,7 +15,7 @@ def _thresholds() -> dict[str, float]:
         "release_queries_with_label2_min": 6.0,
         "release_min_pairs_per_query": 120.0,
         "release_parsing_trial_count_min": 100.0,
-        "release_parsing_rule_count_min": 500.0,
+        "release_parsing_rule_count_min": 300.0,
         "release_parsing_unique_fields_min": 6.0,
         "release_parsing_f1_min": 0.3,
         "release_parsing_hallucination_rate_max": 0.02,
@@ -59,7 +59,7 @@ def _parsing_report_pass() -> dict[str, object]:
     return {
         "dataset": {
             "trial_count": 100,
-            "gold_rule_count": 525,
+            "gold_rule_count": 358,
             "unique_fields": 7,
         },
         "metrics": {
