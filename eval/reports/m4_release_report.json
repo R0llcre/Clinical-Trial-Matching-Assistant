@@ -1,0 +1,101 @@
+{
+  "generated_at_utc": "2026-02-06T15:57:02.098334+00:00",
+  "overall_status": "PASS",
+  "gate_status": {
+    "smoke": "PASS",
+    "release": "PASS"
+  },
+  "inputs": {
+    "smoke_report_kind": "m4_evaluation_report",
+    "release_report_kind": "retrieval_annotation_report_v2_strict_final"
+  },
+  "checks": [
+    {
+      "id": "smoke.top10_hitrate",
+      "source": "m4_evaluation_report",
+      "comparator": ">=",
+      "actual": 1.0,
+      "target": 0.7,
+      "status": "PASS"
+    },
+    {
+      "id": "smoke.parsing_f1",
+      "source": "m4_evaluation_report",
+      "comparator": ">=",
+      "actual": 1.0,
+      "target": 0.8,
+      "status": "PASS"
+    },
+    {
+      "id": "smoke.hallucination_rate",
+      "source": "m4_evaluation_report",
+      "comparator": "<=",
+      "actual": 0.0,
+      "target": 0.02,
+      "status": "PASS"
+    },
+    {
+      "id": "smoke.relevance_coverage",
+      "source": "m4_evaluation_report",
+      "comparator": ">=",
+      "actual": 1.0,
+      "target": 1.0,
+      "status": "PASS"
+    },
+    {
+      "id": "release.query_count",
+      "source": "retrieval_annotation_report_v2_strict_final",
+      "comparator": ">=",
+      "actual": 10.0,
+      "target": 10.0,
+      "status": "PASS"
+    },
+    {
+      "id": "release.total_pairs",
+      "source": "retrieval_annotation_report_v2_strict_final",
+      "comparator": ">=",
+      "actual": 1644.0,
+      "target": 1500.0,
+      "status": "PASS"
+    },
+    {
+      "id": "release.label2_total",
+      "source": "retrieval_annotation_report_v2_strict_final",
+      "comparator": ">=",
+      "actual": 74.0,
+      "target": 60.0,
+      "status": "PASS"
+    },
+    {
+      "id": "release.queries_with_label2",
+      "source": "retrieval_annotation_report_v2_strict_final",
+      "comparator": ">=",
+      "actual": 7.0,
+      "target": 6.0,
+      "status": "PASS"
+    },
+    {
+      "id": "release.min_pairs_per_query",
+      "source": "retrieval_annotation_report_v2_strict_final",
+      "comparator": ">=",
+      "actual": 140.0,
+      "target": 120.0,
+      "status": "PASS"
+    }
+  ],
+  "summary": {
+    "smoke": {
+      "top10_hitrate": 1.0,
+      "parsing_f1": 1.0,
+      "hallucination_rate": 0.0,
+      "annotation_coverage": 1.0
+    },
+    "release": {
+      "query_count": 10,
+      "total_pairs": 1644,
+      "label2_total": 74,
+      "queries_with_label2": 7,
+      "min_pairs_per_query": 140
+    }
+  }
+}
