@@ -11,6 +11,9 @@ Eval Assets
 - M4 最终门禁报告:
 - `eval/reports/m4_release_report.md`
 - `eval/reports/m4_release_report.json`
+- 解析发布报告:
+- `eval/reports/parsing_release_report.md`
+- `eval/reports/parsing_release_report.json`
 - 大样本检索最终报告:
 - `eval/reports/retrieval_annotation_report_v2_strict_final.md`
 - `eval/reports/retrieval_annotation_report_v2_strict_final.json`
@@ -28,10 +31,13 @@ Eval Assets
 - 大样本最终集:
 - `eval/annotations/relevance.v2.round1_round2_round4.final.jsonl`
 - `eval/annotations/relevance.v2.round1_round2_round3b_round4.merged.jsonl`
+- 解析发布集:
+- `eval/data/trials_parsing_release.jsonl`
+- 生成脚本: `scripts/eval/build_parsing_release_dataset.py`（对原始标注做规则质量过滤）
 
 目录说明
 - `eval/data/`:
-- 固定评估输入（queries/trials/patients）。
+- 固定评估输入（queries/trials/patients）与解析发布样本。
 - `eval/annotations/`:
 - 当前可复用的标注与最终合并结果。
 - `eval/reports/`:

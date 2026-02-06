@@ -1,0 +1,17 @@
+{
+  "deduped_trials": 100,
+  "input_rule_count": 525,
+  "kept_rule_count": 358,
+  "dropped_rule_count": 167,
+  "dropped_by_reason": {
+    "age_semantics_mismatch": 97,
+    "condition_negated_value": 5,
+    "history_semantics_mismatch": 62,
+    "medication_semantics_mismatch": 3
+  },
+  "source_files": [
+    "eval/archive/m4_history/annotations/trials_labeled.batch1.annotator_b.jsonl",
+    "eval/archive/m4_history/annotations/trials_labeled.batch2.annotator_b.jsonl"
+  ],
+  "source_row_count": 100
+}
