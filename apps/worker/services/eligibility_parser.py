@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 import re
 import uuid
 from pathlib import Path
@@ -96,9 +97,10 @@ def preprocess_eligibility_text(eligibility_text: Optional[str]) -> Dict[str, Li
 
 def parse_criteria_v1(eligibility_text: Optional[str]) -> List[Dict[str, Any]]:
     """Parse eligibility text into structured criteria rules with UNKNOWN fallback."""
-    curated_rules = _parse_with_curated_overrides(eligibility_text)
-    if curated_rules is not None:
-        return curated_rules
+    if _curated_override_enabled():
+        curated_rules = _parse_with_curated_overrides(eligibility_text)
+        if curated_rules is not None:
+            return curated_rules
 
     preprocessed = preprocess_eligibility_text(eligibility_text)
     inclusion_sentences = preprocessed["inclusion_sentences"]
@@ -181,6 +183,11 @@ def _parse_with_curated_overrides(
             )
         )
     return parsed
+
+
+def _curated_override_enabled() -> bool:
+    value = os.getenv("CTMA_ENABLE_CURATED_PARSER_OVERRIDES", "")
+    return value.strip().lower() in {"1", "true", "yes", "on"}
 
 
 def _load_curated_rule_overrides() -> Dict[str, List[Dict[str, Any]]]:
