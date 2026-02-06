@@ -69,3 +69,60 @@ def test_evaluate_trial_fail_and_unknown_path() -> None:
     }
     assert exclusion["age"] == "FAIL"
     assert exclusion["sex"] == "UNKNOWN"
+
+
+def test_evaluate_trial_prefers_parsed_criteria_rules() -> None:
+    patient_profile = {
+        "demographics": {"age": 34, "sex": "female"},
+        "conditions": ["diabetes mellitus type 2"],
+    }
+    trial = {
+        "nct_id": "NCT-3",
+        "title": "Parsed Criteria Trial",
+        "status": "RECRUITING",
+        "phase": "PHASE2",
+        "fetched_at": "2026-02-10T00:00:00",
+        "criteria_json": [
+            {
+                "id": "rule-age",
+                "type": "INCLUSION",
+                "field": "age",
+                "operator": ">=",
+                "value": 18,
+                "unit": "years",
+                "evidence_text": "Participants must be at least 18 years old.",
+            },
+            {
+                "id": "rule-sex",
+                "type": "INCLUSION",
+                "field": "sex",
+                "operator": "=",
+                "value": "female",
+                "evidence_text": "Female participants only.",
+            },
+            {
+                "id": "rule-exclusion",
+                "type": "EXCLUSION",
+                "field": "condition",
+                "operator": "NOT_IN",
+                "value": "active infection",
+                "evidence_text": "No active infection.",
+            },
+        ],
+        "raw_json": {},
+    }
+
+    result = evaluate_trial(patient_profile, trial)
+
+    assert result["score"] > 0
+    assert result["checklist"]["missing_info"] == []
+
+    inclusion = {
+        item["rule_id"]: item["verdict"] for item in result["checklist"]["inclusion"]
+    }
+    exclusion = {
+        item["rule_id"]: item["verdict"] for item in result["checklist"]["exclusion"]
+    }
+    assert inclusion["rule-age"] == "PASS"
+    assert inclusion["rule-sex"] == "PASS"
+    assert exclusion["rule-exclusion"] == "PASS"

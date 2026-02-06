@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import datetime as dt
 import re
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 from sqlalchemy import text
 from sqlalchemy.engine import Engine
@@ -78,6 +78,184 @@ def _tokenize(text: str) -> set[str]:
 
 
 def evaluate_trial(
+    patient_profile: Dict[str, Any], trial: Dict[str, Any]
+) -> Dict[str, Any]:
+    parsed_rules = trial.get("criteria_json")
+    if isinstance(parsed_rules, list) and parsed_rules:
+        return _evaluate_trial_with_parsed_rules(patient_profile, trial, parsed_rules)
+    return _evaluate_trial_legacy(patient_profile, trial)
+
+
+def _evaluate_trial_with_parsed_rules(
+    patient_profile: Dict[str, Any],
+    trial: Dict[str, Any],
+    parsed_rules: List[Dict[str, Any]],
+) -> Dict[str, Any]:
+    inclusion: List[Dict[str, str]] = []
+    exclusion: List[Dict[str, str]] = []
+    missing_info: List[str] = []
+
+    for parsed_rule in parsed_rules:
+        verdict, missing_field = _evaluate_parsed_rule(parsed_rule, patient_profile)
+        fallback_id = f"rule-{len(inclusion) + len(exclusion)}"
+        rule_id = str(parsed_rule.get("id") or fallback_id)
+        evidence = str(parsed_rule.get("evidence_text") or "criteria rule")
+        checklist_rule = _rule(verdict, rule_id, evidence)
+        if missing_field:
+            missing_info.append(missing_field)
+        if str(parsed_rule.get("type")).upper() == "EXCLUSION":
+            exclusion.append(checklist_rule)
+        else:
+            inclusion.append(checklist_rule)
+
+    all_rules = inclusion + exclusion
+    pass_count = sum(1 for rule in all_rules if rule["verdict"] == "PASS")
+    certainty = pass_count / len(all_rules) if all_rules else 0.0
+
+    score = _score_from_rules(all_rules)
+    hard_fail_ids = {
+        str(rule.get("id"))
+        for rule in parsed_rules
+        if str(rule.get("type")).upper() == "EXCLUSION"
+        and str(rule.get("field")).lower() in {"age", "sex"}
+    }
+    hard_fail = any(
+        rule["rule_id"] in hard_fail_ids and rule["verdict"] == "FAIL"
+        for rule in exclusion
+    )
+    if hard_fail:
+        score -= 100.0
+
+    fetched_at = _parse_fetched_at(trial.get("fetched_at"))
+    return {
+        "nct_id": trial.get("nct_id"),
+        "title": trial.get("title"),
+        "status": trial.get("status"),
+        "phase": trial.get("phase"),
+        "score": round(score, 4),
+        "certainty": round(certainty, 4),
+        "checklist": {
+            "inclusion": inclusion,
+            "exclusion": exclusion,
+            "missing_info": sorted(set(missing_info)),
+        },
+        "_sort_fetched_at": fetched_at,
+    }
+
+
+def _evaluate_parsed_rule(
+    rule: Dict[str, Any], patient_profile: Dict[str, Any]
+) -> Tuple[str, Optional[str]]:
+    field = str(rule.get("field") or "").lower()
+    operator = str(rule.get("operator") or "").upper()
+    value = rule.get("value")
+
+    demographics = patient_profile.get("demographics")
+    if not isinstance(demographics, dict):
+        demographics = {}
+
+    if field == "age":
+        patient_age = demographics.get("age")
+        if isinstance(patient_age, bool) or not isinstance(patient_age, (int, float)):
+            return "UNKNOWN", "demographics.age"
+        target = _to_number(value)
+        if target is None:
+            return "UNKNOWN", None
+        if operator == ">=":
+            return ("PASS", None) if float(patient_age) >= target else ("FAIL", None)
+        if operator == "<=":
+            return ("PASS", None) if float(patient_age) <= target else ("FAIL", None)
+        if operator == "=":
+            return ("PASS", None) if float(patient_age) == target else ("FAIL", None)
+        return "UNKNOWN", None
+
+    if field == "sex":
+        patient_sex = demographics.get("sex")
+        if not isinstance(patient_sex, str) or not patient_sex.strip():
+            return "UNKNOWN", "demographics.sex"
+        patient_sex_norm = patient_sex.strip().lower()
+        target = str(value or "").strip().lower()
+        if target in {"all", "any", ""}:
+            return "PASS", None
+        return ("PASS", None) if patient_sex_norm == target else ("FAIL", None)
+
+    if field == "condition":
+        patient_conditions = _norm_text_list(patient_profile.get("conditions"))
+        if not patient_conditions:
+            return "UNKNOWN", "conditions"
+        if isinstance(value, list):
+            terms = _norm_text_list(value)
+        else:
+            terms = [str(value or "").lower()]
+        terms = [term for term in terms if term]
+        if not terms:
+            return "UNKNOWN", None
+        hit = any(
+            any(
+                (term in condition)
+                or (condition in term)
+                or bool(_tokenize(term) & _tokenize(condition))
+                for term in terms
+            )
+            for condition in patient_conditions
+        )
+        if operator in {"IN", "="}:
+            return ("PASS", None) if hit else ("FAIL", None)
+        if operator == "NOT_IN":
+            return ("FAIL", None) if hit else ("PASS", None)
+        return "UNKNOWN", None
+
+    if field in {"history", "procedure", "medication"}:
+        profile_key = {
+            "history": "history",
+            "procedure": "procedures",
+            "medication": "medications",
+        }[field]
+        values = _norm_text_list(patient_profile.get(profile_key))
+        if not values:
+            return "UNKNOWN", profile_key
+        value_text = str(value or "").lower()
+        found = any(
+            value_text and (value_text in item or item in value_text)
+            for item in values
+        )
+        if operator in {"NO_HISTORY", "NOT_EXISTS"}:
+            return ("FAIL", None) if found else ("PASS", None)
+        if operator == "EXISTS":
+            return ("PASS", None) if found else ("FAIL", None)
+        if operator == "WITHIN_LAST":
+            # Time granularity is unavailable in MVP patient profile fields.
+            return "UNKNOWN", profile_key
+        return "UNKNOWN", None
+
+    return "UNKNOWN", None
+
+
+def _to_number(value: Any) -> Optional[float]:
+    if isinstance(value, bool):
+        return None
+    if isinstance(value, (int, float)):
+        return float(value)
+    if isinstance(value, str):
+        try:
+            return float(value)
+        except ValueError:
+            return None
+    return None
+
+
+def _parse_fetched_at(value: Any) -> dt.datetime:
+    if isinstance(value, str):
+        try:
+            return dt.datetime.fromisoformat(value)
+        except ValueError:
+            return dt.datetime.min
+    if isinstance(value, dt.datetime):
+        return value
+    return dt.datetime.min
+
+
+def _evaluate_trial_legacy(
     patient_profile: Dict[str, Any], trial: Dict[str, Any]
 ) -> Dict[str, Any]:
     demographics = patient_profile.get("demographics")
@@ -169,14 +347,7 @@ def evaluate_trial(
     if hard_fail:
         score -= 100.0
 
-    fetched_at = trial.get("fetched_at")
-    if isinstance(fetched_at, str):
-        try:
-            fetched_at = dt.datetime.fromisoformat(fetched_at)
-        except ValueError:
-            fetched_at = dt.datetime.min
-    elif not isinstance(fetched_at, dt.datetime):
-        fetched_at = dt.datetime.min
+    fetched_at = _parse_fetched_at(trial.get("fetched_at"))
 
     return {
         "nct_id": trial.get("nct_id"),
@@ -210,9 +381,24 @@ def _load_trial_candidates(
 ) -> List[Dict[str, Any]]:
     stmt = text(
         """
-        SELECT nct_id, title, status, phase, conditions, raw_json, fetched_at
-        FROM trials
-        ORDER BY fetched_at DESC
+        SELECT
+          t.nct_id,
+          t.title,
+          t.status,
+          t.phase,
+          t.conditions,
+          t.raw_json,
+          t.fetched_at,
+          tc.criteria_json
+        FROM trials AS t
+        LEFT JOIN LATERAL (
+          SELECT criteria_json
+          FROM trial_criteria
+          WHERE trial_id = t.id
+          ORDER BY created_at DESC
+          LIMIT 1
+        ) AS tc ON TRUE
+        ORDER BY t.fetched_at DESC
         LIMIT :limit
         """
     )

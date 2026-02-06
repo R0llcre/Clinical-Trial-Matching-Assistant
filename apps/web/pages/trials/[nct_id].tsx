@@ -10,8 +10,26 @@ type TrialDetail = {
   phase?: string | null;
   conditions: string[];
   eligibility_text?: string | null;
+  criteria?: ParsedRule[];
+  criteria_parser_version?: string | null;
+  coverage_stats?: {
+    total_rules?: number;
+    known_rules?: number;
+    unknown_rules?: number;
+  } | null;
   locations: string[];
   fetched_at?: string | null;
+};
+
+type ParsedRule = {
+  id: string;
+  type: "INCLUSION" | "EXCLUSION";
+  field: string;
+  operator: string;
+  value: string | number | null;
+  unit?: string | null;
+  certainty?: string | null;
+  evidence_text: string;
 };
 
 type TrialResponse = {
@@ -89,6 +107,40 @@ export default function TrialDetailPage() {
           <section className="detail-block">
             <h3>Eligibility</h3>
             <pre>{trial.eligibility_text || "No eligibility text provided."}</pre>
+          </section>
+          <section className="detail-block">
+            <h3>Parsed Criteria</h3>
+            <div className="pills">
+              {trial.criteria_parser_version && (
+                <span className="pill warm">{trial.criteria_parser_version}</span>
+              )}
+              {trial.coverage_stats?.total_rules !== undefined && (
+                <span className="pill">
+                  rules {trial.coverage_stats.total_rules}
+                </span>
+              )}
+              {trial.coverage_stats?.unknown_rules !== undefined && (
+                <span className="pill">
+                  unknown {trial.coverage_stats.unknown_rules}
+                </span>
+              )}
+            </div>
+            {trial.criteria && trial.criteria.length > 0 ? (
+              <ul className="checklist-list">
+                {trial.criteria.map((rule) => (
+                  <li key={rule.id}>
+                    <span className="pill">{rule.type}</span>
+                    <strong>
+                      {rule.field} {rule.operator} {String(rule.value ?? "")}
+                      {rule.unit ? ` ${rule.unit}` : ""}
+                    </strong>
+                    <span>{rule.evidence_text}</span>
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p className="notice">No parsed criteria available yet.</p>
+            )}
           </section>
           <section className="detail-block">
             <h3>Locations</h3>

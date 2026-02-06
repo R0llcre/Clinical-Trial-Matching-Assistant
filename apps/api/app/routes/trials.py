@@ -3,7 +3,7 @@ from typing import Any, Dict, List, Optional, Tuple
 
 from fastapi import APIRouter
 from fastapi.responses import JSONResponse
-from sqlalchemy import create_engine, func, or_, select
+from sqlalchemy import create_engine, func, or_, select, text
 from sqlalchemy.engine import Engine
 from sqlalchemy.exc import SQLAlchemyError
 
@@ -32,6 +32,18 @@ CREATE TABLE IF NOT EXISTS trials (
 )
 """
 
+_CREATE_TRIAL_CRITERIA_TABLE_SQL = """
+CREATE TABLE IF NOT EXISTS trial_criteria (
+  id UUID PRIMARY KEY,
+  trial_id UUID NOT NULL REFERENCES trials(id),
+  parser_version TEXT NOT NULL,
+  criteria_json JSONB NOT NULL,
+  coverage_stats JSONB,
+  created_at TIMESTAMP NOT NULL,
+  UNIQUE (trial_id, parser_version)
+)
+"""
+
 
 def _normalize_db_url(database_url: str) -> str:
     # Force psycopg driver instead of SQLAlchemy's psycopg2 default.
@@ -53,6 +65,7 @@ def _get_engine() -> Engine:
 def _ensure_trials_table(engine: Engine) -> None:
     with engine.begin() as conn:
         conn.exec_driver_sql(_CREATE_TRIALS_TABLE_SQL)
+        conn.exec_driver_sql(_CREATE_TRIAL_CRITERIA_TABLE_SQL)
 
 
 def _error(
@@ -197,6 +210,7 @@ def _get_trial(engine: Engine, nct_id: str) -> Optional[Dict[str, Any]]:
         .get("descriptionModule", {})
         .get("briefSummary")
     )
+    criteria_payload = _get_latest_trial_criteria(engine, str(row["id"]))
 
     return {
         "nct_id": row["nct_id"],
@@ -206,8 +220,38 @@ def _get_trial(engine: Engine, nct_id: str) -> Optional[Dict[str, Any]]:
         "phase": row["phase"],
         "conditions": row["conditions"] or [],
         "eligibility_text": row["eligibility_text"],
+        "criteria": criteria_payload["criteria_json"] if criteria_payload else [],
+        "criteria_parser_version": (
+            criteria_payload["parser_version"] if criteria_payload else None
+        ),
+        "coverage_stats": (
+            criteria_payload["coverage_stats"] if criteria_payload else None
+        ),
         "locations": _format_locations(row["locations_json"]),
         "fetched_at": row["fetched_at"].isoformat() if row["fetched_at"] else None,
+    }
+
+
+def _get_latest_trial_criteria(
+    engine: Engine, trial_id: str
+) -> Optional[Dict[str, Any]]:
+    stmt = text(
+        """
+        SELECT parser_version, criteria_json, coverage_stats
+        FROM trial_criteria
+        WHERE trial_id = :trial_id
+        ORDER BY created_at DESC
+        LIMIT 1
+        """
+    )
+    with engine.begin() as conn:
+        row = conn.execute(stmt, {"trial_id": trial_id}).mappings().first()
+    if not row:
+        return None
+    return {
+        "parser_version": row["parser_version"],
+        "criteria_json": row["criteria_json"] or [],
+        "coverage_stats": row["coverage_stats"],
     }
 
 
