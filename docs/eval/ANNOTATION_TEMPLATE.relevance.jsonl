@@ -1,0 +1,2 @@
+{"query_id":"Q0001","nct_id":"NCT12345678","relevance_label":2,"rationale":"condition and constraints align","annotator_id":"annotator_a","guideline_version":"m4-v1"}
+{"query_id":"Q0002","nct_id":"NCT87654321","relevance_label":1,"rationale":"condition overlaps but one hard constraint mismatches","annotator_id":"annotator_a","guideline_version":"m4-v1"}
