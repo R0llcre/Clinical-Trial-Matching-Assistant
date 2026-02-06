@@ -2,8 +2,12 @@ API Spec
 
 **统一约定**
 Base URL: /api
-认证: Authorization: Bearer <token>
-响应格式: {"ok": true|false, "data": ..., "error": {"code": "", "message": "", "details": {}}}
+认证:
+- 敏感接口需携带 Authorization: Bearer <token>
+- 当前必填: /api/patients*、/api/match、/api/matches/{id}
+响应格式:
+- 成功: {"ok": true, "data": {...}, "error": null}
+- 失败: {"ok": false, "data": null, "error": {"code": "", "message": "", "details": {}}}
 时间字段: ISO 8601
 分页参数: page, page_size
 
@@ -16,6 +20,8 @@ EXTERNAL_API_ERROR 外部 API 错误
 RATE_LIMITED 触发限流
 PARSER_FAILED 解析失败
 TRIAL_NOT_FOUND 试验不存在
+PATIENT_NOT_FOUND 患者画像不存在
+MATCH_NOT_FOUND 匹配结果不存在
 
 **Trials**
 GET /api/trials
@@ -47,6 +53,7 @@ GET /api/trials/{nct_id}
 **Patients**
 POST /api/patients
 目的: 创建患者画像
+认证: 必填
 输入
 - profile_json 必填
 - source 选填, manual 或 synthea
@@ -60,16 +67,19 @@ POST /api/patients
 
 GET /api/patients
 目的: 列表与分页
+认证: 必填
 输入: page, page_size
 输出: patients[], total
 
 GET /api/patients/{id}
 目的: 获取患者画像
-错误: NOT_FOUND
+认证: 必填
+错误: PATIENT_NOT_FOUND
 
 **Matching**
 POST /api/match
 目的: 生成匹配结果
+认证: 必填
 输入
 - patient_profile_id 必填
 - filters 可选
@@ -85,7 +95,8 @@ POST /api/match
 
 GET /api/matches/{id}
 目的: 获取匹配详情
-错误: NOT_FOUND
+认证: 必填
+错误: MATCH_NOT_FOUND
 
 **Admin**
 POST /api/admin/sync

@@ -65,6 +65,7 @@ def _error(
         status_code=status_code,
         content={
             "ok": False,
+            "data": None,
             "error": {
                 "code": code,
                 "message": message,
@@ -75,7 +76,10 @@ def _error(
 
 
 def _ok(data: Dict[str, Any]) -> JSONResponse:
-    return JSONResponse(status_code=200, content={"ok": True, "data": data})
+    return JSONResponse(
+        status_code=200,
+        content={"ok": True, "data": data, "error": None},
+    )
 
 
 def _parse_pagination(

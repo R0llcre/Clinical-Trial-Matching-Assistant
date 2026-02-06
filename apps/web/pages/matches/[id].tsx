@@ -58,12 +58,27 @@ export default function MatchResultsPage() {
   const router = useRouter();
   const { id } = router.query;
 
+  const [jwtToken, setJwtToken] = useState(
+    process.env.NEXT_PUBLIC_DEV_JWT ?? ""
+  );
   const [data, setData] = useState<MatchData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
+    const savedToken = window.localStorage.getItem("ctmatch.jwt");
+    if (savedToken && !jwtToken) {
+      setJwtToken(savedToken);
+    }
+  }, [jwtToken]);
+
+  useEffect(() => {
     if (!router.isReady || typeof id !== "string") {
+      return;
+    }
+    if (!jwtToken.trim()) {
+      setLoading(false);
+      setError("JWT token is required to load match results.");
       return;
     }
 
@@ -71,7 +86,9 @@ export default function MatchResultsPage() {
       setLoading(true);
       setError(null);
       try {
-        const response = await fetch(`${API_BASE}/api/matches/${id}`);
+        const response = await fetch(`${API_BASE}/api/matches/${id}`, {
+          headers: {Authorization: `Bearer ${jwtToken.trim()}`},
+        });
         const payload = (await response.json()) as MatchResponse;
         if (!response.ok || !payload.ok || !payload.data) {
           throw new Error(payload.error?.message || "Failed to load match result");
@@ -86,7 +103,7 @@ export default function MatchResultsPage() {
     };
 
     loadMatch();
-  }, [router.isReady, id]);
+  }, [router.isReady, id, jwtToken]);
 
   return (
     <main>

@@ -9,11 +9,12 @@ from app.routes.trials import router as trials_router
 from app.services.auth import AuthError, decode_auth_header
 
 app = FastAPI()
+_PROTECTED_PREFIXES = ("/api/patients", "/api/match", "/api/matches")
 
 
 @app.middleware("http")
 async def auth_middleware(request: Request, call_next):
-    if request.url.path.startswith("/api/patients"):
+    if request.url.path.startswith(_PROTECTED_PREFIXES):
         try:
             claims = decode_auth_header(request.headers.get("Authorization"))
             request.state.auth_claims = claims
@@ -22,6 +23,7 @@ async def auth_middleware(request: Request, call_next):
                 status_code=401,
                 content={
                     "ok": False,
+                    "data": None,
                     "error": {
                         "code": "UNAUTHORIZED",
                         "message": str(exc),
