@@ -40,6 +40,16 @@ Evaluation
 - 关键字段 F1 >= 0.80
 - Hallucination <= 2%
 
+**M4 双门禁（必须同时通过）**
+- `Smoke Gate`（小样本可运行性）:
+- 来源: `eval/reports/m4_evaluation_report.json`
+- 门槛: Top-10 HitRate >= 0.70, Parsing F1 >= 0.80, Hallucination <= 0.02, relevance coverage >= 1.0
+- `Release Gate`（大样本统计稳健性）:
+- 来源: `eval/reports/retrieval_annotation_report_v2_strict_final.json`
+- 门槛: query_count >= 10, total_pairs >= 1500, label=2 总数 >= 60, 含 label=2 的 query 数 >= 6, 每 query 最小样本 >= 120
+- 最终结论:
+- `M4` 完成 = `Smoke Gate PASS` 且 `Release Gate PASS`
+
 **评估流程**
 1. 生成或采样试验与查询
 2. 人工标注相关性与字段
@@ -65,6 +75,12 @@ Evaluation
 
 **M4-4 报告生成命令**
 - `python3 scripts/eval/generate_evaluation_report.py --queries eval/data/queries.jsonl --trials eval/data/trials_sample.jsonl --relevance eval/annotations/relevance.trials_sample.annotator_a.jsonl --top-k 10 --min-relevance-coverage 1.0 --output-md eval/reports/m4_evaluation_report.md --output-json eval/reports/m4_evaluation_report.json`
+
+**M4 最终发布门禁命令（双门禁统一结论）**
+- `python3 scripts/eval/check_m4_release_gate.py --smoke-report eval/reports/m4_evaluation_report.json --retrieval-report eval/reports/retrieval_annotation_report_v2_strict_final.json --output-md eval/reports/m4_release_report.md --output-json eval/reports/m4_release_report.json`
+- 产物:
+- `eval/reports/m4_release_report.md`
+- `eval/reports/m4_release_report.json`
 
 **大样本检索标注报告（300）**
 - `python3 scripts/eval/generate_retrieval_only_report.py --annotator-a eval/annotations/relevance.annotator_a.jsonl --annotator-b eval/annotations/relevance.annotator_b.jsonl --output-md eval/reports/retrieval_annotation_report_300.md --output-json eval/reports/retrieval_annotation_report_300.json`
