@@ -1,0 +1,8 @@
+{"patient_id": "P0001", "demographics": {"age": 52, "sex": "female"}, "conditions": ["type 2 diabetes"], "medications": ["metformin"], "labs": [{"name": "HbA1c", "value": 7.9, "unit": "%"}]}
+{"patient_id": "P0002", "demographics": {"age": 61, "sex": "female"}, "conditions": ["metastatic breast cancer"], "medications": ["letrozole"], "labs": [{"name": "ALT", "value": 29, "unit": "U/L"}]}
+{"patient_id": "P0003", "demographics": {"age": 69, "sex": "male"}, "conditions": ["heart failure"], "medications": ["furosemide"], "labs": [{"name": "NT-proBNP", "value": 1500, "unit": "pg/mL"}]}
+{"patient_id": "P0004", "demographics": {"age": 12, "sex": "male"}, "conditions": ["asthma"], "medications": ["albuterol"], "labs": [{"name": "FEV1", "value": 68, "unit": "%"}]}
+{"patient_id": "P0005", "demographics": {"age": 45, "sex": "female"}, "conditions": ["rheumatoid arthritis"], "medications": ["adalimumab"], "labs": [{"name": "CRP", "value": 14.2, "unit": "mg/L"}]}
+{"patient_id": "P0006", "demographics": {"age": 58, "sex": "male"}, "conditions": ["melanoma"], "medications": ["pembrolizumab"], "labs": [{"name": "LDH", "value": 280, "unit": "U/L"}]}
+{"patient_id": "P0007", "demographics": {"age": 34, "sex": "female"}, "conditions": ["long covid"], "medications": [], "labs": [{"name": "CRP", "value": 6.4, "unit": "mg/L"}]}
+{"patient_id": "P0008", "demographics": {"age": 29, "sex": "female"}, "conditions": ["migraine"], "medications": ["topiramate"], "labs": [{"name": "Creatinine", "value": 0.8, "unit": "mg/dL"}]}

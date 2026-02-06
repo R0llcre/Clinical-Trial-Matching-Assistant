@@ -50,3 +50,12 @@ Evaluation
 - 指标结果表
 - 错误类型统计
 - 失败样本示例
+
+**M4-1 交付文件**
+- eval/data/queries.jsonl
+- eval/data/trials_sample.jsonl
+- eval/data/patients.jsonl
+
+**M4-1 生成与校验命令**
+- `python3 scripts/eval/generate_eval_data.py --output-dir eval/data`
+- `python3 scripts/eval/validate_eval_data.py --data-dir eval/data`
