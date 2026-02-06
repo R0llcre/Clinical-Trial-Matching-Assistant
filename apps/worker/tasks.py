@@ -474,6 +474,7 @@ def sync_trials(
     processed = 0
     inserted = 0
     updated = 0
+    inserted_nct_ids: List[str] = []
 
     LOGGER.info(
         "sync_trials started run_id=%s condition=%s status=%s",
@@ -507,6 +508,7 @@ def sync_trials(
                     processed += 1
                     if is_insert:
                         inserted += 1
+                        inserted_nct_ids.append(str(trial["nct_id"]))
                     else:
                         updated += 1
 
@@ -550,6 +552,16 @@ def sync_trials(
                 status,
             )
             raise
+
+    for nct_id in inserted_nct_ids:
+        try:
+            parse_trial(nct_id=nct_id, parser_version="rule_v1")
+        except Exception:
+            LOGGER.exception(
+                "auto parse failed run_id=%s nct_id=%s parser_version=rule_v1",
+                run_id,
+                nct_id,
+            )
 
     stats = SyncStats(
         run_id=run_id,

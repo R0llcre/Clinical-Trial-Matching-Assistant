@@ -280,6 +280,7 @@ def _parse_common_exclusion_rules(
 ) -> List[Dict[str, Any]]:
     text = sentence.lower()
     rules: List[Dict[str, Any]] = []
+    seen_signatures = set()
     for keyword, field, operator, value in _COMMON_EXCLUSION_PATTERNS:
         if keyword not in text:
             continue
@@ -295,6 +296,17 @@ def _parse_common_exclusion_rules(
             rule_value = value
             unit = None
             window_text = None
+
+        signature = (
+            field,
+            rule_operator,
+            str(rule_value),
+            unit or "",
+            window_text or "",
+        )
+        if signature in seen_signatures:
+            continue
+        seen_signatures.add(signature)
 
         rules.append(
             _build_rule(
