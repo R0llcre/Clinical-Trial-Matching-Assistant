@@ -11,6 +11,10 @@ _HEADING_WITH_TAIL = re.compile(
     r"^(inclusion(?: criteria)?|exclusion(?: criteria)?)\s*[:\-]\s*(.+)$",
     re.I,
 )
+_INLINE_HEADING_BOUNDARY = re.compile(
+    r"([^\n])\s+(?=(?:inclusion(?: criteria)?|exclusion(?: criteria)?)\s*[:\-])",
+    re.I,
+)
 _BULLET_PREFIX = re.compile(r"^(?:[-*]\s*|\u2022\s*|\d+[.)]\s*)")
 _SENTENCE_BOUNDARY = re.compile(r"(?<=[.!?;])\s+")
 _WHITESPACE = re.compile(r"\s+")
@@ -20,17 +24,36 @@ _AGE_MIN_PATTERNS = [
         r"\b(\d{1,3})\s*(?:years?|yrs?)\s*(?:or older|and older|or above|and above|\+)\b",
         re.I,
     ),
-    re.compile(r"\b(?:at least|min(?:imum)?(?: age)?|>=)\s*(\d{1,3})\b", re.I),
+    re.compile(r"\bage\s*(?:>=|at least|min(?:imum)?(?: age)?)\s*(\d{1,3})\b", re.I),
+    re.compile(r">=\s*(\d{1,3})\s*(?:years?|yrs?)?\b", re.I),
 ]
 _AGE_MAX_PATTERNS = [
     re.compile(
         r"\b(\d{1,3})\s*(?:years?|yrs?)\s*(?:or younger|and younger|or below|and below)\b",
         re.I,
     ),
-    re.compile(r"\b(?:at most|max(?:imum)?(?: age)?|<=|up to)\s*(\d{1,3})\b", re.I),
+    re.compile(r"\bage\s*(?:<=|at most|max(?:imum)?(?: age)?|up to)\s*(\d{1,3})\b", re.I),
+    re.compile(r"<=\s*(\d{1,3})\s*(?:years?|yrs?)?\b", re.I),
 ]
+_LAB_PATTERN = re.compile(
+    r"\b([A-Za-z][A-Za-z0-9_+\-/]{1,32})\s*(<=|>=|<|>|=)\s*"
+    r"(\d+(?:\.\d+)?)\s*(%|mg/dl|g/dl|u/l|iu/l|mmol/l|mmhg)?(?=\s|[.,;)]|$)",
+    re.I,
+)
+_CONDITION_WITH_PATTERN = re.compile(
+    r"\b(?:with|having)\s+([a-z][a-z0-9\-\s]{2,80}?)(?:[.,;]|$)",
+    re.I,
+)
+_CONDITION_DIAGNOSIS_PATTERN = re.compile(
+    r"\b([a-z][a-z0-9\-\s]{2,80}?)\s+diagnosis\b",
+    re.I,
+)
+_CONDITION_SYMPTOMS_PATTERN = re.compile(
+    r"\b([a-z][a-z0-9\-\s]{2,80}?)\s+symptoms?\b",
+    re.I,
+)
 _TIME_WINDOW = re.compile(
-    r"\b(?:within|in the last|during the last)\s+(\d{1,3})\s*"
+    r"\b(?:within(?:\s+the\s+last)?|in the last|during the last)\s+(\d{1,3})\s*"
     r"(day|days|week|weeks|month|months|year|years)\b",
     re.I,
 )
@@ -52,6 +75,7 @@ def preprocess_eligibility_text(eligibility_text: Optional[str]) -> Dict[str, Li
         return {"inclusion_sentences": [], "exclusion_sentences": []}
 
     normalized = eligibility_text.replace("\r\n", "\n").replace("\r", "\n")
+    normalized = _normalize_inline_headings(normalized)
     inclusion_lines, exclusion_lines, has_heading = _split_sections(normalized)
 
     if not has_heading:
@@ -119,6 +143,10 @@ def _split_sections(text: str) -> Tuple[List[str], List[str], bool]:
     return merged, [], False
 
 
+def _normalize_inline_headings(text: str) -> str:
+    return _INLINE_HEADING_BOUNDARY.sub(r"\1\n", text)
+
+
 def _extract_heading(line: str) -> Tuple[Optional[str], Optional[str]]:
     inline = _HEADING_WITH_TAIL.match(line)
     if inline:
@@ -167,6 +195,8 @@ def _parse_sentence(
         parsed: List[Dict[str, Any]] = []
         parsed.extend(_parse_age_rules(sentence, rule_type, source_span))
         parsed.extend(_parse_sex_rules(sentence, rule_type, source_span))
+        parsed.extend(_parse_lab_rules(sentence, rule_type, source_span))
+        parsed.extend(_parse_condition_rules(sentence, rule_type, source_span))
         if rule_type == "EXCLUSION":
             parsed.extend(_parse_common_exclusion_rules(sentence, source_span))
     except Exception:
@@ -174,12 +204,18 @@ def _parse_sentence(
 
     if parsed:
         return parsed
+    if rule_type == "EXCLUSION":
+        return []
     return [_unknown_rule(sentence, rule_type, source_span)]
 
 
 def _parse_age_rules(
     sentence: str, rule_type: str, source_span: Optional[Dict[str, int]]
 ) -> List[Dict[str, Any]]:
+    text = sentence.lower()
+    if not any(token in text for token in ("age", "year", "yr", "older", "younger")):
+        return []
+
     result: List[Dict[str, Any]] = []
     range_match = _AGE_RANGE.search(sentence)
     if range_match:
@@ -242,6 +278,107 @@ def _parse_age_rules(
         )
 
     return result
+
+
+def _parse_lab_rules(
+    sentence: str, rule_type: str, source_span: Optional[Dict[str, int]]
+) -> List[Dict[str, Any]]:
+    if rule_type != "INCLUSION":
+        return []
+
+    match = _LAB_PATTERN.search(sentence)
+    if not match:
+        return []
+
+    marker = _norm_text(match.group(1))
+    if marker in {"age", "aged"}:
+        return []
+
+    operator = match.group(2)
+    raw_value = match.group(3)
+    unit = match.group(4).lower() if match.group(4) else None
+    value = float(raw_value)
+    return [
+        _build_rule(
+            rule_type=rule_type,
+            field="lab",
+            operator=operator,
+            value=value,
+            unit=unit,
+            certainty="medium",
+            evidence_text=sentence,
+            source_span=source_span,
+            time_window=None,
+        )
+    ]
+
+
+def _parse_condition_rules(
+    sentence: str, rule_type: str, source_span: Optional[Dict[str, int]]
+) -> List[Dict[str, Any]]:
+    if rule_type != "INCLUSION":
+        return []
+
+    candidates: List[str] = []
+    patterns = (
+        _CONDITION_WITH_PATTERN,
+        _CONDITION_DIAGNOSIS_PATTERN,
+        _CONDITION_SYMPTOMS_PATTERN,
+    )
+    for pattern in patterns:
+        for match in pattern.finditer(sentence):
+            cleaned = _clean_condition_value(match.group(1))
+            if cleaned:
+                candidates.append(cleaned)
+
+    if not candidates:
+        return []
+
+    deduped: List[str] = []
+    seen = set()
+    for value in candidates:
+        if value in seen:
+            continue
+        seen.add(value)
+        deduped.append(value)
+
+    return [
+        _build_rule(
+            rule_type=rule_type,
+            field="condition",
+            operator="IN",
+            value=value,
+            unit=None,
+            certainty="medium",
+            evidence_text=sentence,
+            source_span=source_span,
+        )
+        for value in deduped
+    ]
+
+
+def _clean_condition_value(raw: str) -> Optional[str]:
+    value = _norm_text(raw)
+    if not value:
+        return None
+
+    noise_prefixes = (
+        "adults with ",
+        "participants with ",
+        "patient with ",
+        "patients with ",
+        "history of ",
+        "known ",
+    )
+    for prefix in noise_prefixes:
+        if value.startswith(prefix):
+            value = value[len(prefix) :].strip()
+
+    value = re.sub(r"\b(?:nyha|class)\s+[ivx0-9\-]+\b", "", value, flags=re.I).strip()
+    value = _WHITESPACE.sub(" ", value)
+    if len(value) < 3:
+        return None
+    return value
 
 
 def _parse_sex_rules(
@@ -362,6 +499,10 @@ def _build_sentence_spans(text: str, sentences: List[str]) -> Dict[str, Dict[str
         spans[sentence] = {"start": start, "end": end}
         cursor = end
     return spans
+
+
+def _norm_text(text: str) -> str:
+    return " ".join((text or "").lower().replace("-", " ").split())
 
 
 def _unknown_rule(

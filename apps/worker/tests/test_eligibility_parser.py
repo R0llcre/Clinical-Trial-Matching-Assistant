@@ -36,6 +36,18 @@ def test_preprocess_handles_inline_headings() -> None:
     assert payload["exclusion_sentences"] == ["Active infection."]
 
 
+def test_preprocess_handles_mixed_inline_heading_in_single_line() -> None:
+    text = (
+        "Inclusion: Adults with heart failure. "
+        "Exclusion: Prior treatment within the last 30 days."
+    )
+
+    payload = preprocess_eligibility_text(text)
+
+    assert payload["inclusion_sentences"] == ["Adults with heart failure."]
+    assert payload["exclusion_sentences"] == ["Prior treatment within the last 30 days."]
+
+
 def test_preprocess_without_sections_defaults_to_single_segment() -> None:
     text = """
     Adults aged 21 years or older.
@@ -119,3 +131,42 @@ def test_parse_criteria_v1_deduplicates_overlapping_infection_keywords() -> None
         and rule["value"] == "active infection"
     ]
     assert len(infection_rules) == 1
+
+
+def test_parse_criteria_v1_extracts_lab_and_condition_rules() -> None:
+    text = """
+    Inclusion: Adults with heart failure. HbA1c <= 8.5%.
+    """
+
+    rules = parse_criteria_v1(text)
+
+    condition_rule = next(
+        rule
+        for rule in rules
+        if rule["type"] == "INCLUSION"
+        and rule["field"] == "condition"
+        and rule["operator"] == "IN"
+    )
+    assert condition_rule["value"] == "heart failure"
+
+    lab_rule = next(
+        rule
+        for rule in rules
+        if rule["type"] == "INCLUSION"
+        and rule["field"] == "lab"
+        and rule["operator"] == "<="
+    )
+    assert lab_rule["value"] == 8.5
+    assert lab_rule["unit"] == "%"
+
+
+def test_parse_criteria_v1_does_not_parse_month_window_as_age() -> None:
+    text = """
+    Inclusion Criteria:
+    long covid symptoms for at least 3 months.
+    """
+
+    rules = parse_criteria_v1(text)
+
+    age_rules = [rule for rule in rules if rule["field"] == "age"]
+    assert age_rules == []
