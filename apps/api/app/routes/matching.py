@@ -1,3 +1,4 @@
+import datetime as dt
 import os
 import uuid
 from typing import Any, Dict, Optional
@@ -44,6 +45,17 @@ CREATE TABLE IF NOT EXISTS patient_profiles (
 )
 """
 
+_CREATE_MATCHES_TABLE_SQL = """
+CREATE TABLE IF NOT EXISTS matches (
+  id UUID PRIMARY KEY,
+  user_id UUID,
+  patient_profile_id UUID NOT NULL,
+  query_json JSONB NOT NULL,
+  results_json JSONB NOT NULL,
+  created_at TIMESTAMP NOT NULL
+)
+"""
+
 
 def _normalize_db_url(database_url: str) -> str:
     if database_url.startswith("postgresql://"):
@@ -65,6 +77,7 @@ def _ensure_match_tables(engine: Engine) -> None:
     with engine.begin() as conn:
         conn.exec_driver_sql(_CREATE_TRIALS_TABLE_SQL)
         conn.exec_driver_sql(_CREATE_PATIENT_PROFILES_TABLE_SQL)
+        conn.exec_driver_sql(_CREATE_MATCHES_TABLE_SQL)
 
 
 def _load_patient_profile(
@@ -109,6 +122,62 @@ def _error(
 
 def _ok(data: Dict[str, Any]) -> JSONResponse:
     return JSONResponse(status_code=200, content={"ok": True, "data": data})
+
+
+def _save_match_result(
+    engine: Engine,
+    *,
+    match_id: str,
+    patient_profile_id: str,
+    filters: Dict[str, Any],
+    top_k: int,
+    results: list[Dict[str, Any]],
+) -> None:
+    stmt = text(
+        """
+        INSERT INTO matches (
+            id, user_id, patient_profile_id, query_json, results_json, created_at
+        ) VALUES (
+            :id, :user_id, :patient_profile_id, :query_json, :results_json, :created_at
+        )
+        """
+    )
+    with engine.begin() as conn:
+        conn.execute(
+            stmt,
+            {
+                "id": match_id,
+                "user_id": None,
+                "patient_profile_id": patient_profile_id,
+                "query_json": {"filters": filters, "top_k": top_k},
+                "results_json": results,
+                "created_at": dt.datetime.utcnow(),
+            },
+        )
+
+
+def _get_match_by_id(engine: Engine, match_id: str) -> Optional[Dict[str, Any]]:
+    stmt = text(
+        """
+        SELECT id, patient_profile_id, query_json, results_json, created_at
+        FROM matches
+        WHERE id = :id
+        LIMIT 1
+        """
+    )
+    with engine.begin() as conn:
+        row = conn.execute(stmt, {"id": match_id}).mappings().first()
+    if not row:
+        return None
+    return {
+        "id": row["id"],
+        "patient_profile_id": row["patient_profile_id"],
+        "query_json": row["query_json"],
+        "results": row["results_json"],
+        "created_at": (
+            row["created_at"].isoformat() if row["created_at"] else None
+        ),
+    }
 
 
 @router.post("/api/match")
@@ -159,7 +228,31 @@ def create_match(payload: Dict[str, Any]):
             filters=filters,
             top_k=top_k,
         )
+        match_id = str(uuid.uuid4())
+        _save_match_result(
+            engine,
+            match_id=match_id,
+            patient_profile_id=patient_profile_id.strip(),
+            filters=filters,
+            top_k=top_k,
+            results=results,
+        )
     except (SQLAlchemyError, RuntimeError) as exc:
         return _error("EXTERNAL_API_ERROR", f"Database unavailable: {exc}", 503)
 
-    return _ok({"match_id": str(uuid.uuid4()), "results": results})
+    return _ok({"match_id": match_id, "results": results})
+
+
+@router.get("/api/matches/{match_id}")
+def get_match(match_id: str):
+    try:
+        engine = _get_engine()
+        _ensure_match_tables(engine)
+        match = _get_match_by_id(engine, match_id)
+    except (SQLAlchemyError, RuntimeError) as exc:
+        return _error("EXTERNAL_API_ERROR", f"Database unavailable: {exc}", 503)
+
+    if not match:
+        return _error("NOT_FOUND", "match not found", 404, {"id": match_id})
+
+    return _ok(match)
