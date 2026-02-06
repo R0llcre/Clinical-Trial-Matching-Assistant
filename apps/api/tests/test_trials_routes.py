@@ -59,6 +59,7 @@ def test_list_trials_ok(monkeypatch) -> None:
     assert response.status_code == 200
     payload = response.json()
     assert payload["ok"] is True
+    assert payload["error"] is None
     assert payload["data"]["total"] == 1
     assert payload["data"]["page"] == 2
     assert payload["data"]["page_size"] == 5
@@ -76,6 +77,7 @@ def test_list_trials_validation_error() -> None:
     assert response.status_code == 400
     payload = response.json()
     assert payload["ok"] is False
+    assert payload["data"] is None
     assert payload["error"]["code"] == "VALIDATION_ERROR"
 
 
@@ -108,6 +110,7 @@ def test_get_trial_ok(monkeypatch) -> None:
     assert response.status_code == 200
     payload = response.json()
     assert payload["ok"] is True
+    assert payload["error"] is None
     assert payload["data"]["eligibility_text"] == "Eligibility"
     assert schema_checked["ok"] is True
 
@@ -123,4 +126,5 @@ def test_get_trial_not_found(monkeypatch) -> None:
     assert response.status_code == 404
     payload = response.json()
     assert payload["ok"] is False
+    assert payload["data"] is None
     assert payload["error"]["code"] == "TRIAL_NOT_FOUND"

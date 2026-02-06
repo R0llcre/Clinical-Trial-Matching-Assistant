@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { useRouter } from "next/router";
 import type { FormEvent } from "react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 type ApiError = {
   code: string;
@@ -40,6 +40,13 @@ export default function MatchPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  useEffect(() => {
+    const savedToken = window.localStorage.getItem("ctmatch.jwt");
+    if (savedToken && !jwtToken) {
+      setJwtToken(savedToken);
+    }
+  }, [jwtToken]);
+
   const onSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     setLoading(true);
@@ -69,13 +76,15 @@ export default function MatchPage() {
       .split(",")
       .map((item) => item.trim())
       .filter(Boolean);
+    const bearerToken = jwtToken.trim();
+    window.localStorage.setItem("ctmatch.jwt", bearerToken);
 
     try {
       const patientResponse = await fetch(`${API_BASE}/api/patients`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          Authorization: `Bearer ${jwtToken.trim()}`,
+          Authorization: `Bearer ${bearerToken}`,
         },
         body: JSON.stringify({
           profile_json: {
@@ -96,7 +105,10 @@ export default function MatchPage() {
 
       const matchResponse = await fetch(`${API_BASE}/api/match`, {
         method: "POST",
-        headers: {"Content-Type": "application/json"},
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${bearerToken}`,
+        },
         body: JSON.stringify({
           patient_profile_id: patientPayload.data.id,
           top_k: parsedTopK,

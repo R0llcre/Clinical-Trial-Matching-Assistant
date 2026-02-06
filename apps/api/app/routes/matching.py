@@ -112,6 +112,7 @@ def _error(
         status_code=status_code,
         content={
             "ok": False,
+            "data": None,
             "error": {
                 "code": code,
                 "message": message,
@@ -122,7 +123,10 @@ def _error(
 
 
 def _ok(data: Dict[str, Any]) -> JSONResponse:
-    return JSONResponse(status_code=200, content={"ok": True, "data": data})
+    return JSONResponse(
+        status_code=200,
+        content={"ok": True, "data": data, "error": None},
+    )
 
 
 def _save_match_result(
@@ -254,6 +258,6 @@ def get_match(match_id: str):
         return _error("EXTERNAL_API_ERROR", f"Database unavailable: {exc}", 503)
 
     if not match:
-        return _error("NOT_FOUND", "match not found", 404, {"id": match_id})
+        return _error("MATCH_NOT_FOUND", "match not found", 404, {"id": match_id})
 
     return _ok(match)

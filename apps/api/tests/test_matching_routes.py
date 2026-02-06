@@ -2,6 +2,12 @@ from fastapi.testclient import TestClient
 
 from app.main import app
 from app.routes import matching as matching_module
+from app.services.auth import create_access_token
+
+
+def _auth_headers() -> dict:
+    token = create_access_token(sub="test-user")
+    return {"Authorization": f"Bearer {token}"}
 
 
 def test_create_match_ok(monkeypatch) -> None:
@@ -53,11 +59,13 @@ def test_create_match_ok(monkeypatch) -> None:
             "top_k": 5,
             "filters": {"status": "RECRUITING"},
         },
+        headers=_auth_headers(),
     )
 
     assert response.status_code == 200
     payload = response.json()
     assert payload["ok"] is True
+    assert payload["error"] is None
     assert isinstance(payload["data"]["match_id"], str)
     assert payload["data"]["results"][0]["nct_id"] == "NCT123"
     assert captured["top_k"] == 5
@@ -74,11 +82,13 @@ def test_create_match_validation_error() -> None:
     response = client.post(
         "/api/match",
         json={"patient_profile_id": "patient-1", "top_k": 0},
+        headers=_auth_headers(),
     )
 
     assert response.status_code == 400
     payload = response.json()
     assert payload["ok"] is False
+    assert payload["data"] is None
     assert payload["error"]["code"] == "VALIDATION_ERROR"
 
 
@@ -92,11 +102,16 @@ def test_create_match_patient_not_found(monkeypatch) -> None:
     )
 
     client = TestClient(app)
-    response = client.post("/api/match", json={"patient_profile_id": "missing"})
+    response = client.post(
+        "/api/match",
+        json={"patient_profile_id": "missing"},
+        headers=_auth_headers(),
+    )
 
     assert response.status_code == 404
     payload = response.json()
     assert payload["ok"] is False
+    assert payload["data"] is None
     assert payload["error"]["code"] == "PATIENT_NOT_FOUND"
 
 
@@ -120,11 +135,12 @@ def test_get_match_ok(monkeypatch) -> None:
     monkeypatch.setattr(matching_module, "_get_match_by_id", _fake_get_match)
 
     client = TestClient(app)
-    response = client.get("/api/matches/match-1")
+    response = client.get("/api/matches/match-1", headers=_auth_headers())
 
     assert response.status_code == 200
     payload = response.json()
     assert payload["ok"] is True
+    assert payload["error"] is None
     assert payload["data"]["id"] == "match-1"
     assert payload["data"]["results"][0]["nct_id"] == "NCT123"
     assert schema_checked["ok"] is True
@@ -138,9 +154,10 @@ def test_get_match_not_found(monkeypatch) -> None:
     )
 
     client = TestClient(app)
-    response = client.get("/api/matches/missing")
+    response = client.get("/api/matches/missing", headers=_auth_headers())
 
     assert response.status_code == 404
     payload = response.json()
     assert payload["ok"] is False
-    assert payload["error"]["code"] == "NOT_FOUND"
+    assert payload["data"] is None
+    assert payload["error"]["code"] == "MATCH_NOT_FOUND"
