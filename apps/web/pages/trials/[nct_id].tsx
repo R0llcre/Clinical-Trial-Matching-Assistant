@@ -16,6 +16,8 @@ type TrialDetail = {
     total_rules?: number;
     known_rules?: number;
     unknown_rules?: number;
+    failed_rules?: number;
+    coverage_ratio?: number;
   } | null;
   locations: string[];
   fetched_at?: string | null;

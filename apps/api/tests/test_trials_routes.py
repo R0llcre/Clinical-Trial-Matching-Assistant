@@ -107,7 +107,13 @@ def test_get_trial_ok(monkeypatch) -> None:
                 }
             ],
             "criteria_parser_version": "rule_v1",
-            "coverage_stats": {"total_rules": 1, "unknown_rules": 0, "known_rules": 1},
+            "coverage_stats": {
+                "total_rules": 1,
+                "unknown_rules": 0,
+                "known_rules": 1,
+                "failed_rules": 0,
+                "coverage_ratio": 1.0,
+            },
             "locations": ["City, State, Country"],
             "fetched_at": "2024-01-03T00:00:00",
         }
@@ -126,6 +132,7 @@ def test_get_trial_ok(monkeypatch) -> None:
     assert payload["data"]["eligibility_text"] == "Eligibility"
     assert payload["data"]["criteria"][0]["id"] == "rule-1"
     assert payload["data"]["criteria_parser_version"] == "rule_v1"
+    assert payload["data"]["coverage_stats"]["coverage_ratio"] == 1.0
     assert schema_checked["ok"] is True
 
 

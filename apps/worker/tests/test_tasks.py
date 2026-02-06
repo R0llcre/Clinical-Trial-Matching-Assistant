@@ -3,7 +3,13 @@ import datetime as dt
 import pytest
 
 import tasks
-from tasks import _build_query_term, _extract_trial, parse_trial, sync_trials
+from tasks import (
+    _build_query_term,
+    _compute_coverage_stats,
+    _extract_trial,
+    parse_trial,
+    sync_trials,
+)
 
 
 class _FakeConn:
@@ -133,6 +139,8 @@ def test_parse_trial_success(monkeypatch: pytest.MonkeyPatch) -> None:
     assert stats.unknown_count == 0
     assert captured["trial_id"] == "trial-uuid"
     assert captured["coverage_stats"]["total_rules"] == 1
+    assert captured["coverage_stats"]["failed_rules"] == 0
+    assert captured["coverage_stats"]["coverage_ratio"] == 1.0
     assert logs[-1]["status"] == "SUCCESS"
     assert logs[-1]["error_message"] is None
     assert fake_conn.rollbacks == 0
@@ -184,3 +192,19 @@ def test_parse_trial_records_failed_log(monkeypatch: pytest.MonkeyPatch) -> None
     assert logs[-1]["nct_id"] == "NCT999"
     assert logs[-1]["parser_version"] == "rule_v1"
     assert fake_conn.rollbacks == 1
+
+
+def test_compute_coverage_stats_counts_unknown_as_failed() -> None:
+    coverage_stats = _compute_coverage_stats(
+        [
+            {"field": "age", "certainty": "high"},
+            {"field": "other", "certainty": "low"},
+            {"field": "condition", "certainty": "low"},
+        ]
+    )
+
+    assert coverage_stats["total_rules"] == 3
+    assert coverage_stats["known_rules"] == 1
+    assert coverage_stats["unknown_rules"] == 2
+    assert coverage_stats["failed_rules"] == 2
+    assert coverage_stats["coverage_ratio"] == pytest.approx(0.3333, abs=0.0001)

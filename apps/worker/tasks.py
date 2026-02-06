@@ -438,6 +438,24 @@ def _write_parse_log(
         )
 
 
+def _compute_coverage_stats(criteria_json: List[Dict[str, Any]]) -> Dict[str, Any]:
+    total_rules = len(criteria_json)
+    unknown_rules = sum(
+        1
+        for rule in criteria_json
+        if rule.get("field") == "other" or rule.get("certainty") == "low"
+    )
+    known_rules = total_rules - unknown_rules
+    coverage_ratio = float(known_rules) / float(total_rules) if total_rules else 0.0
+    return {
+        "total_rules": total_rules,
+        "known_rules": known_rules,
+        "unknown_rules": unknown_rules,
+        "failed_rules": unknown_rules,
+        "coverage_ratio": round(coverage_ratio, 4),
+    }
+
+
 def sync_trials(
     condition: str,
     status: Optional[str] = None,
@@ -583,16 +601,8 @@ def parse_trial(
                 raise ValueError(f"unsupported parser_version: {parser_version}")
 
             criteria_json = parse_criteria_v1(trial.get("eligibility_text"))
-            unknown_count = sum(
-                1
-                for rule in criteria_json
-                if rule.get("field") == "other" and rule.get("certainty") == "low"
-            )
-            coverage_stats = {
-                "total_rules": len(criteria_json),
-                "unknown_rules": unknown_count,
-                "known_rules": len(criteria_json) - unknown_count,
-            }
+            coverage_stats = _compute_coverage_stats(criteria_json)
+            unknown_count = int(coverage_stats["unknown_rules"])
 
             _upsert_trial_criteria(
                 conn,
