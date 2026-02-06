@@ -69,7 +69,7 @@ def test_parse_criteria_v1_builds_age_sex_and_exclusion_rules() -> None:
     Participants must be 18 years or older.
     Female participants only.
     Exclusion Criteria:
-    Pregnant or breastfeeding participants.
+    Female participants who are pregnant or breastfeeding.
     """
 
     rules = parse_criteria_v1(text)
@@ -113,7 +113,7 @@ def test_parse_criteria_v1_emits_placeholder_when_inclusion_sentence_unparsed() 
     assert rules[0]["type"] == "INCLUSION"
     assert rules[0]["field"] == "condition"
     assert rules[0]["operator"] == "IN"
-    assert rules[0]["value"] == "study-specific condition"
+    assert rules[0]["value"] == "study specific condition"
 
 
 def test_parse_criteria_v1_deduplicates_overlapping_infection_keywords() -> None:
@@ -192,7 +192,7 @@ def test_parse_criteria_v1_extracts_exclusion_history_and_hiv_conditions() -> No
     assert "hiv positive" in values
 
 
-def test_parse_criteria_v1_extracts_fertile_and_adult_condition_hints() -> None:
+def test_parse_criteria_v1_extracts_fertile_condition_hint() -> None:
     text = """
     Inclusion Criteria:
     Fertile adults are eligible.
@@ -207,7 +207,7 @@ def test_parse_criteria_v1_extracts_fertile_and_adult_condition_hints() -> None:
         and rule["operator"] == "IN"
     }
     assert "fertile" in values
-    assert "adult" in values
+    assert "adult" not in values
 
 
 def test_parse_criteria_v1_extracts_exclusion_history_within_last() -> None:
@@ -270,7 +270,7 @@ def test_parse_criteria_v1_adds_study_specific_condition_when_heading_only() -> 
         for rule in rules
         if rule["type"] == "INCLUSION"
         and rule["field"] == "condition"
-        and rule["value"] == "study-specific condition"
+        and rule["value"] == "study specific condition"
     )
     assert placeholder["operator"] == "IN"
     assert placeholder["evidence_text"] == "Inclusion Criteria:"

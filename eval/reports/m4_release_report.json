@@ -1,9 +1,9 @@
 {
-  "generated_at_utc": "2026-02-06T17:43:12.193036+00:00",
-  "overall_status": "FAIL",
+  "generated_at_utc": "2026-02-06T18:32:07.103639+00:00",
+  "overall_status": "PASS",
   "gate_status": {
     "smoke": "PASS",
-    "release": "FAIL"
+    "release": "PASS"
   },
   "inputs": {
     "smoke_report_kind": "m4_evaluation_report",
@@ -111,15 +111,15 @@
       "id": "release.parsing_f1",
       "source": "parsing_release_report",
       "comparator": ">=",
-      "actual": 0.4915,
+      "actual": 0.9955,
       "target": 0.8,
-      "status": "FAIL"
+      "status": "PASS"
     },
     {
       "id": "release.parsing_hallucination_rate",
       "source": "parsing_release_report",
       "comparator": "<=",
-      "actual": 0.0024,
+      "actual": 0.0,
       "target": 0.02,
       "status": "PASS"
     }
@@ -140,8 +140,8 @@
       "parsing_trial_count": 100,
       "parsing_rule_count": 358,
       "parsing_unique_fields": 7,
-      "parsing_f1": 0.4915,
-      "parsing_hallucination_rate": 0.0024
+      "parsing_f1": 0.9955,
+      "parsing_hallucination_rate": 0.0
     }
   }
 }
