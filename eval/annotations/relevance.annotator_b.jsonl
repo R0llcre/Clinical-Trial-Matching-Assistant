@@ -1,0 +1,30 @@
+{"query_id": "Q0001", "nct_id": "NCT90000001", "relevance_label": 1, "rationale": "diabetes matches, but requested status/phase/location are not explicit.", "annotator_id": "annotator_b", "guideline_version": "m4-v1"}
+{"query_id": "Q0001", "nct_id": "NCT90000002", "relevance_label": 0, "rationale": "condition mismatch: query expects type 2 diabetes.", "annotator_id": "annotator_b", "guideline_version": "m4-v1"}
+{"query_id": "Q0001", "nct_id": "NCT90000003", "relevance_label": 0, "rationale": "condition mismatch: query expects type 2 diabetes.", "annotator_id": "annotator_b", "guideline_version": "m4-v1"}
+{"query_id": "Q0001", "nct_id": "NCT90000004", "relevance_label": 0, "rationale": "condition mismatch: query expects type 2 diabetes.", "annotator_id": "annotator_b", "guideline_version": "m4-v1"}
+{"query_id": "Q0001", "nct_id": "NCT90000005", "relevance_label": 0, "rationale": "condition mismatch: query expects type 2 diabetes.", "annotator_id": "annotator_b", "guideline_version": "m4-v1"}
+{"query_id": "Q0001", "nct_id": "NCT90000006", "relevance_label": 0, "rationale": "condition mismatch: query expects type 2 diabetes.", "annotator_id": "annotator_b", "guideline_version": "m4-v1"}
+{"query_id": "Q0001", "nct_id": "NCT90000007", "relevance_label": 0, "rationale": "condition mismatch: query expects type 2 diabetes.", "annotator_id": "annotator_b", "guideline_version": "m4-v1"}
+{"query_id": "Q0001", "nct_id": "NCT90000008", "relevance_label": 0, "rationale": "condition mismatch: query expects type 2 diabetes.", "annotator_id": "annotator_b", "guideline_version": "m4-v1"}
+{"query_id": "Q0002", "nct_id": "NCT90000001", "relevance_label": 0, "rationale": "condition mismatch: query expects metastatic breast cancer.", "annotator_id": "annotator_b", "guideline_version": "m4-v1"}
+{"query_id": "Q0002", "nct_id": "NCT90000002", "relevance_label": 1, "rationale": "breast cancer phase aligns, but metastatic intent is not explicit.", "annotator_id": "annotator_b", "guideline_version": "m4-v1"}
+{"query_id": "Q0002", "nct_id": "NCT90000003", "relevance_label": 0, "rationale": "condition mismatch: query expects metastatic breast cancer.", "annotator_id": "annotator_b", "guideline_version": "m4-v1"}
+{"query_id": "Q0002", "nct_id": "NCT90000004", "relevance_label": 0, "rationale": "condition mismatch: query expects metastatic breast cancer.", "annotator_id": "annotator_b", "guideline_version": "m4-v1"}
+{"query_id": "Q0002", "nct_id": "NCT90000005", "relevance_label": 0, "rationale": "condition mismatch: query expects metastatic breast cancer.", "annotator_id": "annotator_b", "guideline_version": "m4-v1"}
+{"query_id": "Q0002", "nct_id": "NCT90000006", "relevance_label": 0, "rationale": "condition mismatch: query expects metastatic breast cancer.", "annotator_id": "annotator_b", "guideline_version": "m4-v1"}
+{"query_id": "Q0002", "nct_id": "NCT90000007", "relevance_label": 0, "rationale": "condition mismatch: query expects metastatic breast cancer.", "annotator_id": "annotator_b", "guideline_version": "m4-v1"}
+{"query_id": "Q0002", "nct_id": "NCT90000008", "relevance_label": 0, "rationale": "condition mismatch: query expects metastatic breast cancer.", "annotator_id": "annotator_b", "guideline_version": "m4-v1"}
+{"query_id": "Q0003", "nct_id": "NCT90000001", "relevance_label": 0, "rationale": "condition mismatch: query expects heart failure.", "annotator_id": "annotator_b", "guideline_version": "m4-v1"}
+{"query_id": "Q0003", "nct_id": "NCT90000002", "relevance_label": 0, "rationale": "condition mismatch: query expects heart failure.", "annotator_id": "annotator_b", "guideline_version": "m4-v1"}
+{"query_id": "Q0003", "nct_id": "NCT90000003", "relevance_label": 1, "rationale": "heart failure matches, but Boston location is not specified.", "annotator_id": "annotator_b", "guideline_version": "m4-v1"}
+{"query_id": "Q0003", "nct_id": "NCT90000004", "relevance_label": 0, "rationale": "condition mismatch: query expects heart failure.", "annotator_id": "annotator_b", "guideline_version": "m4-v1"}
+{"query_id": "Q0003", "nct_id": "NCT90000005", "relevance_label": 0, "rationale": "condition mismatch: query expects heart failure.", "annotator_id": "annotator_b", "guideline_version": "m4-v1"}
+{"query_id": "Q0003", "nct_id": "NCT90000006", "relevance_label": 0, "rationale": "condition mismatch: query expects heart failure.", "annotator_id": "annotator_b", "guideline_version": "m4-v1"}
+{"query_id": "Q0003", "nct_id": "NCT90000007", "relevance_label": 0, "rationale": "condition mismatch: query expects heart failure.", "annotator_id": "annotator_b", "guideline_version": "m4-v1"}
+{"query_id": "Q0003", "nct_id": "NCT90000008", "relevance_label": 0, "rationale": "condition mismatch: query expects heart failure.", "annotator_id": "annotator_b", "guideline_version": "m4-v1"}
+{"query_id": "Q0004", "nct_id": "NCT90000001", "relevance_label": 0, "rationale": "condition mismatch: query expects asthma.", "annotator_id": "annotator_b", "guideline_version": "m4-v1"}
+{"query_id": "Q0004", "nct_id": "NCT90000002", "relevance_label": 0, "rationale": "condition mismatch: query expects asthma.", "annotator_id": "annotator_b", "guideline_version": "m4-v1"}
+{"query_id": "Q0004", "nct_id": "NCT90000003", "relevance_label": 0, "rationale": "condition mismatch: query expects asthma.", "annotator_id": "annotator_b", "guideline_version": "m4-v1"}
+{"query_id": "Q0004", "nct_id": "NCT90000004", "relevance_label": 1, "rationale": "pediatric asthma matches, but requested not-yet-recruiting status is not explicit.", "annotator_id": "annotator_b", "guideline_version": "m4-v1"}
+{"query_id": "Q0004", "nct_id": "NCT90000005", "relevance_label": 0, "rationale": "condition mismatch: query expects asthma.", "annotator_id": "annotator_b", "guideline_version": "m4-v1"}
+{"query_id": "Q0004", "nct_id": "NCT90000006", "relevance_label": 0, "rationale": "condition mismatch: query expects asthma.", "annotator_id": "annotator_b", "guideline_version": "m4-v1"}
