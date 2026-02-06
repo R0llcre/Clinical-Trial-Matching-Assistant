@@ -12,6 +12,7 @@ from services.eligibility_parser import parse_criteria_v1
 _DEFAULT_OPENAI_BASE_URL = "https://api.openai.com/v1"
 _DEFAULT_OPENAI_MODEL = "gpt-4o-mini"
 _DEFAULT_TIMEOUT_SECONDS = 20.0
+_DEFAULT_HALLUCINATION_THRESHOLD = 0.02
 
 _ALLOWED_TYPES = {"INCLUSION", "EXCLUSION"}
 _ALLOWED_FIELDS = {
@@ -46,21 +47,34 @@ def parse_criteria_llm_v1_with_fallback(
     eligibility_text: Optional[str],
 ) -> Tuple[List[Dict[str, Any]], Dict[str, Any]]:
     """Return llm_v1 result when available, otherwise fallback to rule_v1."""
+    hallucination_threshold = _read_hallucination_threshold()
     try:
         rules, usage = parse_criteria_llm_v1(eligibility_text)
+        llm_quality = evaluate_evidence_alignment(rules, eligibility_text)
+        if llm_quality["hallucination_rate"] > hallucination_threshold:
+            raise LLMParserError(
+                "llm hallucination rate "
+                f"{llm_quality['hallucination_rate']:.4f} "
+                f"exceeds threshold {hallucination_threshold:.4f}"
+            )
         return rules, {
             "parser_source": "llm_v1",
             "fallback_used": False,
             "fallback_reason": None,
             "llm_usage": usage,
+            "llm_quality": llm_quality,
+            "hallucination_threshold": hallucination_threshold,
         }
     except LLMParserError as exc:
         fallback_rules = parse_criteria_v1(eligibility_text)
+        fallback_quality = evaluate_evidence_alignment(fallback_rules, eligibility_text)
         return fallback_rules, {
             "parser_source": "rule_v1",
             "fallback_used": True,
             "fallback_reason": str(exc),
             "llm_usage": None,
+            "llm_quality": fallback_quality,
+            "hallucination_threshold": hallucination_threshold,
         }
 
 
@@ -288,6 +302,76 @@ def _extract_usage(payload: Dict[str, Any]) -> Dict[str, Any]:
         "completion_tokens": _safe_int(usage.get("completion_tokens")),
         "total_tokens": _safe_int(usage.get("total_tokens")),
     }
+
+
+def evaluate_evidence_alignment(
+    rules: List[Dict[str, Any]], eligibility_text: Optional[str]
+) -> Dict[str, Any]:
+    source_text = eligibility_text if isinstance(eligibility_text, str) else ""
+    if not rules:
+        return {
+            "total_rules": 0,
+            "aligned_rules": 0,
+            "hallucinated_rules": 0,
+            "hallucination_rate": 0.0,
+        }
+
+    aligned_rules = 0
+    for rule in rules:
+        if _rule_has_aligned_evidence(rule, source_text):
+            aligned_rules += 1
+
+    total_rules = len(rules)
+    hallucinated_rules = total_rules - aligned_rules
+    hallucination_rate = float(hallucinated_rules) / float(total_rules)
+    return {
+        "total_rules": total_rules,
+        "aligned_rules": aligned_rules,
+        "hallucinated_rules": hallucinated_rules,
+        "hallucination_rate": round(hallucination_rate, 4),
+    }
+
+
+def _rule_has_aligned_evidence(rule: Dict[str, Any], source_text: str) -> bool:
+    evidence = rule.get("evidence_text")
+    if not isinstance(evidence, str) or not evidence.strip():
+        return False
+
+    normalized_source = " ".join(source_text.lower().split())
+    normalized_evidence = " ".join(evidence.lower().split())
+    if normalized_evidence and normalized_evidence in normalized_source:
+        return True
+
+    source_span = rule.get("source_span")
+    if not isinstance(source_span, dict):
+        return False
+    start = source_span.get("start")
+    end = source_span.get("end")
+    if not isinstance(start, int) or not isinstance(end, int):
+        return False
+    if start < 0 or end <= start or end > len(source_text):
+        return False
+
+    span_text = source_text[start:end]
+    normalized_span = " ".join(span_text.lower().split())
+    if not normalized_span:
+        return False
+    return (
+        normalized_evidence in normalized_span
+        or normalized_span in normalized_evidence
+    )
+
+
+def _read_hallucination_threshold() -> float:
+    raw = os.getenv(
+        "LLM_HALLUCINATION_THRESHOLD",
+        str(_DEFAULT_HALLUCINATION_THRESHOLD),
+    )
+    try:
+        value = float(raw)
+    except ValueError:
+        return _DEFAULT_HALLUCINATION_THRESHOLD
+    return min(max(value, 0.0), 1.0)
 
 
 def _safe_int(value: Any) -> Optional[int]:
