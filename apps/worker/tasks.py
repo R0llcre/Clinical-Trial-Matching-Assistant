@@ -6,11 +6,13 @@ import os
 import time
 import uuid
 from dataclasses import dataclass
-from typing import Any, Dict, Iterable, Optional, Sequence
+from typing import Any, Dict, Iterable, List, Optional, Sequence
 
 import httpx
 import psycopg
 from psycopg.types.json import Json
+
+from services.eligibility_parser import parse_criteria_v1
 
 DEFAULT_BASE_URL = "https://clinicaltrials.gov/api/v2"
 LOGGER = logging.getLogger(__name__)
@@ -25,6 +27,16 @@ class SyncStats:
     processed: int
     inserted: int
     updated: int
+
+
+@dataclass
+class ParseStats:
+    run_id: str
+    nct_id: str
+    parser_version: str
+    status: str
+    rule_count: int
+    unknown_count: int
 
 
 FIELD_MAP = {
@@ -214,6 +226,33 @@ def _ensure_tables(conn: psycopg.Connection) -> None:
             )
             """
         )
+        cur.execute(
+            """
+            CREATE TABLE IF NOT EXISTS trial_criteria (
+              id UUID PRIMARY KEY,
+              trial_id UUID NOT NULL REFERENCES trials(id),
+              parser_version TEXT NOT NULL,
+              criteria_json JSONB NOT NULL,
+              coverage_stats JSONB,
+              created_at TIMESTAMP NOT NULL,
+              UNIQUE (trial_id, parser_version)
+            )
+            """
+        )
+        cur.execute(
+            """
+            CREATE TABLE IF NOT EXISTS parse_logs (
+              id UUID PRIMARY KEY,
+              run_id UUID NOT NULL,
+              task_name TEXT NOT NULL,
+              nct_id TEXT NOT NULL,
+              parser_version TEXT NOT NULL,
+              status TEXT NOT NULL,
+              error_message TEXT,
+              created_at TIMESTAMP NOT NULL
+            )
+            """
+        )
 
 
 def _upsert_trial(conn: psycopg.Connection, trial: Dict[str, Any]) -> bool:
@@ -304,6 +343,95 @@ def _write_sync_log(
                 "processed": processed,
                 "inserted": inserted,
                 "updated": updated,
+                "error_message": error_message,
+                "created_at": dt.datetime.utcnow(),
+            },
+        )
+
+
+def _fetch_trial_for_parse(
+    conn: psycopg.Connection, nct_id: str
+) -> Optional[Dict[str, Any]]:
+    with conn.cursor() as cur:
+        cur.execute(
+            """
+            SELECT id, nct_id, eligibility_text
+            FROM trials
+            WHERE nct_id = %s
+            LIMIT 1
+            """,
+            (nct_id,),
+        )
+        row = cur.fetchone()
+    if not row:
+        return None
+    return {
+        "id": str(row[0]),
+        "nct_id": str(row[1]),
+        "eligibility_text": row[2],
+    }
+
+
+def _upsert_trial_criteria(
+    conn: psycopg.Connection,
+    *,
+    trial_id: str,
+    parser_version: str,
+    criteria_json: List[Dict[str, Any]],
+    coverage_stats: Dict[str, Any],
+) -> None:
+    with conn.cursor() as cur:
+        cur.execute(
+            """
+            INSERT INTO trial_criteria (
+              id, trial_id, parser_version, criteria_json, coverage_stats, created_at
+            ) VALUES (
+              %(id)s, %(trial_id)s, %(parser_version)s,
+              %(criteria_json)s, %(coverage_stats)s, %(created_at)s
+            )
+            ON CONFLICT (trial_id, parser_version) DO UPDATE SET
+              criteria_json = EXCLUDED.criteria_json,
+              coverage_stats = EXCLUDED.coverage_stats,
+              created_at = EXCLUDED.created_at
+            """,
+            {
+                "id": str(uuid.uuid4()),
+                "trial_id": trial_id,
+                "parser_version": parser_version,
+                "criteria_json": Json(criteria_json),
+                "coverage_stats": Json(coverage_stats),
+                "created_at": dt.datetime.utcnow(),
+            },
+        )
+
+
+def _write_parse_log(
+    conn: psycopg.Connection,
+    *,
+    run_id: str,
+    nct_id: str,
+    parser_version: str,
+    status: str,
+    error_message: Optional[str],
+) -> None:
+    with conn.cursor() as cur:
+        cur.execute(
+            """
+            INSERT INTO parse_logs (
+              id, run_id, task_name, nct_id, parser_version,
+              status, error_message, created_at
+            ) VALUES (
+              %(id)s, %(run_id)s, %(task_name)s, %(nct_id)s,
+              %(parser_version)s, %(status)s, %(error_message)s, %(created_at)s
+            )
+            """,
+            {
+                "id": str(uuid.uuid4()),
+                "run_id": run_id,
+                "task_name": "parse_trial",
+                "nct_id": nct_id,
+                "parser_version": parser_version,
+                "status": status,
                 "error_message": error_message,
                 "created_at": dt.datetime.utcnow(),
             },
@@ -421,5 +549,101 @@ def sync_trials(
         processed,
         inserted,
         updated,
+    )
+    return stats
+
+
+def parse_trial(
+    nct_id: str,
+    parser_version: str = "rule_v1",
+) -> ParseStats:
+    database_url = os.getenv("DATABASE_URL")
+    if not database_url:
+        raise RuntimeError("DATABASE_URL not set")
+
+    run_id = str(uuid.uuid4())
+
+    LOGGER.info(
+        "parse_trial started run_id=%s nct_id=%s parser_version=%s",
+        run_id,
+        nct_id,
+        parser_version,
+    )
+
+    with psycopg.connect(database_url) as conn:
+        _ensure_tables(conn)
+        conn.commit()
+
+        try:
+            trial = _fetch_trial_for_parse(conn, nct_id)
+            if not trial:
+                raise ValueError(f"trial not found: {nct_id}")
+
+            if parser_version != "rule_v1":
+                raise ValueError(f"unsupported parser_version: {parser_version}")
+
+            criteria_json = parse_criteria_v1(trial.get("eligibility_text"))
+            unknown_count = sum(
+                1
+                for rule in criteria_json
+                if rule.get("field") == "other" and rule.get("certainty") == "low"
+            )
+            coverage_stats = {
+                "total_rules": len(criteria_json),
+                "unknown_rules": unknown_count,
+                "known_rules": len(criteria_json) - unknown_count,
+            }
+
+            _upsert_trial_criteria(
+                conn,
+                trial_id=trial["id"],
+                parser_version=parser_version,
+                criteria_json=criteria_json,
+                coverage_stats=coverage_stats,
+            )
+            _write_parse_log(
+                conn,
+                run_id=run_id,
+                nct_id=nct_id,
+                parser_version=parser_version,
+                status="SUCCESS",
+                error_message=None,
+            )
+            conn.commit()
+        except Exception as exc:
+            conn.rollback()
+            _ensure_tables(conn)
+            _write_parse_log(
+                conn,
+                run_id=run_id,
+                nct_id=nct_id,
+                parser_version=parser_version,
+                status="FAILED",
+                error_message=str(exc),
+            )
+            conn.commit()
+            LOGGER.exception(
+                "parse_trial failed run_id=%s nct_id=%s parser_version=%s",
+                run_id,
+                nct_id,
+                parser_version,
+            )
+            raise
+
+    stats = ParseStats(
+        run_id=run_id,
+        nct_id=nct_id,
+        parser_version=parser_version,
+        status="SUCCESS",
+        rule_count=len(criteria_json),
+        unknown_count=unknown_count,
+    )
+    LOGGER.info(
+        "parse_trial completed run_id=%s nct_id=%s parser_version=%s rules=%s unknown=%s",
+        run_id,
+        nct_id,
+        parser_version,
+        stats.rule_count,
+        stats.unknown_count,
     )
     return stats
