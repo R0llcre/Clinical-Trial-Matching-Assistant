@@ -1,0 +1,277 @@
+{
+  "source": {
+    "type": "aact_flatfile",
+    "zip_path": "/tmp/aact/aact_flatfiles_latest.zip",
+    "summary": {
+      "queries": {
+        "Q0001": {
+          "positive_candidates": 180,
+          "final_candidates": 220
+        },
+        "Q0002": {
+          "positive_candidates": 180,
+          "final_candidates": 220
+        },
+        "Q0003": {
+          "positive_candidates": 180,
+          "final_candidates": 220
+        },
+        "Q0004": {
+          "positive_candidates": 180,
+          "final_candidates": 220
+        },
+        "Q0005": {
+          "positive_candidates": 180,
+          "final_candidates": 220
+        },
+        "Q0006": {
+          "positive_candidates": 180,
+          "final_candidates": 220
+        },
+        "Q0007": {
+          "positive_candidates": 180,
+          "final_candidates": 220
+        },
+        "Q0008": {
+          "positive_candidates": 180,
+          "final_candidates": 220
+        },
+        "Q0009": {
+          "positive_candidates": 180,
+          "final_candidates": 220
+        },
+        "Q0010": {
+          "positive_candidates": 180,
+          "final_candidates": 220
+        }
+      },
+      "global_positive_ncts": 1781
+    }
+  },
+  "queries_path": "eval/data/queries.jsonl",
+  "excluded_files": [
+    "eval/annotations/relevance.annotator_a.jsonl",
+    "eval/annotations/relevance.annotator_b.jsonl",
+    "eval/annotations/relevance.batch1.annotator_b.jsonl",
+    "eval/annotations/relevance.batch2.annotator_b.jsonl",
+    "eval/annotations/relevance.batch3.annotator_b.jsonl",
+    "eval/annotations/relevance.batch4.annotator_b.jsonl"
+  ],
+  "excluded_pair_count": 2750,
+  "pending": {
+    "path": "eval/annotation_tasks/relevance.pending.v2.jsonl",
+    "total_rows": 2181,
+    "query_summary": {
+      "Q0001": {
+        "fetched_candidates": 220,
+        "after_exclusion": 218,
+        "selected_candidates": 218,
+        "band_counts": {
+          "hard_negative": 41,
+          "likely_1": 150,
+          "likely_2": 27
+        }
+      },
+      "Q0002": {
+        "fetched_candidates": 220,
+        "after_exclusion": 219,
+        "selected_candidates": 219,
+        "band_counts": {
+          "hard_negative": 113,
+          "likely_1": 105,
+          "likely_2": 1
+        }
+      },
+      "Q0003": {
+        "fetched_candidates": 220,
+        "after_exclusion": 219,
+        "selected_candidates": 219,
+        "band_counts": {
+          "hard_negative": 39,
+          "likely_1": 172,
+          "likely_2": 8
+        }
+      },
+      "Q0004": {
+        "fetched_candidates": 220,
+        "after_exclusion": 219,
+        "selected_candidates": 219,
+        "band_counts": {
+          "hard_negative": 39,
+          "likely_1": 170,
+          "likely_2": 10
+        }
+      },
+      "Q0005": {
+        "fetched_candidates": 220,
+        "after_exclusion": 216,
+        "selected_candidates": 216,
+        "band_counts": {
+          "hard_negative": 44,
+          "likely_1": 126,
+          "likely_2": 46
+        }
+      },
+      "Q0006": {
+        "fetched_candidates": 220,
+        "after_exclusion": 219,
+        "selected_candidates": 219,
+        "band_counts": {
+          "hard_negative": 54,
+          "likely_1": 74,
+          "likely_2": 91
+        }
+      },
+      "Q0007": {
+        "fetched_candidates": 220,
+        "after_exclusion": 219,
+        "selected_candidates": 219,
+        "band_counts": {
+          "hard_negative": 117,
+          "likely_1": 102
+        }
+      },
+      "Q0008": {
+        "fetched_candidates": 220,
+        "after_exclusion": 219,
+        "selected_candidates": 219,
+        "band_counts": {
+          "hard_negative": 40,
+          "likely_1": 166,
+          "likely_2": 13
+        }
+      },
+      "Q0009": {
+        "fetched_candidates": 220,
+        "after_exclusion": 216,
+        "selected_candidates": 216,
+        "band_counts": {
+          "hard_negative": 42,
+          "likely_1": 142,
+          "likely_2": 32
+        }
+      },
+      "Q0010": {
+        "fetched_candidates": 220,
+        "after_exclusion": 217,
+        "selected_candidates": 217,
+        "band_counts": {
+          "hard_negative": 39,
+          "likely_1": 162,
+          "likely_2": 16
+        }
+      }
+    }
+  },
+  "batch_round_1": {
+    "path": "eval/annotation_tasks/relevance.batch_v2_round1.700.jsonl",
+    "total_rows": 700,
+    "target_per_query": 70,
+    "quotas": {
+      "likely_2": 20,
+      "likely_1": 30,
+      "hard_negative": 20
+    },
+    "query_summary": {
+      "Q0001": {
+        "picked": 70,
+        "picked_band_counts": {
+          "hard_negative": 20,
+          "likely_1": 30,
+          "likely_2": 20
+        },
+        "requested_target": 70,
+        "shortfall": 0
+      },
+      "Q0002": {
+        "picked": 70,
+        "picked_band_counts": {
+          "hard_negative": 20,
+          "likely_1": 49,
+          "likely_2": 1
+        },
+        "requested_target": 70,
+        "shortfall": 0
+      },
+      "Q0003": {
+        "picked": 70,
+        "picked_band_counts": {
+          "hard_negative": 20,
+          "likely_1": 42,
+          "likely_2": 8
+        },
+        "requested_target": 70,
+        "shortfall": 0
+      },
+      "Q0004": {
+        "picked": 70,
+        "picked_band_counts": {
+          "hard_negative": 20,
+          "likely_1": 40,
+          "likely_2": 10
+        },
+        "requested_target": 70,
+        "shortfall": 0
+      },
+      "Q0005": {
+        "picked": 70,
+        "picked_band_counts": {
+          "hard_negative": 20,
+          "likely_1": 30,
+          "likely_2": 20
+        },
+        "requested_target": 70,
+        "shortfall": 0
+      },
+      "Q0006": {
+        "picked": 70,
+        "picked_band_counts": {
+          "hard_negative": 20,
+          "likely_1": 30,
+          "likely_2": 20
+        },
+        "requested_target": 70,
+        "shortfall": 0
+      },
+      "Q0007": {
+        "picked": 70,
+        "picked_band_counts": {
+          "hard_negative": 20,
+          "likely_1": 50
+        },
+        "requested_target": 70,
+        "shortfall": 0
+      },
+      "Q0008": {
+        "picked": 70,
+        "picked_band_counts": {
+          "hard_negative": 20,
+          "likely_1": 37,
+          "likely_2": 13
+        },
+        "requested_target": 70,
+        "shortfall": 0
+      },
+      "Q0009": {
+        "picked": 70,
+        "picked_band_counts": {
+          "hard_negative": 20,
+          "likely_1": 30,
+          "likely_2": 20
+        },
+        "requested_target": 70,
+        "shortfall": 0
+      },
+      "Q0010": {
+        "picked": 70,
+        "picked_band_counts": {
+          "hard_negative": 20,
+          "likely_1": 34,
+          "likely_2": 16
+        },
+        "requested_target": 70,
+        "shortfall": 0
+      }
+    }
+  }
+}

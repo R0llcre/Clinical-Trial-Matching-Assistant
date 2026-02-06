@@ -1,0 +1,31 @@
+{
+  "base_rows": 700,
+  "adjudication_rows": 149,
+  "adjudicated_pairs_applied": 149,
+  "changed_pairs": 56,
+  "changed_rate": 0.3758,
+  "label_transitions": {
+    "1->1": 85,
+    "2->0": 1,
+    "2->1": 55,
+    "2->2": 8
+  },
+  "final_label_distribution": {
+    "0": 143,
+    "1": 549,
+    "2": 8
+  },
+  "adjudicated_by_query": {
+    "Q0001": 15,
+    "Q0002": 1,
+    "Q0003": 11,
+    "Q0004": 10,
+    "Q0005": 21,
+    "Q0006": 21,
+    "Q0007": 22,
+    "Q0008": 13,
+    "Q0009": 19,
+    "Q0010": 16
+  },
+  "output_annotator_id": "adjudicated"
+}

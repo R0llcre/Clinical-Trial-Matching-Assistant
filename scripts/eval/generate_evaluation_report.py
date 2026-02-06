@@ -261,6 +261,13 @@ def render_markdown(report: Dict[str, Any]) -> str:
     lines.append(
         f"- retrieval_skipped_queries: {report['metrics']['retrieval'].get('skipped_queries', 0)}"
     )
+    lines.append(
+        f"- retrieval_annotation_coverage: {report['metrics']['retrieval'].get('annotation_coverage', 0.0)}"
+    )
+    lines.append(
+        f"- retrieval_fully_annotated_queries: "
+        f"{report['metrics']['retrieval'].get('fully_annotated_queries', 0)}"
+    )
     lines.append("")
     lines.append("## Metric Summary")
     lines.append("")
@@ -306,6 +313,7 @@ def generate_report(
     relevance_path: Path,
     top_k: int,
     relevance_threshold: int,
+    min_relevance_coverage: float,
     retrieval_results_path: str,
     predicted_rules_path: str,
     error_sample_limit: int = 10,
@@ -326,6 +334,7 @@ def generate_report(
         relevance_path=relevance_path,
         top_k=top_k,
         relevance_threshold=relevance_threshold,
+        min_relevance_coverage=min_relevance_coverage,
         retrieval_results_path=retrieval_results_path,
         predicted_rules_path=predicted_rules_path,
     )
@@ -376,6 +385,7 @@ def main() -> None:
     parser.add_argument("--relevance", default="eval/annotations/relevance.annotator_a.jsonl")
     parser.add_argument("--top-k", type=int, default=10)
     parser.add_argument("--relevance-threshold", type=int, default=1)
+    parser.add_argument("--min-relevance-coverage", type=float, default=1.0)
     parser.add_argument("--retrieval-results", default="")
     parser.add_argument("--predicted-rules", default="")
     parser.add_argument("--error-sample-limit", type=int, default=10)
@@ -397,6 +407,7 @@ def main() -> None:
         relevance_path=Path(args.relevance),
         top_k=args.top_k,
         relevance_threshold=args.relevance_threshold,
+        min_relevance_coverage=args.min_relevance_coverage,
         retrieval_results_path=args.retrieval_results,
         predicted_rules_path=args.predicted_rules,
         error_sample_limit=args.error_sample_limit,

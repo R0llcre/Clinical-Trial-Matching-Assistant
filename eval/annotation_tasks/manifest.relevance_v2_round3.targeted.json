@@ -1,0 +1,102 @@
+{
+  "input_pending_rows": 9310,
+  "input_reference_rows": 1400,
+  "excluded_pair_count": 1400,
+  "deduped_pending_rows_after_exclusion": 8610,
+  "focus_queries": [
+    "Q0001",
+    "Q0002",
+    "Q0004",
+    "Q0005",
+    "Q0006",
+    "Q0008",
+    "Q0009",
+    "Q0010"
+  ],
+  "target_per_query": 50,
+  "quotas": {
+    "likely_2": 35,
+    "likely_1": 15,
+    "hard_negative": 0
+  },
+  "task_id_prefix": "relevance-v2r3",
+  "total_rows": 400,
+  "query_summary": {
+    "Q0001": {
+      "label2_count_in_reference": 0,
+      "available_after_exclusion": 868,
+      "picked": 50,
+      "picked_band_counts": {
+        "likely_1": 50
+      },
+      "shortfall": 0
+    },
+    "Q0002": {
+      "label2_count_in_reference": 0,
+      "available_after_exclusion": 862,
+      "picked": 50,
+      "picked_band_counts": {
+        "likely_1": 50
+      },
+      "shortfall": 0
+    },
+    "Q0004": {
+      "label2_count_in_reference": 0,
+      "available_after_exclusion": 857,
+      "picked": 50,
+      "picked_band_counts": {
+        "likely_1": 50
+      },
+      "shortfall": 0
+    },
+    "Q0005": {
+      "label2_count_in_reference": 0,
+      "available_after_exclusion": 859,
+      "picked": 50,
+      "picked_band_counts": {
+        "likely_1": 15,
+        "likely_2": 35
+      },
+      "shortfall": 0
+    },
+    "Q0006": {
+      "label2_count_in_reference": 0,
+      "available_after_exclusion": 863,
+      "picked": 50,
+      "picked_band_counts": {
+        "likely_1": 15,
+        "likely_2": 35
+      },
+      "shortfall": 0
+    },
+    "Q0008": {
+      "label2_count_in_reference": 0,
+      "available_after_exclusion": 862,
+      "picked": 50,
+      "picked_band_counts": {
+        "likely_1": 50
+      },
+      "shortfall": 0
+    },
+    "Q0009": {
+      "label2_count_in_reference": 0,
+      "available_after_exclusion": 866,
+      "picked": 50,
+      "picked_band_counts": {
+        "likely_1": 39,
+        "likely_2": 11
+      },
+      "shortfall": 0
+    },
+    "Q0010": {
+      "label2_count_in_reference": 0,
+      "available_after_exclusion": 848,
+      "picked": 50,
+      "picked_band_counts": {
+        "likely_1": 15,
+        "likely_2": 35
+      },
+      "shortfall": 0
+    }
+  }
+}

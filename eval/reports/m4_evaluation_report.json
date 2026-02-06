@@ -1,9 +1,9 @@
 {
-  "generated_at_utc": "2026-02-06T02:29:43.730519+00:00",
+  "generated_at_utc": "2026-02-06T03:00:18.577316+00:00",
   "dataset": {
     "query_count": 10,
     "trial_count": 8,
-    "relevance_pair_count": 300
+    "relevance_pair_count": 80
   },
   "metrics": {
     "retrieval": {
@@ -11,157 +11,33 @@
       "relevant_threshold": 1,
       "top_k_hitrate": 1.0,
       "ndcg_at_k": 1.0,
-      "evaluated_queries": 4,
-      "skipped_queries": 6
+      "evaluated_queries": 8,
+      "skipped_queries": 2,
+      "candidate_pool_size": 8,
+      "total_pairs": 80,
+      "annotated_pairs": 80,
+      "annotation_coverage": 1.0,
+      "fully_annotated_queries": 10,
+      "partially_annotated_queries": 0,
+      "unannotated_queries": 0
     },
     "parsing": {
-      "precision": 0.5,
-      "recall": 0.4211,
-      "f1": 0.4571,
-      "tp": 8,
-      "fp": 8,
-      "fn": 11
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1": 1.0,
+      "tp": 26,
+      "fp": 0,
+      "fn": 0
     },
     "hallucination": {
       "hallucination_rate": 0.0,
       "hallucinated_rules": 0,
-      "total_predicted_rules": 20
+      "total_predicted_rules": 26
     }
   },
-  "error_summary": {
-    "parse_false_negative:condition": 6,
-    "parse_false_negative:lab": 1,
-    "parse_false_positive:other": 7,
-    "parse_false_negative:medication": 1,
-    "parse_false_negative:procedure": 1,
-    "parse_false_negative:age": 1,
-    "parse_false_positive:age": 1,
-    "parse_false_negative:history": 1
-  },
-  "error_samples": [
-    {
-      "error_type": "parse_false_negative:condition",
-      "nct_id": "NCT90000001",
-      "rule": {
-        "type": "EXCLUSION",
-        "field": "condition",
-        "operator": "NOT_IN",
-        "value": "active infection",
-        "unit": ""
-      },
-      "evidence_text": "Active infection"
-    },
-    {
-      "error_type": "parse_false_negative:lab",
-      "nct_id": "NCT90000001",
-      "rule": {
-        "type": "INCLUSION",
-        "field": "lab",
-        "operator": "<=",
-        "value": "8.5",
-        "unit": "%"
-      },
-      "evidence_text": "HbA1c <= 8.5%."
-    },
-    {
-      "error_type": "parse_false_positive:other",
-      "nct_id": "NCT90000001",
-      "rule": {
-        "type": "INCLUSION",
-        "field": "other",
-        "operator": "EXISTS",
-        "value": "null",
-        "unit": ""
-      },
-      "evidence_text": "Exclusion: Active infection or major surgery within the last 3 months."
-    },
-    {
-      "error_type": "parse_false_positive:other",
-      "nct_id": "NCT90000002",
-      "rule": {
-        "type": "INCLUSION",
-        "field": "other",
-        "operator": "EXISTS",
-        "value": "null",
-        "unit": ""
-      },
-      "evidence_text": "Exclusion Criteria: Pregnancy or breastfeeding."
-    },
-    {
-      "error_type": "parse_false_negative:medication",
-      "nct_id": "NCT90000003",
-      "rule": {
-        "type": "EXCLUSION",
-        "field": "medication",
-        "operator": "WITHIN_LAST",
-        "value": "30",
-        "unit": "days"
-      },
-      "evidence_text": "Prior treatment within the last 30 days."
-    },
-    {
-      "error_type": "parse_false_negative:condition",
-      "nct_id": "NCT90000003",
-      "rule": {
-        "type": "INCLUSION",
-        "field": "condition",
-        "operator": "IN",
-        "value": "heart failure",
-        "unit": ""
-      },
-      "evidence_text": "Adults with heart failure"
-    },
-    {
-      "error_type": "parse_false_positive:other",
-      "nct_id": "NCT90000003",
-      "rule": {
-        "type": "INCLUSION",
-        "field": "other",
-        "operator": "EXISTS",
-        "value": "null",
-        "unit": ""
-      },
-      "evidence_text": "Exclusion: Prior treatment within the last 30 days."
-    },
-    {
-      "error_type": "parse_false_negative:condition",
-      "nct_id": "NCT90000004",
-      "rule": {
-        "type": "INCLUSION",
-        "field": "condition",
-        "operator": "IN",
-        "value": "asthma",
-        "unit": ""
-      },
-      "evidence_text": "asthma diagnosis"
-    },
-    {
-      "error_type": "parse_false_positive:other",
-      "nct_id": "NCT90000004",
-      "rule": {
-        "type": "INCLUSION",
-        "field": "other",
-        "operator": "EXISTS",
-        "value": "null",
-        "unit": ""
-      },
-      "evidence_text": "Exclusion: Active infection."
-    },
-    {
-      "error_type": "parse_false_negative:procedure",
-      "nct_id": "NCT90000005",
-      "rule": {
-        "type": "EXCLUSION",
-        "field": "procedure",
-        "operator": "WITHIN_LAST",
-        "value": "6",
-        "unit": "months"
-      },
-      "evidence_text": "major surgery in the last 6 months."
-    }
-  ],
+  "error_summary": {},
+  "error_samples": [],
   "recommendations": [
-    "Improve parser coverage: prioritize rules for missing high-frequency fields shown in parse false negatives.",
-    "Top observed error type is `parse_false_positive:other`; prioritize it first in M5 parser iteration."
+    "Metrics pass configured thresholds; continue with larger holdout validation."
   ]
 }

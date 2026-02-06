@@ -111,6 +111,7 @@ def test_generate_report_smoke(tmp_path: Path) -> None:
         relevance_path=relevance_path,
         top_k=10,
         relevance_threshold=1,
+        min_relevance_coverage=1.0,
         retrieval_results_path="",
         predicted_rules_path=str(predicted_rules_path),
         error_sample_limit=5,

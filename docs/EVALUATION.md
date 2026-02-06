@@ -61,7 +61,41 @@ Evaluation
 - `python3 scripts/eval/validate_eval_data.py --data-dir eval/data`
 
 **M4-3 指标计算命令**
-- `python3 scripts/eval/run_evaluation.py --queries eval/data/queries.jsonl --trials eval/data/trials_sample.jsonl --relevance eval/annotations/relevance.annotator_a.jsonl --top-k 10`
+- `python3 scripts/eval/run_evaluation.py --queries eval/data/queries.jsonl --trials eval/data/trials_sample.jsonl --relevance eval/annotations/relevance.trials_sample.annotator_a.jsonl --top-k 10 --min-relevance-coverage 1.0`
 
 **M4-4 报告生成命令**
-- `python3 scripts/eval/generate_evaluation_report.py --queries eval/data/queries.jsonl --trials eval/data/trials_sample.jsonl --relevance eval/annotations/relevance.annotator_a.jsonl --top-k 10 --output-md eval/reports/m4_evaluation_report.md --output-json eval/reports/m4_evaluation_report.json`
+- `python3 scripts/eval/generate_evaluation_report.py --queries eval/data/queries.jsonl --trials eval/data/trials_sample.jsonl --relevance eval/annotations/relevance.trials_sample.annotator_a.jsonl --top-k 10 --min-relevance-coverage 1.0 --output-md eval/reports/m4_evaluation_report.md --output-json eval/reports/m4_evaluation_report.json`
+
+**大样本检索标注报告（300）**
+- `python3 scripts/eval/generate_retrieval_only_report.py --annotator-a eval/annotations/relevance.annotator_a.jsonl --annotator-b eval/annotations/relevance.annotator_b.jsonl --output-md eval/reports/retrieval_annotation_report_300.md --output-json eval/reports/retrieval_annotation_report_300.json`
+
+**扩样任务清单生成（2000 检索 + 200 解析）**
+- `python3 scripts/eval/generate_annotation_tasks.py --source eval/annotations/relevance.annotator_a.jsonl --target-retrieval-pairs 2000 --target-parsing-trials 200 --output-retrieval eval/annotation_tasks/relevance.pending.2000.jsonl --output-parsing eval/annotation_tasks/parsing.pending.200.jsonl --output-manifest eval/annotation_tasks/manifest.large_scale.json`
+
+**V2 扩池（AACT 快照）与首批 700 任务**
+- 下载最新 AACT flatfiles：`mkdir -p /tmp/aact && cd /tmp/aact && curl -L --fail -o aact_flatfiles_latest.zip https://ctti-aact.nyc3.digitaloceanspaces.com/je8x1y6mzswfseyc1q7i09ebtqb7`
+- 生成 v2 候选池与首批任务：
+- `python3 scripts/eval/generate_retrieval_v2_tasks_aact.py --aact-zip /tmp/aact/aact_flatfiles_latest.zip --queries eval/data/queries.jsonl --max-candidates-per-query 220 --background-per-query 40 --target-per-query 70 --likely2-quota 20 --likely1-quota 30 --hard-negative-quota 20 --output-pending eval/annotation_tasks/relevance.pending.v2.jsonl --output-batch eval/annotation_tasks/relevance.batch_v2_round1.700.jsonl --output-manifest eval/annotation_tasks/manifest.relevance_v2_round1.json`
+
+**V2 复核任务（adjudication）**
+- 从 `annotator_b` 标注中自动抽取复核集（默认规则：全部 label=2 + 每 query 最多 15 条 likely_2 但被标为 1）
+- `python3 scripts/eval/generate_relevance_adjudication_tasks.py --labels eval/annotations/relevance.v2.round1.annotator_b.jsonl --tasks eval/annotation_tasks/relevance.batch_v2_round1.700.jsonl --likely2-label1-per-query 15 --output-jsonl eval/annotation_tasks/relevance.v2.round1.adjudication.annotator_a.jsonl --output-manifest eval/annotation_tasks/manifest.relevance.v2.round1.adjudication.json`
+
+**V2 复核结果回写（生成 round1 final）**
+- 将复核文件覆盖到 round1 基线标签，产出可直接用于评估的 final 文件
+- `python3 scripts/eval/apply_relevance_adjudication.py --base eval/annotations/relevance.v2.round1.annotator_b.jsonl --adjudication eval/annotations/relevance.v2.round1.adjudication.annotator_a.jsonl --output-jsonl eval/annotations/relevance.v2.round1.final.jsonl --output-manifest eval/annotations/manifest.relevance.v2.round1.final.json`
+
+**V2 round2（提高 1/2 密度）**
+- 基于 AACT 重新采样并排除已标注 pair，建议提高 `likely_2` 配额、降低 hard negative
+- `python3 scripts/eval/generate_retrieval_v2_tasks_aact.py --aact-zip /tmp/aact/aact_flatfiles_latest.zip --queries eval/data/queries.jsonl --exclude eval/annotations/relevance.v2.round1.final.jsonl --max-candidates-per-query 1000 --background-per-query 40 --target-per-query 70 --likely2-quota 40 --likely1-quota 25 --hard-negative-quota 5 --task-id-prefix relevance-v2r2 --output-pending eval/annotation_tasks/relevance.pending.v2.round2.jsonl --output-batch eval/annotation_tasks/relevance.batch_v2_round2.700.jsonl --output-manifest eval/annotation_tasks/manifest.relevance_v2_round2.json`
+
+**V2 round3（仅针对 label=2 稀缺 query 的定向采样）**
+- 自动读取 `round1+round2 final`，只为 `label=2` 数量低于阈值的 query 生成任务
+- 输出同时包含标准版与 blind 版（blind 去除 `band/heuristic_score/features`）
+- `python3 scripts/eval/generate_retrieval_v2_round3_tasks.py --pending eval/annotation_tasks/relevance.pending.v2.round2.jsonl --queries eval/data/queries.jsonl --reference-labels eval/annotations/relevance.v2.round1_round2.final.jsonl --target-per-query 50 --likely2-quota 35 --likely1-quota 15 --hard-negative-quota 0 --task-id-prefix relevance-v2r3 --output-batch eval/annotation_tasks/relevance.batch_v2_round3.targeted.jsonl --output-blind eval/annotation_tasks/relevance.batch_v2_round3.targeted.blind.jsonl --output-manifest eval/annotation_tasks/manifest.relevance_v2_round3.targeted.json`
+
+**V2 round4（修复 location 归一化后，定向高价值采样）**
+- 先用更大的候选池重新打分（`max-candidates-per-query=5000`），避免被前几轮已标注样本“掏空”
+- `python3 scripts/eval/generate_retrieval_v2_tasks_aact.py --aact-zip /tmp/aact/aact_flatfiles_latest.zip --queries eval/data/queries.jsonl --exclude eval/annotations/relevance.v2.round1_round2.final.jsonl --exclude eval/annotations/relevance.v2.round3.annotator_b.jsonl --max-candidates-per-query 5000 --background-per-query 40 --target-per-query 10 --likely2-quota 10 --likely1-quota 0 --hard-negative-quota 0 --task-id-prefix probe-v2r4 --output-pending /tmp/relevance.pending.v2.round4.probe5000.jsonl --output-batch /tmp/relevance.batch.v2.round4.probe5000.jsonl --output-manifest /tmp/manifest.relevance_v2_round4.probe5000.json`
+- 再用定向脚本生成实际标注批次（带 hard constraint 过滤与 blind 输出）
+- `python3 scripts/eval/generate_retrieval_v2_round3_tasks.py --pending /tmp/relevance.pending.v2.round4.probe5000.jsonl --queries eval/data/queries.jsonl --reference-labels eval/annotations/relevance.v2.round1_round2.final.jsonl --exclude eval/annotations/relevance.v2.round3.annotator_b.jsonl --focus-query Q0004 --focus-query Q0005 --focus-query Q0006 --focus-query Q0007 --focus-query Q0008 --focus-query Q0009 --focus-query Q0010 --target-per-query 40 --likely2-quota 30 --likely1-quota 10 --hard-negative-quota 0 --require-status-match --min-location-match-score 1 --min-intent-match-count 1 --task-id-prefix relevance-v2r4 --output-batch eval/annotation_tasks/relevance.batch_v2_round4.targeted.jsonl --output-blind eval/annotation_tasks/relevance.batch_v2_round4.targeted.blind.jsonl --output-manifest eval/annotation_tasks/manifest.relevance_v2_round4.targeted.json`
