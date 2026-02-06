@@ -254,6 +254,21 @@ def _ensure_tables(conn: psycopg.Connection) -> None:
             )
             """
         )
+        cur.execute(
+            """
+            CREATE TABLE IF NOT EXISTS llm_usage_logs (
+              id UUID PRIMARY KEY,
+              run_id UUID NOT NULL,
+              nct_id TEXT NOT NULL,
+              parser_version TEXT NOT NULL,
+              prompt_tokens INTEGER,
+              completion_tokens INTEGER,
+              total_tokens INTEGER NOT NULL,
+              usage_date DATE NOT NULL,
+              created_at TIMESTAMP NOT NULL
+            )
+            """
+        )
 
 
 def _upsert_trial(conn: psycopg.Connection, trial: Dict[str, Any]) -> bool:
@@ -439,6 +454,83 @@ def _write_parse_log(
         )
 
 
+def _read_llm_daily_token_budget() -> int:
+    raw = os.getenv("LLM_DAILY_TOKEN_BUDGET", "200000")
+    try:
+        return int(raw)
+    except ValueError:
+        return 200000
+
+
+def _daily_llm_token_usage(conn: psycopg.Connection, usage_date: dt.date) -> int:
+    with conn.cursor() as cur:
+        cur.execute(
+            """
+            SELECT COALESCE(SUM(total_tokens), 0)
+            FROM llm_usage_logs
+            WHERE usage_date = %s
+            """,
+            (usage_date,),
+        )
+        row = cur.fetchone()
+    if not row:
+        return 0
+    return int(row[0] or 0)
+
+
+def _is_llm_budget_exceeded(conn: psycopg.Connection, usage_date: dt.date) -> bool:
+    budget = _read_llm_daily_token_budget()
+    if budget <= 0:
+        return True
+    used_tokens = _daily_llm_token_usage(conn, usage_date)
+    return used_tokens >= budget
+
+
+def _write_llm_usage_log(
+    conn: psycopg.Connection,
+    *,
+    run_id: str,
+    nct_id: str,
+    parser_version: str,
+    usage: Dict[str, Any],
+) -> None:
+    prompt_tokens = usage.get("prompt_tokens")
+    completion_tokens = usage.get("completion_tokens")
+    total_tokens = usage.get("total_tokens")
+    if isinstance(total_tokens, int):
+        total = total_tokens
+    else:
+        total = 0
+    now = dt.datetime.now(dt.UTC)
+
+    with conn.cursor() as cur:
+        cur.execute(
+            """
+            INSERT INTO llm_usage_logs (
+              id, run_id, nct_id, parser_version, prompt_tokens,
+              completion_tokens, total_tokens, usage_date, created_at
+            ) VALUES (
+              %(id)s, %(run_id)s, %(nct_id)s, %(parser_version)s,
+              %(prompt_tokens)s, %(completion_tokens)s, %(total_tokens)s,
+              %(usage_date)s, %(created_at)s
+            )
+            """,
+            {
+                "id": str(uuid.uuid4()),
+                "run_id": run_id,
+                "nct_id": nct_id,
+                "parser_version": parser_version,
+                "prompt_tokens": prompt_tokens if isinstance(prompt_tokens, int) else None,
+                "completion_tokens": (
+                    completion_tokens if isinstance(completion_tokens, int) else None
+                ),
+                "total_tokens": max(total, 0),
+                "usage_date": now.date(),
+                "created_at": now,
+            },
+        )
+
+
 def _compute_coverage_stats(criteria_json: List[Dict[str, Any]]) -> Dict[str, Any]:
     total_rules = len(criteria_json)
     unknown_rules = sum(
@@ -620,9 +712,43 @@ def parse_trial(
                     "llm_usage": None,
                 }
             elif parser_version == "llm_v1":
-                criteria_json, parser_metadata = parse_criteria_llm_v1_with_fallback(
-                    trial.get("eligibility_text")
-                )
+                usage_date = dt.datetime.now(dt.UTC).date()
+                if _is_llm_budget_exceeded(conn, usage_date):
+                    criteria_json = parse_criteria_v1(trial.get("eligibility_text"))
+                    parser_metadata = {
+                        "parser_source": "rule_v1",
+                        "fallback_used": True,
+                        "fallback_reason": "llm daily token budget exceeded",
+                        "llm_usage": None,
+                    }
+                else:
+                    criteria_json, parser_metadata = (
+                        parse_criteria_llm_v1_with_fallback(
+                            trial.get("eligibility_text")
+                        )
+                    )
+                    llm_usage = parser_metadata.get("llm_usage")
+                    if (
+                        parser_metadata.get("parser_source") == "llm_v1"
+                        and isinstance(llm_usage, dict)
+                    ):
+                        _write_llm_usage_log(
+                            conn,
+                            run_id=run_id,
+                            nct_id=nct_id,
+                            parser_version=parser_version,
+                            usage=llm_usage,
+                        )
+                daily_tokens_used = _daily_llm_token_usage(conn, usage_date)
+                daily_token_budget = _read_llm_daily_token_budget()
+                parser_metadata["llm_budget"] = {
+                    "daily_token_budget": daily_token_budget,
+                    "daily_tokens_used": daily_tokens_used,
+                    "budget_exceeded": (
+                        daily_token_budget <= 0
+                        or daily_tokens_used >= daily_token_budget
+                    ),
+                }
             else:
                 raise ValueError(f"unsupported parser_version: {parser_version}")
 

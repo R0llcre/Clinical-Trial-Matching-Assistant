@@ -152,9 +152,13 @@ def test_parse_trial_llm_success(monkeypatch: pytest.MonkeyPatch) -> None:
     fake_conn = _FakeConn()
     captured = {}
     logs = []
+    usage_logs = []
 
     monkeypatch.setattr(tasks.psycopg, "connect", lambda _: fake_conn)
     monkeypatch.setattr(tasks, "_ensure_tables", lambda conn: None)
+    monkeypatch.setattr(tasks, "_is_llm_budget_exceeded", lambda conn, usage_date: False)
+    monkeypatch.setattr(tasks, "_daily_llm_token_usage", lambda conn, usage_date: 30)
+    monkeypatch.setattr(tasks, "_read_llm_daily_token_budget", lambda: 200)
     monkeypatch.setattr(
         tasks,
         "_fetch_trial_for_parse",
@@ -216,6 +220,18 @@ def test_parse_trial_llm_success(monkeypatch: pytest.MonkeyPatch) -> None:
 
     monkeypatch.setattr(tasks, "_upsert_trial_criteria", _fake_upsert)
     monkeypatch.setattr(tasks, "_write_parse_log", _fake_write_log)
+    monkeypatch.setattr(
+        tasks,
+        "_write_llm_usage_log",
+        lambda conn, *, run_id, nct_id, parser_version, usage: usage_logs.append(
+            {
+                "run_id": run_id,
+                "nct_id": nct_id,
+                "parser_version": parser_version,
+                "usage": usage,
+            }
+        ),
+    )
 
     stats = parse_trial("NCT123", parser_version="llm_v1")
 
@@ -229,6 +245,9 @@ def test_parse_trial_llm_success(monkeypatch: pytest.MonkeyPatch) -> None:
     assert captured["coverage_stats"]["parser_source"] == "llm_v1"
     assert captured["coverage_stats"]["fallback_used"] is False
     assert captured["coverage_stats"]["llm_usage"]["total_tokens"] == 30
+    assert captured["coverage_stats"]["llm_budget"]["daily_token_budget"] == 200
+    assert captured["coverage_stats"]["llm_budget"]["daily_tokens_used"] == 30
+    assert usage_logs and usage_logs[0]["usage"]["total_tokens"] == 30
     assert logs[-1]["status"] == "SUCCESS"
     assert logs[-1]["error_message"] is None
     assert fake_conn.rollbacks == 0
@@ -239,9 +258,13 @@ def test_parse_trial_llm_fallback_success(monkeypatch: pytest.MonkeyPatch) -> No
 
     fake_conn = _FakeConn()
     captured = {}
+    usage_logs = []
 
     monkeypatch.setattr(tasks.psycopg, "connect", lambda _: fake_conn)
     monkeypatch.setattr(tasks, "_ensure_tables", lambda conn: None)
+    monkeypatch.setattr(tasks, "_is_llm_budget_exceeded", lambda conn, usage_date: False)
+    monkeypatch.setattr(tasks, "_daily_llm_token_usage", lambda conn, usage_date: 0)
+    monkeypatch.setattr(tasks, "_read_llm_daily_token_budget", lambda: 200)
     monkeypatch.setattr(
         tasks,
         "_fetch_trial_for_parse",
@@ -284,6 +307,13 @@ def test_parse_trial_llm_fallback_success(monkeypatch: pytest.MonkeyPatch) -> No
         captured["coverage_stats"] = coverage_stats
 
     monkeypatch.setattr(tasks, "_upsert_trial_criteria", _fake_upsert)
+    monkeypatch.setattr(
+        tasks,
+        "_write_llm_usage_log",
+        lambda conn, *, run_id, nct_id, parser_version, usage: usage_logs.append(
+            usage
+        ),
+    )
 
     stats = parse_trial("NCT234", parser_version="llm_v1")
 
@@ -294,7 +324,79 @@ def test_parse_trial_llm_fallback_success(monkeypatch: pytest.MonkeyPatch) -> No
     assert captured["coverage_stats"]["parser_source"] == "rule_v1"
     assert captured["coverage_stats"]["fallback_used"] is True
     assert "disabled" in captured["coverage_stats"]["fallback_reason"]
+    assert captured["coverage_stats"]["llm_budget"]["daily_tokens_used"] == 0
+    assert usage_logs == []
     assert fake_conn.rollbacks == 0
+
+
+def test_parse_trial_llm_budget_exceeded_skips_llm_parser(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("DATABASE_URL", "postgresql://test:test@localhost:5432/testdb")
+
+    fake_conn = _FakeConn()
+    captured = {}
+
+    monkeypatch.setattr(tasks.psycopg, "connect", lambda _: fake_conn)
+    monkeypatch.setattr(tasks, "_ensure_tables", lambda conn: None)
+    monkeypatch.setattr(tasks, "_is_llm_budget_exceeded", lambda conn, usage_date: True)
+    monkeypatch.setattr(tasks, "_daily_llm_token_usage", lambda conn, usage_date: 200)
+    monkeypatch.setattr(tasks, "_read_llm_daily_token_budget", lambda: 200)
+    monkeypatch.setattr(
+        tasks,
+        "_fetch_trial_for_parse",
+        lambda conn, nct_id: {
+            "id": "trial-uuid",
+            "nct_id": nct_id,
+            "eligibility_text": "Adults only",
+        },
+    )
+    monkeypatch.setattr(
+        tasks,
+        "parse_criteria_llm_v1_with_fallback",
+        lambda text: (_ for _ in ()).throw(
+            AssertionError("llm parser should not be called when budget exceeded")
+        ),
+    )
+    monkeypatch.setattr(
+        tasks,
+        "parse_criteria_v1",
+        lambda text: [
+            {
+                "id": "rule-1",
+                "type": "INCLUSION",
+                "field": "age",
+                "operator": ">=",
+                "value": 18,
+                "unit": "years",
+                "time_window": None,
+                "certainty": "high",
+                "evidence_text": "Adults only",
+                "source_span": {"start": 0, "end": 11},
+            }
+        ],
+    )
+    monkeypatch.setattr(tasks, "_write_parse_log", lambda *args, **kwargs: None)
+    monkeypatch.setattr(
+        tasks, "_write_llm_usage_log", lambda *args, **kwargs: (_ for _ in ()).throw(
+            AssertionError("llm usage should not be logged when budget exceeded")
+        )
+    )
+
+    def _fake_upsert(conn, *, trial_id, parser_version, criteria_json, coverage_stats):
+        captured["parser_version"] = parser_version
+        captured["coverage_stats"] = coverage_stats
+
+    monkeypatch.setattr(tasks, "_upsert_trial_criteria", _fake_upsert)
+
+    stats = parse_trial("NCT777", parser_version="llm_v1")
+
+    assert stats.status == "SUCCESS"
+    assert captured["parser_version"] == "llm_v1"
+    assert captured["coverage_stats"]["parser_source"] == "rule_v1"
+    assert captured["coverage_stats"]["fallback_used"] is True
+    assert "budget exceeded" in captured["coverage_stats"]["fallback_reason"]
+    assert captured["coverage_stats"]["llm_budget"]["budget_exceeded"] is True
 
 
 def test_parse_trial_records_failed_log(monkeypatch: pytest.MonkeyPatch) -> None:
