@@ -57,6 +57,18 @@ CREATE TABLE IF NOT EXISTS matches (
 )
 """
 
+_CREATE_TRIAL_CRITERIA_TABLE_SQL = """
+CREATE TABLE IF NOT EXISTS trial_criteria (
+  id UUID PRIMARY KEY,
+  trial_id UUID NOT NULL REFERENCES trials(id),
+  parser_version TEXT NOT NULL,
+  criteria_json JSONB NOT NULL,
+  coverage_stats JSONB,
+  created_at TIMESTAMP NOT NULL,
+  UNIQUE (trial_id, parser_version)
+)
+"""
+
 
 def _normalize_db_url(database_url: str) -> str:
     if database_url.startswith("postgresql://"):
@@ -79,6 +91,7 @@ def _ensure_match_tables(engine: Engine) -> None:
         conn.exec_driver_sql(_CREATE_TRIALS_TABLE_SQL)
         conn.exec_driver_sql(_CREATE_PATIENT_PROFILES_TABLE_SQL)
         conn.exec_driver_sql(_CREATE_MATCHES_TABLE_SQL)
+        conn.exec_driver_sql(_CREATE_TRIAL_CRITERIA_TABLE_SQL)
 
 
 def _load_patient_profile(
