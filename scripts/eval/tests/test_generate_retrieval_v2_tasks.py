@@ -3,6 +3,8 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+import pytest
+
 from generate_retrieval_v2_tasks import (
     build_round_batch,
     build_search_terms,
@@ -149,6 +151,23 @@ def test_build_round_batch_supports_custom_task_id_prefix() -> None:
     )
 
     assert batch[0]["task_id"] == "relevance-v2r2-00001"
+
+
+def test_build_round_batch_rejects_quota_sum_above_target() -> None:
+    pending_rows = [
+        {"query_id": "Q1", "nct_id": "N1", "band": "likely_2", "heuristic_score": 10.0},
+        {"query_id": "Q1", "nct_id": "N2", "band": "likely_1", "heuristic_score": 9.0},
+        {"query_id": "Q1", "nct_id": "N3", "band": "hard_negative", "heuristic_score": 8.0},
+    ]
+
+    with pytest.raises(ValueError, match="sum of quotas"):
+        build_round_batch(
+            pending_rows,
+            target_per_query=2,
+            likely2_quota=1,
+            likely1_quota=1,
+            hard_negative_quota=1,
+        )
 
 
 def test_load_excluded_pairs_reads_query_nct_keys(tmp_path: Path) -> None:

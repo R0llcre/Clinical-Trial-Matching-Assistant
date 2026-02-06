@@ -680,6 +680,17 @@ def build_round_batch(
     hard_negative_quota: int,
     task_id_prefix: str = "relevance-v2r1",
 ) -> Tuple[List[Dict[str, Any]], Dict[str, Any]]:
+    if target_per_query < 1:
+        raise ValueError("target_per_query must be >= 1")
+    if likely2_quota < 0 or likely1_quota < 0 or hard_negative_quota < 0:
+        raise ValueError("band quotas must be >= 0")
+    quota_sum = likely2_quota + likely1_quota + hard_negative_quota
+    if quota_sum > target_per_query:
+        raise ValueError(
+            "sum of quotas must be <= target_per_query: "
+            f"{quota_sum} > {target_per_query}"
+        )
+
     by_query: Dict[str, Dict[str, List[Dict[str, Any]]]] = defaultdict(
         lambda: {"likely_2": [], "likely_1": [], "hard_negative": []}
     )
