@@ -1,0 +1,2 @@
+{"nct_id":"NCT12345678","rule_id":"rule-1","field":"age","operator":">=","value":"18","unit":"years","quality_label":"correct","evidence_text":"Participants must be 18 years or older.","annotator_id":"annotator_a","guideline_version":"m4-v1"}
+{"nct_id":"NCT12345678","rule_id":"rule-2","field":"sex","operator":"=","value":"female","unit":null,"quality_label":"partial","evidence_text":"Female participants only.","annotator_id":"annotator_a","guideline_version":"m4-v1"}

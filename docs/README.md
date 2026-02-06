@@ -13,6 +13,14 @@ Docs Index
 - CRITERIA_SCHEMA.md 规则结构规范
 - MATCHING_LOGIC.md 匹配与评分逻辑
 - EVALUATION.md 评估与标注规范
+- eval/ANNOTATION_GUIDE.md 双标注执行与一致性验收指南
+- eval/ANNOTATION_TEMPLATE.relevance.jsonl 检索相关性标注模板
+- eval/ANNOTATION_TEMPLATE.rules.jsonl 规则质量标注模板
+- ../scripts/eval/run_evaluation.py M4 指标计算脚本
+- ../scripts/eval/generate_evaluation_report.py M4 评估报告生成脚本
+- ../eval/data/queries.jsonl M4 查询样本集
+- ../eval/data/trials_sample.jsonl M4 试验解析样本集
+- ../eval/data/patients.jsonl M4 合成患者样本集
 - DATA_AND_COMPLIANCE.md 数据与合规边界
 - LEADERSHIP_AND_RESPONSIBILITIES.md 负责人职责与下属交付
 
