@@ -88,3 +88,8 @@ Evaluation
 **V2 round2（提高 1/2 密度）**
 - 基于 AACT 重新采样并排除已标注 pair，建议提高 `likely_2` 配额、降低 hard negative
 - `python3 scripts/eval/generate_retrieval_v2_tasks_aact.py --aact-zip /tmp/aact/aact_flatfiles_latest.zip --queries eval/data/queries.jsonl --exclude eval/annotations/relevance.v2.round1.final.jsonl --max-candidates-per-query 1000 --background-per-query 40 --target-per-query 70 --likely2-quota 40 --likely1-quota 25 --hard-negative-quota 5 --task-id-prefix relevance-v2r2 --output-pending eval/annotation_tasks/relevance.pending.v2.round2.jsonl --output-batch eval/annotation_tasks/relevance.batch_v2_round2.700.jsonl --output-manifest eval/annotation_tasks/manifest.relevance_v2_round2.json`
+
+**V2 round3（仅针对 label=2 稀缺 query 的定向采样）**
+- 自动读取 `round1+round2 final`，只为 `label=2` 数量低于阈值的 query 生成任务
+- 输出同时包含标准版与 blind 版（blind 去除 `band/heuristic_score/features`）
+- `python3 scripts/eval/generate_retrieval_v2_round3_tasks.py --pending eval/annotation_tasks/relevance.pending.v2.round2.jsonl --reference-labels eval/annotations/relevance.v2.round1_round2.final.jsonl --target-per-query 50 --likely2-quota 35 --likely1-quota 15 --hard-negative-quota 0 --task-id-prefix relevance-v2r3 --output-batch eval/annotation_tasks/relevance.batch_v2_round3.targeted.jsonl --output-blind eval/annotation_tasks/relevance.batch_v2_round3.targeted.blind.jsonl --output-manifest eval/annotation_tasks/manifest.relevance_v2_round3.targeted.json`
