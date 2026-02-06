@@ -1,16 +1,16 @@
 {
-  "generated_at_utc": "2026-02-06T19:36:05.725228+00:00",
-  "overall_status": "PASS",
+  "generated_at_utc": "2026-02-06T23:21:11.412219+00:00",
+  "overall_status": "FAIL",
   "gate_status": {
     "smoke": "PASS",
-    "release": "PASS",
-    "generalization": "SKIP"
+    "release": "FAIL",
+    "generalization": "FAIL"
   },
   "inputs": {
     "smoke_report_kind": "m4_evaluation_report",
     "retrieval_report_kind": "retrieval_annotation_report_v2_strict_final",
     "parsing_report_kind": "parsing_release_report",
-    "blind_parsing_report_kind": null
+    "blind_parsing_report_kind": "parsing_blind_report"
   },
   "checks": [
     {
@@ -113,17 +113,49 @@
       "id": "release.parsing_f1",
       "source": "parsing_release_report",
       "comparator": ">=",
-      "actual": 0.9955,
+      "actual": 0.51,
       "target": 0.8,
-      "status": "PASS"
+      "status": "FAIL"
     },
     {
       "id": "release.parsing_hallucination_rate",
       "source": "parsing_release_report",
       "comparator": "<=",
+      "actual": 0.0029,
+      "target": 0.02,
+      "status": "PASS"
+    },
+    {
+      "id": "generalization.blind_parsing_trial_count",
+      "source": "parsing_blind_report",
+      "comparator": ">=",
+      "actual": 60.0,
+      "target": 30.0,
+      "status": "PASS"
+    },
+    {
+      "id": "generalization.blind_parsing_f1",
+      "source": "parsing_blind_report",
+      "comparator": ">=",
+      "actual": 0.3395,
+      "target": 0.8,
+      "status": "FAIL"
+    },
+    {
+      "id": "generalization.blind_parsing_hallucination_rate",
+      "source": "parsing_blind_report",
+      "comparator": "<=",
       "actual": 0.0,
       "target": 0.02,
       "status": "PASS"
+    },
+    {
+      "id": "generalization.release_blind_f1_gap",
+      "source": "parsing_release_report+parsing_blind_report",
+      "comparator": "<=",
+      "actual": 0.1705,
+      "target": 0.1,
+      "status": "FAIL"
     }
   ],
   "summary": {
@@ -142,9 +174,14 @@
       "parsing_trial_count": 100,
       "parsing_rule_count": 358,
       "parsing_unique_fields": 7,
-      "parsing_f1": 0.9955,
-      "parsing_hallucination_rate": 0.0
+      "parsing_f1": 0.51,
+      "parsing_hallucination_rate": 0.0029
     },
-    "generalization": {}
+    "generalization": {
+      "blind_parsing_trial_count": 60,
+      "blind_parsing_f1": 0.3395,
+      "blind_parsing_hallucination_rate": 0.0,
+      "release_blind_f1_gap": 0.1705
+    }
   }
 }
