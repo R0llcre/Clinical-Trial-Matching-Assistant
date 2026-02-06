@@ -1,0 +1,25 @@
+{
+  "input_label_rows": 700,
+  "input_task_rows": 700,
+  "missing_task_metadata_rows": 0,
+  "selected_rows": 376,
+  "selected_by_reason": {
+    "annotator_ambiguous": 251,
+    "label_2": 60,
+    "likely2_labeled1": 110
+  },
+  "selected_by_query": {
+    "Q0001": 39,
+    "Q0002": 50,
+    "Q0003": 36,
+    "Q0004": 43,
+    "Q0005": 31,
+    "Q0006": 29,
+    "Q0007": 21,
+    "Q0008": 48,
+    "Q0009": 34,
+    "Q0010": 45
+  },
+  "likely2_label1_per_query": 15,
+  "ambiguous_task_id_count": 251
+}
