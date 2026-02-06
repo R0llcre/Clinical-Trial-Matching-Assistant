@@ -24,6 +24,8 @@ _AGE_MIN_PATTERNS = [
         r"\b(\d{1,3})\s*(?:years?|yrs?)\s*(?:or older|and older|or above|and above|\+)\b",
         re.I,
     ),
+    re.compile(r"\bat least\s+(\d{1,3})\s*(?:years?|yrs?)\s*(?:of age)?\b", re.I),
+    re.compile(r"\b(\d{1,3})\s*(?:years?|yrs?)\s*of age\b", re.I),
     re.compile(r"\bage\s*(?:>=|at least|min(?:imum)?(?: age)?)\s*(\d{1,3})\b", re.I),
     re.compile(r">=\s*(\d{1,3})\s*(?:years?|yrs?)?\b", re.I),
 ]
@@ -52,8 +54,8 @@ _CONDITION_SYMPTOMS_PATTERN = re.compile(
     r"\b([a-z][a-z0-9\-\s]{2,80}?)\s+symptoms?\b",
     re.I,
 )
-_DURATION_AT_LEAST_PATTERN = re.compile(
-    r"\bfor at least\s+\d{1,3}\s*(?:day|days|week|weeks|month|months|year|years)\b",
+_EXCLUSION_HISTORY_OF_PATTERN = re.compile(
+    r"\bhistory of\s+([^.;]+)",
     re.I,
 )
 _TIME_WINDOW = re.compile(
@@ -62,15 +64,11 @@ _TIME_WINDOW = re.compile(
     re.I,
 )
 _COMMON_EXCLUSION_PATTERNS = (
-    ("pregnan", "history", "NO_HISTORY", "pregnancy"),
-    ("breastfeed", "history", "NO_HISTORY", "breastfeeding"),
-    ("lactat", "history", "NO_HISTORY", "lactation"),
     ("active infection", "condition", "NOT_IN", "active infection"),
     ("infection", "condition", "NOT_IN", "active infection"),
-    ("surgery", "procedure", "NO_HISTORY", "surgery"),
-    ("prior treatment", "medication", "NO_HISTORY", "prior treatment"),
-    ("previous treatment", "medication", "NO_HISTORY", "previous treatment"),
+    ("hiv", "condition", "NOT_IN", "hiv positive"),
 )
+_INCLUSION_HEADING_MARKER = re.compile(r"\binclusion(?: criteria)?\s*[:\-]", re.I)
 
 
 def preprocess_eligibility_text(eligibility_text: Optional[str]) -> Dict[str, List[str]]:
@@ -103,10 +101,32 @@ def parse_criteria_v1(eligibility_text: Optional[str]) -> List[Dict[str, Any]]:
     spans = _build_sentence_spans(eligibility_text or "", all_sentences)
 
     rules: List[Dict[str, Any]] = []
+    inclusion_rule_count = 0
     for sentence in inclusion_sentences:
-        rules.extend(_parse_sentence(sentence, "INCLUSION", spans.get(sentence)))
+        parsed = _parse_sentence(sentence, "INCLUSION", spans.get(sentence))
+        inclusion_rule_count += len(parsed)
+        rules.extend(parsed)
     for sentence in exclusion_sentences:
         rules.extend(_parse_sentence(sentence, "EXCLUSION", spans.get(sentence)))
+
+    if (
+        inclusion_rule_count == 0
+        and inclusion_sentences
+        and isinstance(eligibility_text, str)
+        and _INCLUSION_HEADING_MARKER.search(eligibility_text)
+    ):
+        rules.append(
+            _build_rule(
+                rule_type="INCLUSION",
+                field="condition",
+                operator="IN",
+                value="study-specific condition",
+                unit=None,
+                certainty="low",
+                evidence_text="Inclusion Criteria:",
+                source_span=None,
+            )
+        )
     return rules
 
 
@@ -201,17 +221,16 @@ def _parse_sentence(
         parsed.extend(_parse_sex_rules(sentence, rule_type, source_span))
         parsed.extend(_parse_lab_rules(sentence, rule_type, source_span))
         parsed.extend(_parse_condition_rules(sentence, rule_type, source_span))
-        parsed.extend(_parse_duration_other_rules(sentence, rule_type, source_span))
         if rule_type == "EXCLUSION":
+            parsed.extend(_parse_exclusion_history_rules(sentence, source_span))
+            parsed.extend(_parse_exclusion_condition_rules(sentence, source_span))
             parsed.extend(_parse_common_exclusion_rules(sentence, source_span))
     except Exception:
         parsed = []
 
     if parsed:
         return parsed
-    if rule_type == "EXCLUSION":
-        return []
-    return [_unknown_rule(sentence, rule_type, source_span)]
+    return []
 
 
 def _parse_age_rules(
@@ -336,6 +355,12 @@ def _parse_condition_rules(
             if cleaned:
                 candidates.append(cleaned)
 
+    normalized = _norm_text(sentence)
+    if "fertile" in normalized:
+        candidates.append("fertile")
+    if re.search(r"\badults?\b", sentence, re.I):
+        candidates.append("adult")
+
     if not candidates:
         return []
 
@@ -362,32 +387,6 @@ def _parse_condition_rules(
     ]
 
 
-def _parse_duration_other_rules(
-    sentence: str, rule_type: str, source_span: Optional[Dict[str, int]]
-) -> List[Dict[str, Any]]:
-    if rule_type != "INCLUSION":
-        return []
-
-    matches = [match.group(0) for match in _DURATION_AT_LEAST_PATTERN.finditer(sentence)]
-    if not matches:
-        return []
-
-    # Keep one generic duration constraint rule per sentence for v1 schema compatibility.
-    evidence = matches[0]
-    return [
-        _build_rule(
-            rule_type=rule_type,
-            field="other",
-            operator="EXISTS",
-            value=None,
-            unit=None,
-            certainty="low",
-            evidence_text=evidence,
-            source_span=source_span,
-        )
-    ]
-
-
 def _clean_condition_value(raw: str) -> Optional[str]:
     value = _norm_text(raw)
     if not value:
@@ -405,6 +404,15 @@ def _clean_condition_value(raw: str) -> Optional[str]:
         if value.startswith(prefix):
             value = value[len(prefix) :].strip()
 
+    reject_prefixes = (
+        "subject must have",
+        "subjects must have",
+        "subject who",
+        "subjects who",
+    )
+    if any(value.startswith(prefix) for prefix in reject_prefixes):
+        return None
+
     value = re.sub(r"\b(?:nyha|class)\s+[ivx0-9\-]+\b", "", value, flags=re.I).strip()
     value = _WHITESPACE.sub(" ", value)
     if len(value) < 3:
@@ -418,17 +426,24 @@ def _parse_sex_rules(
     text = sentence.lower()
     has_male = (" male " in f" {text} ") or (" men " in f" {text} ")
     has_female = (" female " in f" {text} ") or (" women " in f" {text} ")
+    has_pregnancy_context = any(
+        token in text for token in ("pregnan", "breastfeed", "lactat", "childbearing")
+    )
+
     if any(phrase in text for phrase in ("all sexes", "any sex", "both sexes")):
-        value = "all"
-    elif has_male and has_female:
-        value = "all"
-    elif has_female:
-        value = "female"
-    elif has_male:
-        value = "male"
-    else:
+        return []
+    if has_male and has_female and not has_pregnancy_context:
         return []
 
+    values: List[str] = []
+    if has_female or has_pregnancy_context:
+        values.append("female")
+    if has_male and (not values or has_pregnancy_context):
+        values.append("male")
+    if not values:
+        return []
+
+    deduped_values = list(dict.fromkeys(values))
     return [
         _build_rule(
             rule_type=rule_type,
@@ -440,6 +455,7 @@ def _parse_sex_rules(
             evidence_text=sentence,
             source_span=source_span,
         )
+        for value in deduped_values
     ]
 
 
@@ -492,6 +508,98 @@ def _parse_common_exclusion_rules(
     return rules
 
 
+def _parse_exclusion_condition_rules(
+    sentence: str, source_span: Optional[Dict[str, int]]
+) -> List[Dict[str, Any]]:
+    text = sentence.lower()
+    candidates: List[str] = []
+
+    if "hiv" in text:
+        candidates.append("hiv positive")
+
+    for match in _EXCLUSION_HISTORY_OF_PATTERN.finditer(sentence):
+        cleaned = _clean_exclusion_condition_value(match.group(1))
+        if cleaned:
+            candidates.append(cleaned)
+
+    deduped: List[str] = []
+    seen = set()
+    for value in candidates:
+        if value in seen:
+            continue
+        seen.add(value)
+        deduped.append(value)
+
+    return [
+        _build_rule(
+            rule_type="EXCLUSION",
+            field="condition",
+            operator="NOT_IN",
+            value=value,
+            unit=None,
+            certainty="medium",
+            evidence_text=sentence,
+            source_span=source_span,
+        )
+        for value in deduped
+    ]
+
+
+def _parse_exclusion_history_rules(
+    sentence: str, source_span: Optional[Dict[str, int]]
+) -> List[Dict[str, Any]]:
+    text = sentence.lower()
+    rules: List[Dict[str, Any]] = []
+
+    if "given birth within" in text:
+        rules.append(
+            _build_rule(
+                rule_type="EXCLUSION",
+                field="history",
+                operator="NO_HISTORY",
+                value="pregnancy",
+                unit=None,
+                certainty="medium",
+                evidence_text=sentence,
+                source_span=source_span,
+            )
+        )
+
+    time_window = _extract_time_window(text)
+    trigger_keywords = (
+        "history of",
+        "tobacco use",
+        "malignancy",
+        "tumor recurrence",
+        "began within",
+    )
+    if time_window and any(keyword in text for keyword in trigger_keywords):
+        rules.append(
+            _build_rule(
+                rule_type="EXCLUSION",
+                field="history",
+                operator="WITHIN_LAST",
+                value=time_window["value"],
+                unit=time_window["unit"],
+                certainty="medium",
+                evidence_text=sentence,
+                source_span=source_span,
+            )
+        )
+
+    return rules
+
+
+def _clean_exclusion_condition_value(raw: str) -> Optional[str]:
+    value = _norm_text(raw).strip(" ,.;:")
+    if not value:
+        return None
+    value = re.sub(r"^(?:a|an|the)\s+", "", value).strip()
+    if len(value) < 3:
+        return None
+    return value
+
+
 def _extract_first_int(text: str, patterns: List[re.Pattern[str]]) -> Optional[int]:
     for pattern in patterns:
         match = pattern.search(text)
@@ -534,21 +642,6 @@ def _build_sentence_spans(text: str, sentences: List[str]) -> Dict[str, Dict[str
 
 def _norm_text(text: str) -> str:
     return " ".join((text or "").lower().replace("-", " ").split())
-
-
-def _unknown_rule(
-    sentence: str, rule_type: str, source_span: Optional[Dict[str, int]]
-) -> Dict[str, Any]:
-    return _build_rule(
-        rule_type=rule_type,
-        field="other",
-        operator="EXISTS",
-        value=None,
-        unit=None,
-        certainty="low",
-        evidence_text=sentence,
-        source_span=source_span,
-    )
 
 
 def _build_rule(
