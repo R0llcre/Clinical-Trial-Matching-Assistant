@@ -6,6 +6,7 @@ from pathlib import Path
 import pytest
 
 from run_evaluation import (
+    compute_relevance_coverage,
     compute_hallucination_rate,
     compute_parse_metrics,
     compute_retrieval_metrics,
@@ -54,6 +55,25 @@ def test_compute_retrieval_metrics_skips_query_without_relevant() -> None:
 
     assert metrics["evaluated_queries"] == 1
     assert metrics["skipped_queries"] == 1
+
+
+def test_compute_relevance_coverage_counts_full_partial_and_empty_queries() -> None:
+    query_ids = ["Q1", "Q2"]
+    candidate_nct_ids = ["N1", "N2"]
+    relevance = {
+        ("Q1", "N1"): 2,
+        ("Q1", "N2"): 0,
+        ("Q2", "N1"): 1,
+    }
+
+    metrics = compute_relevance_coverage(query_ids, candidate_nct_ids, relevance)
+    assert metrics["candidate_pool_size"] == 2
+    assert metrics["total_pairs"] == 4
+    assert metrics["annotated_pairs"] == 3
+    assert metrics["annotation_coverage"] == pytest.approx(0.75)
+    assert metrics["fully_annotated_queries"] == 1
+    assert metrics["partially_annotated_queries"] == 1
+    assert metrics["unannotated_queries"] == 0
 
 
 def test_rule_signature_normalizes_value_and_unit() -> None:
@@ -154,3 +174,54 @@ def test_run_evaluation_repo_data_with_custom_predicted_rules(
     assert "retrieval" in output
     assert "parsing" in output
     assert "hallucination" in output
+
+
+def test_run_evaluation_rejects_low_relevance_coverage(tmp_path: Path) -> None:
+    queries_path = tmp_path / "queries.jsonl"
+    trials_path = tmp_path / "trials.jsonl"
+    relevance_path = tmp_path / "relevance.jsonl"
+    predicted_rules_path = tmp_path / "predicted_rules.jsonl"
+
+    queries_path.write_text(
+        json.dumps({"query_id": "Q1", "query": "diabetes", "expected_conditions": ["diabetes"]})
+        + "\n",
+        encoding="utf-8",
+    )
+    trials_path.write_text(
+        json.dumps(
+            {
+                "nct_id": "N1",
+                "title": "Diabetes trial",
+                "eligibility_text": "Adults only.",
+                "labeled_rules": [],
+            }
+        )
+        + "\n"
+        + json.dumps(
+            {
+                "nct_id": "N2",
+                "title": "Asthma trial",
+                "eligibility_text": "Adults only.",
+                "labeled_rules": [],
+            }
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    relevance_path.write_text(
+        json.dumps({"query_id": "Q1", "nct_id": "N1", "relevance_label": 2}) + "\n",
+        encoding="utf-8",
+    )
+    predicted_rules_path.write_text(
+        json.dumps({"nct_id": "N1", "predicted_rules": []}) + "\n",
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ValueError, match="coverage below minimum"):
+        run_evaluation(
+            queries_path=queries_path,
+            trials_path=trials_path,
+            relevance_path=relevance_path,
+            min_relevance_coverage=1.0,
+            predicted_rules_path=str(predicted_rules_path),
+        )

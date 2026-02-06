@@ -16,6 +16,8 @@ Docs Index
 - eval/ANNOTATION_GUIDE.md 双标注执行与一致性验收指南
 - eval/ANNOTATION_TEMPLATE.relevance.jsonl 检索相关性标注模板
 - eval/ANNOTATION_TEMPLATE.rules.jsonl 规则质量标注模板
+- ../eval/annotations/relevance.trials_sample.annotator_a.jsonl M4 检索评估对齐标注（A）
+- ../eval/annotations/relevance.trials_sample.annotator_b.jsonl M4 检索评估对齐标注（B）
 - ../scripts/eval/run_evaluation.py M4 指标计算脚本
 - ../scripts/eval/generate_evaluation_report.py M4 评估报告生成脚本
 - ../eval/data/queries.jsonl M4 查询样本集

@@ -121,6 +121,56 @@ def build_relevance_index(
     return relevance
 
 
+def compute_relevance_coverage(
+    query_ids: Sequence[str],
+    candidate_nct_ids: Sequence[str],
+    relevance: Dict[Tuple[str, str], int],
+) -> Dict[str, Any]:
+    unique_query_ids = sorted({query_id for query_id in query_ids if query_id})
+    unique_nct_ids = sorted({nct_id for nct_id in candidate_nct_ids if nct_id})
+    total_pairs = len(unique_query_ids) * len(unique_nct_ids)
+    if total_pairs == 0:
+        return {
+            "candidate_pool_size": len(unique_nct_ids),
+            "total_pairs": 0,
+            "annotated_pairs": 0,
+            "annotation_coverage": 0.0,
+            "fully_annotated_queries": 0,
+            "partially_annotated_queries": 0,
+            "unannotated_queries": 0,
+        }
+
+    fully_annotated = 0
+    partially_annotated = 0
+    unannotated = 0
+    annotated_pairs = 0
+
+    for query_id in unique_query_ids:
+        query_annotated = sum(
+            1
+            for nct_id in unique_nct_ids
+            if (query_id, nct_id) in relevance
+        )
+        annotated_pairs += query_annotated
+        if query_annotated == len(unique_nct_ids):
+            fully_annotated += 1
+        elif query_annotated == 0:
+            unannotated += 1
+        else:
+            partially_annotated += 1
+
+    coverage = annotated_pairs / total_pairs
+    return {
+        "candidate_pool_size": len(unique_nct_ids),
+        "total_pairs": total_pairs,
+        "annotated_pairs": annotated_pairs,
+        "annotation_coverage": round(coverage, 4),
+        "fully_annotated_queries": fully_annotated,
+        "partially_annotated_queries": partially_annotated,
+        "unannotated_queries": unannotated,
+    }
+
+
 def dcg_at_k(relevances: Sequence[int], k: int) -> float:
     if k <= 0:
         return 0.0
@@ -163,7 +213,12 @@ def compute_retrieval_metrics(
     for query_id in query_ids:
         ranked = rankings.get(query_id, [])
         rels = [int(relevance.get((query_id, nct_id), 0)) for nct_id in ranked]
-        has_relevant = any(rel >= relevant_threshold for rel in rels)
+        annotated_rels = [
+            int(relevance[(query_id, nct_id)])
+            for nct_id in ranked
+            if (query_id, nct_id) in relevance
+        ]
+        has_relevant = any(rel >= relevant_threshold for rel in annotated_rels)
         if ignore_queries_without_relevant and not has_relevant:
             continue
 
@@ -352,6 +407,7 @@ def run_evaluation(
     relevance_path: Path,
     top_k: int = 10,
     relevance_threshold: int = 1,
+    min_relevance_coverage: float = 0.0,
     retrieval_results_path: str = "",
     predicted_rules_path: str = "",
 ) -> Dict[str, Any]:
@@ -362,11 +418,26 @@ def run_evaluation(
 
     query_ids = [str(row.get("query_id") or "").strip() for row in queries]
     query_ids = [query_id for query_id in query_ids if query_id]
+    candidate_nct_ids = [
+        str(trial.get("nct_id") or "").strip()
+        for trial in trials
+        if str(trial.get("nct_id") or "").strip()
+    ]
 
     if retrieval_results_path:
         rankings = load_retrieval_rankings(Path(retrieval_results_path))
     else:
         rankings = build_heuristic_rankings(queries, trials)
+
+    coverage_metrics = compute_relevance_coverage(query_ids, candidate_nct_ids, relevance)
+    if min_relevance_coverage > 0 and (
+        coverage_metrics["annotation_coverage"] < min_relevance_coverage
+    ):
+        coverage_value = coverage_metrics["annotation_coverage"]
+        raise ValueError(
+            "relevance annotation coverage below minimum: "
+            f"{coverage_value} < {min_relevance_coverage}"
+        )
 
     retrieval_metrics = compute_retrieval_metrics(
         query_ids,
@@ -386,6 +457,7 @@ def run_evaluation(
             "top_k": top_k,
             "relevant_threshold": relevance_threshold,
             **retrieval_metrics,
+            **coverage_metrics,
         },
         "parsing": parse_metrics,
         "hallucination": hallucination_metrics,
@@ -399,6 +471,7 @@ def main() -> None:
     parser.add_argument("--relevance", default="eval/annotations/relevance.annotator_a.jsonl")
     parser.add_argument("--top-k", type=int, default=10)
     parser.add_argument("--relevance-threshold", type=int, default=1)
+    parser.add_argument("--min-relevance-coverage", type=float, default=0.0)
     parser.add_argument(
         "--retrieval-results",
         default="",
@@ -425,6 +498,7 @@ def main() -> None:
         relevance_path=Path(args.relevance),
         top_k=args.top_k,
         relevance_threshold=args.relevance_threshold,
+        min_relevance_coverage=args.min_relevance_coverage,
         retrieval_results_path=args.retrieval_results,
         predicted_rules_path=args.predicted_rules,
     )
