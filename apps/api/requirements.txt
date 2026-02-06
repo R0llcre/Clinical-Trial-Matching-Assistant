@@ -4,3 +4,4 @@ psycopg[binary]>=3.1
 redis>=5.0
 httpx>=0.25
 sqlalchemy>=2.0
+PyJWT>=2.8

@@ -28,6 +28,9 @@ const API_BASE = process.env.NEXT_PUBLIC_API_BASE ?? "http://localhost:8000";
 
 export default function MatchPage() {
   const router = useRouter();
+  const [jwtToken, setJwtToken] = useState(
+    process.env.NEXT_PUBLIC_DEV_JWT ?? ""
+  );
   const [age, setAge] = useState("52");
   const [sex, setSex] = useState("female");
   const [conditions, setConditions] = useState("type 2 diabetes");
@@ -54,6 +57,13 @@ export default function MatchPage() {
       setError("Age and top_k must be valid positive numbers.");
       return;
     }
+    if (!jwtToken.trim()) {
+      setLoading(false);
+      setError(
+        "JWT token is required for /api/patients. Generate one via scripts/gen_dev_jwt.py."
+      );
+      return;
+    }
 
     const conditionList = conditions
       .split(",")
@@ -63,7 +73,10 @@ export default function MatchPage() {
     try {
       const patientResponse = await fetch(`${API_BASE}/api/patients`, {
         method: "POST",
-        headers: {"Content-Type": "application/json"},
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${jwtToken.trim()}`,
+        },
         body: JSON.stringify({
           profile_json: {
             demographics: {
@@ -121,6 +134,16 @@ export default function MatchPage() {
 
       <section className="card">
         <form className="search-panel" onSubmit={onSubmit}>
+          <div className="field">
+            <label htmlFor="jwt">JWT Token</label>
+            <input
+              id="jwt"
+              value={jwtToken}
+              onChange={(event) => setJwtToken(event.target.value)}
+              placeholder="Bearer token (required)"
+            />
+          </div>
+
           <div className="field">
             <label htmlFor="age">Age</label>
             <input

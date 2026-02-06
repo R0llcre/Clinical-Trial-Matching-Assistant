@@ -2,6 +2,12 @@ from fastapi.testclient import TestClient
 
 from app.main import app
 from app.routes import patients as patients_module
+from app.services.auth import create_access_token
+
+
+def _auth_headers() -> dict:
+    token = create_access_token(sub="test-user")
+    return {"Authorization": f"Bearer {token}"}
 
 
 def test_create_patient_ok(monkeypatch) -> None:
@@ -35,6 +41,7 @@ def test_create_patient_ok(monkeypatch) -> None:
             "profile_json": {"demographics": {"age": 52, "sex": "female"}},
             "source": "manual",
         },
+        headers=_auth_headers(),
     )
 
     assert response.status_code == 200
@@ -51,6 +58,7 @@ def test_create_patient_validation_error() -> None:
     response = client.post(
         "/api/patients",
         json={"profile_json": {"demographics": {"sex": "female"}}},
+        headers=_auth_headers(),
     )
 
     assert response.status_code == 400
@@ -81,7 +89,7 @@ def test_get_patient_ok(monkeypatch) -> None:
     monkeypatch.setattr(patients_module, "_get_patient", _fake_get)
 
     client = TestClient(app)
-    response = client.get("/api/patients/patient-1")
+    response = client.get("/api/patients/patient-1", headers=_auth_headers())
 
     assert response.status_code == 200
     payload = response.json()
@@ -100,7 +108,7 @@ def test_get_patient_not_found(monkeypatch) -> None:
     )
 
     client = TestClient(app)
-    response = client.get("/api/patients/missing")
+    response = client.get("/api/patients/missing", headers=_auth_headers())
 
     assert response.status_code == 404
     payload = response.json()
@@ -138,7 +146,9 @@ def test_list_patients_ok(monkeypatch) -> None:
     monkeypatch.setattr(patients_module, "_list_patients", _fake_list)
 
     client = TestClient(app)
-    response = client.get("/api/patients?page=2&page_size=5")
+    response = client.get(
+        "/api/patients?page=2&page_size=5", headers=_auth_headers()
+    )
 
     assert response.status_code == 200
     payload = response.json()
@@ -154,7 +164,9 @@ def test_list_patients_ok(monkeypatch) -> None:
 
 def test_list_patients_validation_error() -> None:
     client = TestClient(app)
-    response = client.get("/api/patients?page=0&page_size=1000")
+    response = client.get(
+        "/api/patients?page=0&page_size=1000", headers=_auth_headers()
+    )
 
     assert response.status_code == 400
     payload = response.json()
