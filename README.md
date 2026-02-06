@@ -15,6 +15,7 @@ Clinical Trial Matching Assistant
 - docs/CRITERIA_SCHEMA.md 规则结构规范
 - docs/MATCHING_LOGIC.md 匹配与评分逻辑
 - docs/EVALUATION.md 评估与标注规范
+- eval/README.md 评估数据与报告资产索引（当前基线 + 历史归档）
 - docs/DATA_AND_COMPLIANCE.md 数据与合规边界
 - docs/LEADERSHIP_AND_RESPONSIBILITIES.md 负责人职责与下属交付
 - docs/milestones/M0_foundation.md

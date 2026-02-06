@@ -14,10 +14,11 @@ DEFAULT_BASE_URL = "https://clinicaltrials.gov/api/v2"
 DEFAULT_EXCLUDE_FILES = [
     "eval/annotations/relevance.annotator_a.jsonl",
     "eval/annotations/relevance.annotator_b.jsonl",
-    "eval/annotations/relevance.batch1.annotator_b.jsonl",
-    "eval/annotations/relevance.batch2.annotator_b.jsonl",
-    "eval/annotations/relevance.batch3.annotator_b.jsonl",
-    "eval/annotations/relevance.batch4.annotator_b.jsonl",
+    "eval/annotations/relevance.v2.round1.final.jsonl",
+    "eval/annotations/relevance.v2.round1_round2.final.jsonl",
+    "eval/annotations/relevance.v2.round4.final.jsonl",
+    "eval/annotations/relevance.v2.round1_round2_round4.final.jsonl",
+    "eval/annotations/relevance.v2.round1_round2_round3b_round4.merged.jsonl",
 ]
 QUERY_SYNONYMS = {
     "type 2 diabetes": [

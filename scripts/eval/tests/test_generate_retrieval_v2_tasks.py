@@ -6,6 +6,7 @@ from pathlib import Path
 import pytest
 
 from generate_retrieval_v2_tasks import (
+    DEFAULT_EXCLUDE_FILES,
     build_round_batch,
     build_search_terms,
     load_excluded_pairs,
@@ -180,3 +181,11 @@ def test_load_excluded_pairs_reads_query_nct_keys(tmp_path: Path) -> None:
 
     excluded = load_excluded_pairs([path])
     assert excluded == {("Q1", "N1"), ("Q2", "N2")}
+
+
+def test_default_exclude_files_use_canonical_final_sets() -> None:
+    assert "eval/annotations/relevance.batch1.annotator_b.jsonl" not in DEFAULT_EXCLUDE_FILES
+    assert "eval/annotations/relevance.batch2.annotator_b.jsonl" not in DEFAULT_EXCLUDE_FILES
+    assert "eval/annotations/relevance.batch3.annotator_b.jsonl" not in DEFAULT_EXCLUDE_FILES
+    assert "eval/annotations/relevance.batch4.annotator_b.jsonl" not in DEFAULT_EXCLUDE_FILES
+    assert "eval/annotations/relevance.v2.round1_round2_round4.final.jsonl" in DEFAULT_EXCLUDE_FILES

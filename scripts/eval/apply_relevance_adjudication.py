@@ -136,12 +136,12 @@ def main() -> None:
     )
     parser.add_argument(
         "--base",
-        default="eval/annotations/relevance.v2.round1.annotator_b.jsonl",
+        default="eval/archive/m4_history/annotations/relevance.v2.round1.annotator_b.jsonl",
         help="Base label file (typically annotator_b full round)",
     )
     parser.add_argument(
         "--adjudication",
-        default="eval/annotations/relevance.v2.round1.adjudication.annotator_a.jsonl",
+        default="eval/archive/m4_history/annotations/relevance.v2.round1.adjudication.annotator_a.jsonl",
         help="Adjudication label file (subset with final labels)",
     )
     parser.add_argument(

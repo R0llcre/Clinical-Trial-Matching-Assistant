@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from generate_retrieval_v2_round3_tasks import (
+    DEFAULT_PENDING_PATH,
     apply_hard_filters,
     build_blind_rows,
     build_targeted_batch,
@@ -142,3 +143,10 @@ def test_apply_hard_filters_drops_rows_with_constraint_mismatch() -> None:
     assert manifest["dropped_rows"] == 1
     assert manifest["drop_reasons"]["phase_mismatch"] == 1
     assert manifest["drop_reasons"]["intent_mismatch"] == 1
+
+
+def test_default_pending_path_points_to_archived_round2_pool() -> None:
+    assert (
+        DEFAULT_PENDING_PATH
+        == "eval/archive/m4_history/annotation_tasks/relevance.pending.v2.round2.jsonl"
+    )
