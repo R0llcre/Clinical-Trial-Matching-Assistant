@@ -65,3 +65,9 @@ Evaluation
 
 **M4-4 报告生成命令**
 - `python3 scripts/eval/generate_evaluation_report.py --queries eval/data/queries.jsonl --trials eval/data/trials_sample.jsonl --relevance eval/annotations/relevance.trials_sample.annotator_a.jsonl --top-k 10 --min-relevance-coverage 1.0 --output-md eval/reports/m4_evaluation_report.md --output-json eval/reports/m4_evaluation_report.json`
+
+**大样本检索标注报告（300）**
+- `python3 scripts/eval/generate_retrieval_only_report.py --annotator-a eval/annotations/relevance.annotator_a.jsonl --annotator-b eval/annotations/relevance.annotator_b.jsonl --output-md eval/reports/retrieval_annotation_report_300.md --output-json eval/reports/retrieval_annotation_report_300.json`
+
+**扩样任务清单生成（2000 检索 + 200 解析）**
+- `python3 scripts/eval/generate_annotation_tasks.py --source eval/annotations/relevance.annotator_a.jsonl --target-retrieval-pairs 2000 --target-parsing-trials 200 --output-retrieval eval/annotation_tasks/relevance.pending.2000.jsonl --output-parsing eval/annotation_tasks/parsing.pending.200.jsonl --output-manifest eval/annotation_tasks/manifest.large_scale.json`

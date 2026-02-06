@@ -1,0 +1,17 @@
+{
+  "source": "eval/annotations/relevance.annotator_a.jsonl",
+  "retrieval": {
+    "query_count": 10,
+    "nct_count": 275,
+    "annotated_pairs": 300,
+    "cross_product_pairs": 2750,
+    "candidate_unlabeled_pairs": 2450,
+    "generated_tasks": 2000,
+    "requested_tasks": 2000
+  },
+  "parsing": {
+    "candidate_trials": 275,
+    "generated_tasks": 200,
+    "requested_tasks": 200
+  }
+}

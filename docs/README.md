@@ -20,6 +20,8 @@ Docs Index
 - ../eval/annotations/relevance.trials_sample.annotator_b.jsonl M4 检索评估对齐标注（B）
 - ../scripts/eval/run_evaluation.py M4 指标计算脚本
 - ../scripts/eval/generate_evaluation_report.py M4 评估报告生成脚本
+- ../scripts/eval/generate_retrieval_only_report.py 大样本检索标注报告脚本
+- ../scripts/eval/generate_annotation_tasks.py 扩样标注任务生成脚本
 - ../eval/data/queries.jsonl M4 查询样本集
 - ../eval/data/trials_sample.jsonl M4 试验解析样本集
 - ../eval/data/patients.jsonl M4 合成患者样本集
