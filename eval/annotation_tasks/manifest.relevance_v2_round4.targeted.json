@@ -1,0 +1,139 @@
+{
+  "input_pending_rows": 18745,
+  "input_reference_rows": 1400,
+  "excluded_pair_count": 1800,
+  "deduped_pending_rows_after_exclusion": 18745,
+  "focus_queries": [
+    "Q0004",
+    "Q0005",
+    "Q0006",
+    "Q0007",
+    "Q0008",
+    "Q0009",
+    "Q0010"
+  ],
+  "target_per_query": 40,
+  "quotas": {
+    "likely_2": 30,
+    "likely_1": 10,
+    "hard_negative": 0
+  },
+  "task_id_prefix": "relevance-v2r4",
+  "total_rows": 244,
+  "query_summary": {
+    "Q0004": {
+      "label2_count_in_reference": 0,
+      "available_after_exclusion": 4,
+      "picked": 4,
+      "picked_band_counts": {
+        "likely_2": 4
+      },
+      "shortfall": 36
+    },
+    "Q0005": {
+      "label2_count_in_reference": 0,
+      "available_after_exclusion": 165,
+      "picked": 40,
+      "picked_band_counts": {
+        "likely_1": 27,
+        "likely_2": 13
+      },
+      "shortfall": 0
+    },
+    "Q0006": {
+      "label2_count_in_reference": 0,
+      "available_after_exclusion": 72,
+      "picked": 40,
+      "picked_band_counts": {
+        "likely_1": 22,
+        "likely_2": 18
+      },
+      "shortfall": 0
+    },
+    "Q0007": {
+      "label2_count_in_reference": 0,
+      "available_after_exclusion": 2072,
+      "picked": 40,
+      "picked_band_counts": {
+        "likely_1": 6,
+        "likely_2": 34
+      },
+      "shortfall": 0
+    },
+    "Q0008": {
+      "label2_count_in_reference": 0,
+      "available_after_exclusion": 1553,
+      "picked": 40,
+      "picked_band_counts": {
+        "likely_1": 32,
+        "likely_2": 8
+      },
+      "shortfall": 0
+    },
+    "Q0009": {
+      "label2_count_in_reference": 0,
+      "available_after_exclusion": 85,
+      "picked": 40,
+      "picked_band_counts": {
+        "likely_2": 40
+      },
+      "shortfall": 0
+    },
+    "Q0010": {
+      "label2_count_in_reference": 0,
+      "available_after_exclusion": 335,
+      "picked": 40,
+      "picked_band_counts": {
+        "likely_1": 35,
+        "likely_2": 5
+      },
+      "shortfall": 0
+    }
+  },
+  "hard_filters": {
+    "input_rows": 47942,
+    "kept_rows": 18745,
+    "dropped_rows": 29197,
+    "settings": {
+      "require_status_match": true,
+      "require_phase_match": false,
+      "min_location_match_score": 1,
+      "min_intent_match_count": 1
+    },
+    "drop_reasons": {
+      "intent_mismatch": 16387,
+      "location_mismatch": 18100,
+      "status_mismatch": 13367
+    },
+    "dropped_by_query": {
+      "Q0004": {
+        "intent_mismatch": 3942,
+        "location_mismatch": 3057,
+        "status_mismatch": 4668
+      },
+      "Q0005": {
+        "intent_mismatch": 4287,
+        "location_mismatch": 2534
+      },
+      "Q0006": {
+        "intent_mismatch": 3997,
+        "location_mismatch": 1902,
+        "status_mismatch": 4235
+      },
+      "Q0007": {
+        "location_mismatch": 2772
+      },
+      "Q0008": {
+        "location_mismatch": 3256
+      },
+      "Q0009": {
+        "location_mismatch": 2464,
+        "status_mismatch": 4464
+      },
+      "Q0010": {
+        "intent_mismatch": 4161,
+        "location_mismatch": 2115
+      }
+    }
+  }
+}

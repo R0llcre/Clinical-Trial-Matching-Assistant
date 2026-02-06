@@ -120,6 +120,118 @@ def _sort_candidates(rows: Sequence[Dict[str, Any]]) -> List[Dict[str, Any]]:
     )
 
 
+def _has_expected_location(query: Dict[str, Any]) -> bool:
+    expected_location = query.get("expected_location")
+    if not isinstance(expected_location, dict):
+        return False
+    return any(
+        str(expected_location.get(field) or "").strip()
+        for field in ("country", "state", "city")
+    )
+
+
+def _to_bool(value: Any) -> bool:
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, str):
+        return value.strip().lower() in {"1", "true", "yes", "y"}
+    if isinstance(value, (int, float)):
+        return value != 0
+    return False
+
+
+def _to_int(value: Any) -> int:
+    if isinstance(value, bool):
+        return int(value)
+    if isinstance(value, (int, float)):
+        return int(value)
+    if isinstance(value, str):
+        token = value.strip()
+        if not token:
+            return 0
+        try:
+            return int(float(token))
+        except ValueError:
+            return 0
+    return 0
+
+
+def apply_hard_filters(
+    *,
+    pending_rows: Sequence[Dict[str, Any]],
+    query_by_id: Dict[str, Dict[str, Any]],
+    focus_queries: Sequence[str],
+    require_status_match: bool,
+    require_phase_match: bool,
+    min_location_match_score: int,
+    min_intent_match_count: int,
+) -> Tuple[List[Dict[str, Any]], Dict[str, Any]]:
+    focus_query_set = set(focus_queries)
+    kept: List[Dict[str, Any]] = []
+    drop_reasons: Dict[str, int] = defaultdict(int)
+    dropped_by_query: Dict[str, Dict[str, int]] = defaultdict(lambda: defaultdict(int))
+
+    for row in pending_rows:
+        query_id = str(row.get("query_id") or "").strip()
+        if not query_id or query_id not in focus_query_set:
+            kept.append(row)
+            continue
+
+        query = query_by_id.get(query_id)
+        if not query:
+            kept.append(row)
+            continue
+
+        features = row.get("features") if isinstance(row.get("features"), dict) else {}
+        reasons: List[str] = []
+
+        if require_status_match and str(query.get("expected_status") or "").strip():
+            if not _to_bool(features.get("status_match")):
+                reasons.append("status_mismatch")
+
+        if require_phase_match and str(query.get("expected_phase") or "").strip():
+            if not _to_bool(features.get("phase_match")):
+                reasons.append("phase_mismatch")
+
+        if min_location_match_score > 0 and _has_expected_location(query):
+            location_score = _to_int(features.get("location_match_score"))
+            if location_score < min_location_match_score:
+                reasons.append("location_mismatch")
+
+        if min_intent_match_count > 0:
+            intent_target_count = _to_int(features.get("intent_target_count"))
+            intent_match_count = _to_int(features.get("intent_match_count"))
+            if intent_target_count > 0 and intent_match_count < min_intent_match_count:
+                reasons.append("intent_mismatch")
+
+        if not reasons:
+            kept.append(row)
+            continue
+
+        for reason in reasons:
+            drop_reasons[reason] += 1
+            dropped_by_query[query_id][reason] += 1
+
+    dropped = len(pending_rows) - len(kept)
+    manifest = {
+        "input_rows": len(pending_rows),
+        "kept_rows": len(kept),
+        "dropped_rows": dropped,
+        "settings": {
+            "require_status_match": require_status_match,
+            "require_phase_match": require_phase_match,
+            "min_location_match_score": min_location_match_score,
+            "min_intent_match_count": min_intent_match_count,
+        },
+        "drop_reasons": dict(sorted(drop_reasons.items())),
+        "dropped_by_query": {
+            query_id: dict(sorted(reason_counts.items()))
+            for query_id, reason_counts in sorted(dropped_by_query.items())
+        },
+    }
+    return kept, manifest
+
+
 def build_targeted_batch(
     *,
     pending_rows: Sequence[Dict[str, Any]],
@@ -253,6 +365,7 @@ def main() -> None:
         default="eval/annotation_tasks/relevance.pending.v2.round2.jsonl",
         help="Candidate pending pool",
     )
+    parser.add_argument("--queries", default="eval/data/queries.jsonl")
     parser.add_argument(
         "--reference-labels",
         default="eval/annotations/relevance.v2.round1_round2.final.jsonl",
@@ -275,6 +388,10 @@ def main() -> None:
     parser.add_argument("--likely2-quota", type=int, default=35)
     parser.add_argument("--likely1-quota", type=int, default=15)
     parser.add_argument("--hard-negative-quota", type=int, default=0)
+    parser.add_argument("--require-status-match", action="store_true")
+    parser.add_argument("--require-phase-match", action="store_true")
+    parser.add_argument("--min-location-match-score", type=int, default=0)
+    parser.add_argument("--min-intent-match-count", type=int, default=0)
     parser.add_argument("--task-id-prefix", default="relevance-v2r3")
     parser.add_argument(
         "--output-batch",
@@ -291,7 +408,13 @@ def main() -> None:
     args = parser.parse_args()
 
     pending_rows = load_jsonl(Path(args.pending))
+    queries = load_jsonl(Path(args.queries))
     reference_rows = load_jsonl(Path(args.reference_labels))
+    query_by_id = {
+        str(row.get("query_id") or "").strip(): row
+        for row in queries
+        if str(row.get("query_id") or "").strip()
+    }
 
     exclude_paths: List[Path] = [Path(args.reference_labels)]
     for item in args.exclude:
@@ -309,8 +432,18 @@ def main() -> None:
     if not focus_queries:
         raise ValueError("no focus queries selected; adjust --max-label2-count or --focus-query")
 
-    batch_rows, manifest = build_targeted_batch(
+    filtered_pending_rows, hard_filter_manifest = apply_hard_filters(
         pending_rows=pending_rows,
+        query_by_id=query_by_id,
+        focus_queries=focus_queries,
+        require_status_match=args.require_status_match,
+        require_phase_match=args.require_phase_match,
+        min_location_match_score=args.min_location_match_score,
+        min_intent_match_count=args.min_intent_match_count,
+    )
+
+    batch_rows, manifest = build_targeted_batch(
+        pending_rows=filtered_pending_rows,
         reference_rows=reference_rows,
         excluded_pairs=excluded_pairs,
         focus_queries=focus_queries,
@@ -322,6 +455,7 @@ def main() -> None:
         task_id_prefix=args.task_id_prefix,
     )
     blind_rows = build_blind_rows(batch_rows)
+    manifest["hard_filters"] = hard_filter_manifest
 
     dump_jsonl(Path(args.output_batch), batch_rows)
     dump_jsonl(Path(args.output_blind), blind_rows)

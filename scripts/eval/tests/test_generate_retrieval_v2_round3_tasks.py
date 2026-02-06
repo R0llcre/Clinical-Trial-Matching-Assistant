@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from generate_retrieval_v2_round3_tasks import (
+    apply_hard_filters,
     build_blind_rows,
     build_targeted_batch,
     determine_focus_queries,
@@ -90,3 +91,54 @@ def test_build_blind_rows_removes_scoring_fields() -> None:
     assert "band" not in row
     assert "heuristic_score" not in row
     assert "features" not in row
+
+
+def test_apply_hard_filters_drops_rows_with_constraint_mismatch() -> None:
+    pending_rows = [
+        {
+            "query_id": "Q1",
+            "nct_id": "N1",
+            "features": {
+                "status_match": True,
+                "phase_match": True,
+                "location_match_score": 1,
+                "intent_target_count": 1,
+                "intent_match_count": 1,
+            },
+        },
+        {
+            "query_id": "Q1",
+            "nct_id": "N2",
+            "features": {
+                "status_match": True,
+                "phase_match": False,
+                "location_match_score": 1,
+                "intent_target_count": 1,
+                "intent_match_count": 0,
+            },
+        },
+    ]
+    query_by_id = {
+        "Q1": {
+            "query_id": "Q1",
+            "expected_status": "RECRUITING",
+            "expected_phase": "PHASE2",
+            "expected_location": {"country": "USA", "state": None, "city": None},
+        }
+    }
+
+    kept, manifest = apply_hard_filters(
+        pending_rows=pending_rows,
+        query_by_id=query_by_id,
+        focus_queries=["Q1"],
+        require_status_match=True,
+        require_phase_match=True,
+        min_location_match_score=1,
+        min_intent_match_count=1,
+    )
+
+    assert len(kept) == 1
+    assert kept[0]["nct_id"] == "N1"
+    assert manifest["dropped_rows"] == 1
+    assert manifest["drop_reasons"]["phase_mismatch"] == 1
+    assert manifest["drop_reasons"]["intent_mismatch"] == 1

@@ -51,6 +51,48 @@ def test_score_trial_for_query_prefers_likely_2_when_condition_and_phase_match()
     assert features["status_match"] is True
 
 
+def test_score_trial_for_query_normalizes_us_location_aliases() -> None:
+    query = {
+        "query": "metastatic breast cancer phase 3",
+        "expected_conditions": ["metastatic breast cancer"],
+        "expected_status": "RECRUITING",
+        "expected_phase": "PHASE3",
+        "expected_location": {"country": "USA", "state": "CA", "city": None},
+    }
+    trial = {
+        "title": "Metastatic Breast Cancer Combination Study",
+        "conditions": ["metastatic breast cancer"],
+        "status": "RECRUITING",
+        "phases": ["PHASE3"],
+        "locations": [{"country": "United States", "state": "California", "city": "Los Angeles"}],
+    }
+
+    _, band, features = score_trial_for_query(query, trial)
+    assert band == "likely_2"
+    assert features["location_match_score"] >= 2
+
+
+def test_score_trial_for_query_tracks_intent_feature_matches() -> None:
+    query = {
+        "query": "migraine prevention trial for women",
+        "expected_conditions": ["migraine"],
+        "expected_status": None,
+        "expected_phase": "PHASE2",
+        "expected_location": {"country": "USA", "state": None, "city": None},
+    }
+    trial = {
+        "title": "Phase 2 migraine prevention study in women",
+        "conditions": ["migraine"],
+        "status": "COMPLETED",
+        "phases": ["PHASE2"],
+        "locations": [{"country": "United States", "state": "Texas", "city": "Dallas"}],
+    }
+
+    _, _, features = score_trial_for_query(query, trial)
+    assert features["intent_target_count"] >= 2
+    assert features["intent_match_count"] >= 2
+
+
 def test_build_round_batch_respects_per_query_target_and_fallback() -> None:
     pending_rows = [
         {

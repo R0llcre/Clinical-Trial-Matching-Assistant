@@ -64,6 +64,131 @@ QUERY_SYNONYMS = {
     ],
 }
 
+COUNTRY_ALIASES = {
+    "us": "united states",
+    "usa": "united states",
+    "u s": "united states",
+    "u s a": "united states",
+    "united states": "united states",
+    "united states of america": "united states",
+}
+
+STATE_ALIASES = {
+    "al": "alabama",
+    "ak": "alaska",
+    "az": "arizona",
+    "ar": "arkansas",
+    "ca": "california",
+    "co": "colorado",
+    "ct": "connecticut",
+    "de": "delaware",
+    "dc": "district of columbia",
+    "fl": "florida",
+    "ga": "georgia",
+    "hi": "hawaii",
+    "id": "idaho",
+    "il": "illinois",
+    "in": "indiana",
+    "ia": "iowa",
+    "ks": "kansas",
+    "ky": "kentucky",
+    "la": "louisiana",
+    "me": "maine",
+    "md": "maryland",
+    "ma": "massachusetts",
+    "mi": "michigan",
+    "mn": "minnesota",
+    "ms": "mississippi",
+    "mo": "missouri",
+    "mt": "montana",
+    "ne": "nebraska",
+    "nv": "nevada",
+    "nh": "new hampshire",
+    "nj": "new jersey",
+    "nm": "new mexico",
+    "ny": "new york",
+    "nc": "north carolina",
+    "nd": "north dakota",
+    "oh": "ohio",
+    "ok": "oklahoma",
+    "or": "oregon",
+    "pa": "pennsylvania",
+    "ri": "rhode island",
+    "sc": "south carolina",
+    "sd": "south dakota",
+    "tn": "tennessee",
+    "tx": "texas",
+    "ut": "utah",
+    "vt": "vermont",
+    "va": "virginia",
+    "wa": "washington",
+    "wv": "west virginia",
+    "wi": "wisconsin",
+    "wy": "wyoming",
+}
+
+INTENT_QUERY_MARKERS = {
+    "female": ("women", "woman", "female"),
+    "pediatric": ("pediatric", "paediatric", "child", "children", "adolescent"),
+    "biologic": ("biologic", "biological"),
+    "immunotherapy": ("immunotherapy", "checkpoint", "pd 1", "pdl1", "ctla 4"),
+    "prevention": ("prevention", "preventive", "prophylaxis", "prophylactic"),
+}
+
+INTENT_LEXICONS = {
+    "female": (
+        "female",
+        "women",
+        "woman",
+        "girl",
+        "girls",
+    ),
+    "pediatric": (
+        "pediatric",
+        "paediatric",
+        "child",
+        "children",
+        "adolescent",
+        "adolescents",
+        "teen",
+        "teens",
+    ),
+    "biologic": (
+        "biologic",
+        "biological",
+        "monoclonal",
+        "antibody",
+        "adalimumab",
+        "infliximab",
+        "etanercept",
+        "rituximab",
+        "tocilizumab",
+        "abatacept",
+        "ustekinumab",
+        "secukinumab",
+    ),
+    "immunotherapy": (
+        "immunotherapy",
+        "checkpoint",
+        "pd 1",
+        "pd l1",
+        "pdl1",
+        "ctla 4",
+        "pembrolizumab",
+        "nivolumab",
+        "atezolizumab",
+        "durvalumab",
+        "ipilimumab",
+        "cemiplimab",
+    ),
+    "prevention": (
+        "prevention",
+        "preventive",
+        "prophylaxis",
+        "prophylactic",
+    ),
+}
+
 
 def load_jsonl(path: Path) -> List[Dict[str, Any]]:
     rows: List[Dict[str, Any]] = []
@@ -101,6 +226,69 @@ def _norm_text(text: str) -> str:
 
 def _tokenize(text: str) -> set[str]:
     return {token for token in _norm_text(text).split() if len(token) > 2}
+
+
+def _normalize_country(text: str) -> str:
+    token = _norm_text(text)
+    return COUNTRY_ALIASES.get(token, token)
+
+
+def _normalize_state(text: str) -> str:
+    token = _norm_text(text)
+    return STATE_ALIASES.get(token, token)
+
+
+def _has_expected_location(expected_location: Dict[str, Any]) -> bool:
+    if not isinstance(expected_location, dict):
+        return False
+    return any(
+        str(expected_location.get(field) or "").strip()
+        for field in ("country", "state", "city")
+    )
+
+
+def _extract_query_intents(query: Dict[str, Any]) -> List[str]:
+    query_text = _norm_text(str(query.get("query") or ""))
+    intents: List[str] = []
+    for intent, markers in INTENT_QUERY_MARKERS.items():
+        if any(_norm_text(marker) in query_text for marker in markers):
+            intents.append(intent)
+    return intents
+
+
+def _contains_token_or_phrase(
+    *,
+    keyword: str,
+    text_norm: str,
+    tokens: set[str],
+) -> bool:
+    normalized = _norm_text(keyword)
+    if not normalized:
+        return False
+    if " " in normalized:
+        return normalized in text_norm
+    return normalized in tokens
+
+
+def _intent_match_count(
+    intent_targets: Sequence[str],
+    *,
+    trial_text_norm: str,
+    trial_tokens: set[str],
+) -> int:
+    matched = 0
+    for intent in intent_targets:
+        lexicon = INTENT_LEXICONS.get(intent, ())
+        if any(
+            _contains_token_or_phrase(
+                keyword=keyword,
+                text_norm=trial_text_norm,
+                tokens=trial_tokens,
+            )
+            for keyword in lexicon
+        ):
+            matched += 1
+    return matched
 
 
 def _get_nested(raw: Dict[str, Any], path: Sequence[str]) -> Any:
@@ -305,19 +493,19 @@ def _location_match_score(
     if not isinstance(expected_location, dict) or not locations:
         return 0
 
-    country = str(expected_location.get("country") or "").strip().lower()
-    state = str(expected_location.get("state") or "").strip().lower()
-    city = str(expected_location.get("city") or "").strip().lower()
+    country = _normalize_country(str(expected_location.get("country") or ""))
+    state = _normalize_state(str(expected_location.get("state") or ""))
+    city = _norm_text(str(expected_location.get("city") or ""))
     score = 0
 
     if country:
-        if any(country == (loc.get("country") or "").strip().lower() for loc in locations):
+        if any(country == _normalize_country(str(loc.get("country") or "")) for loc in locations):
             score += 1
     if state:
-        if any(state == (loc.get("state") or "").strip().lower() for loc in locations):
+        if any(state == _normalize_state(str(loc.get("state") or "")) for loc in locations):
             score += 1
     if city:
-        if any(city == (loc.get("city") or "").strip().lower() for loc in locations):
+        if any(city == _norm_text(str(loc.get("city") or "")) for loc in locations):
             score += 1
     return score
 
@@ -334,6 +522,7 @@ def score_trial_for_query(
     expected_phase = str(query.get("expected_phase") or "").strip().upper()
     expected_status = str(query.get("expected_status") or "").strip().upper()
     expected_location = query.get("expected_location") or {}
+    intent_targets = _extract_query_intents(query)
 
     trial_title = str(trial.get("title") or "")
     trial_conditions = " ".join(str(item) for item in (trial.get("conditions") or []))
@@ -352,6 +541,23 @@ def score_trial_for_query(
     status_match = bool(expected_status and status == expected_status)
     phase_match = bool(expected_phase and expected_phase in phases)
     location_match = _location_match_score(expected_location, trial.get("locations") or [])
+    intent_match_count = _intent_match_count(
+        intent_targets,
+        trial_text_norm=trial_text_norm,
+        trial_tokens=trial_tokens,
+    )
+
+    required_checks: List[bool] = []
+    if expected_status:
+        required_checks.append(status_match)
+    if expected_phase:
+        required_checks.append(phase_match)
+    if _has_expected_location(expected_location):
+        required_checks.append(location_match >= 1)
+    if intent_targets:
+        required_checks.append(intent_match_count >= 1)
+
+    all_required_match = bool(required_checks) and all(required_checks)
 
     score = 0.0
     score += 6.0 if condition_exact else 0.0
@@ -359,9 +565,13 @@ def score_trial_for_query(
     score += 1.8 if status_match else 0.0
     score += 1.8 if phase_match else 0.0
     score += location_match * 1.2
+    score += intent_match_count * 1.1
+    score += 2.0 if all_required_match else 0.0
+    if intent_targets and intent_match_count == 0:
+        score -= 0.8
     score += min(query_overlap, 8) * 0.2
 
-    if condition_exact and (status_match or phase_match or location_match >= 1):
+    if condition_exact and all_required_match:
         band = "likely_2"
     elif condition_exact or cond_overlap >= 2 or query_overlap >= 3:
         band = "likely_1"
@@ -375,6 +585,8 @@ def score_trial_for_query(
         "status_match": status_match,
         "phase_match": phase_match,
         "location_match_score": location_match,
+        "intent_target_count": len(intent_targets),
+        "intent_match_count": intent_match_count,
     }
     return round(score, 4), band, features
 
