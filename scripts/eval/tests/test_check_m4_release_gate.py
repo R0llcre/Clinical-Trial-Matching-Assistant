@@ -19,6 +19,10 @@ def _thresholds() -> dict[str, float]:
         "release_parsing_unique_fields_min": 6.0,
         "release_parsing_f1_min": 0.8,
         "release_parsing_hallucination_rate_max": 0.02,
+        "blind_parsing_trial_count_min": 30.0,
+        "blind_parsing_f1_min": 0.8,
+        "blind_parsing_hallucination_rate_max": 0.02,
+        "release_blind_f1_gap_max": 0.1,
     }
 
 
@@ -69,16 +73,32 @@ def _parsing_report_pass() -> dict[str, object]:
     }
 
 
+def _blind_parsing_report_pass() -> dict[str, object]:
+    return {
+        "dataset": {
+            "trial_count": 40,
+            "gold_rule_count": 120,
+            "unique_fields": 7,
+        },
+        "metrics": {
+            "parsing": {"f1": 0.82},
+            "hallucination": {"hallucination_rate": 0.01},
+        },
+    }
+
+
 def test_build_release_gate_report_passes() -> None:
     report = build_release_gate_report(
         smoke_report=_smoke_report(),
         retrieval_report=_retrieval_report_pass(),
         parsing_report=_parsing_report_pass(),
+        blind_parsing_report=None,
         thresholds=_thresholds(),
     )
     assert report["overall_status"] == "PASS"
     assert report["gate_status"]["smoke"] == "PASS"
     assert report["gate_status"]["release"] == "PASS"
+    assert report["gate_status"]["generalization"] == "SKIP"
 
 
 def test_build_release_gate_report_fails_release_constraints() -> None:
@@ -91,16 +111,51 @@ def test_build_release_gate_report_fails_release_constraints() -> None:
         smoke_report=_smoke_report(),
         retrieval_report=retrieval_report,
         parsing_report=parsing_report,
+        blind_parsing_report=None,
         thresholds=_thresholds(),
     )
 
     assert report["overall_status"] == "FAIL"
     assert report["gate_status"]["smoke"] == "PASS"
     assert report["gate_status"]["release"] == "FAIL"
+    assert report["gate_status"]["generalization"] == "SKIP"
     failed_checks = {check["id"] for check in report["checks"] if check["status"] == "FAIL"}
     assert "release.total_pairs" in failed_checks
     assert "release.label2_total" in failed_checks
     assert "release.parsing_trial_count" in failed_checks
+
+
+def test_build_release_gate_report_passes_with_blind_gate() -> None:
+    report = build_release_gate_report(
+        smoke_report=_smoke_report(),
+        retrieval_report=_retrieval_report_pass(),
+        parsing_report=_parsing_report_pass(),
+        blind_parsing_report=_blind_parsing_report_pass(),
+        thresholds=_thresholds(),
+    )
+    assert report["overall_status"] == "PASS"
+    assert report["gate_status"]["generalization"] == "PASS"
+
+
+def test_build_release_gate_report_fails_on_blind_gap() -> None:
+    parsing_report = _parsing_report_pass()
+    parsing_report["metrics"]["parsing"]["f1"] = 0.95
+    blind_report = _blind_parsing_report_pass()
+    blind_report["metrics"]["parsing"]["f1"] = 0.70
+
+    report = build_release_gate_report(
+        smoke_report=_smoke_report(),
+        retrieval_report=_retrieval_report_pass(),
+        parsing_report=parsing_report,
+        blind_parsing_report=blind_report,
+        thresholds=_thresholds(),
+    )
+
+    assert report["overall_status"] == "FAIL"
+    assert report["gate_status"]["generalization"] == "FAIL"
+    failed_checks = {check["id"] for check in report["checks"] if check["status"] == "FAIL"}
+    assert "generalization.blind_parsing_f1" in failed_checks
+    assert "generalization.release_blind_f1_gap" in failed_checks
 
 
 def test_render_markdown_contains_gate_sections() -> None:
@@ -108,9 +163,11 @@ def test_render_markdown_contains_gate_sections() -> None:
         smoke_report=_smoke_report(),
         retrieval_report=_retrieval_report_pass(),
         parsing_report=_parsing_report_pass(),
+        blind_parsing_report=None,
         thresholds=_thresholds(),
     )
     markdown = render_markdown(report)
     assert "# M4 Release Gate Report" in markdown
     assert "## Gate Summary" in markdown
     assert "## Check Details" in markdown
+    assert "| generalization | SKIP |" in markdown

@@ -59,6 +59,7 @@ def build_release_gate_report(
     smoke_report: Dict[str, Any],
     retrieval_report: Dict[str, Any],
     parsing_report: Dict[str, Any],
+    blind_parsing_report: Dict[str, Any] | None,
     thresholds: Dict[str, float],
 ) -> Dict[str, Any]:
     metrics = smoke_report.get("metrics")
@@ -113,6 +114,13 @@ def build_release_gate_report(
             for row in query_breakdown
             if isinstance(row, dict)
         )
+    )
+
+    release_parsing_f1 = _require_number(release_parsing, "f1", "parsing.metrics.parsing")
+    release_parsing_hallucination_rate = _require_number(
+        release_hallucination,
+        "hallucination_rate",
+        "parsing.metrics.hallucination",
     )
 
     checks: List[Dict[str, Any]] = [
@@ -208,21 +216,91 @@ def build_release_gate_report(
             check_id="release.parsing_f1",
             source="parsing_release_report",
             comparator=">=",
-            actual=_require_number(release_parsing, "f1", "parsing.metrics.parsing"),
+            actual=release_parsing_f1,
             target=thresholds["release_parsing_f1_min"],
         ),
         _check(
             check_id="release.parsing_hallucination_rate",
             source="parsing_release_report",
             comparator="<=",
-            actual=_require_number(
-                release_hallucination,
-                "hallucination_rate",
-                "parsing.metrics.hallucination",
-            ),
+            actual=release_parsing_hallucination_rate,
             target=thresholds["release_parsing_hallucination_rate_max"],
         ),
     ]
+
+    generalization_summary: Dict[str, Any] = {}
+    generalization_status = "SKIP"
+    if blind_parsing_report is not None:
+        blind_dataset = blind_parsing_report.get("dataset")
+        blind_metrics = blind_parsing_report.get("metrics")
+        if not isinstance(blind_dataset, dict):
+            raise ValueError("blind parsing report missing `dataset`")
+        if not isinstance(blind_metrics, dict):
+            raise ValueError("blind parsing report missing `metrics`")
+        blind_parsing = blind_metrics.get("parsing")
+        blind_hallucination = blind_metrics.get("hallucination")
+        if not isinstance(blind_parsing, dict):
+            raise ValueError("blind parsing report missing `metrics.parsing`")
+        if not isinstance(blind_hallucination, dict):
+            raise ValueError("blind parsing report missing `metrics.hallucination`")
+
+        blind_parsing_trial_count = _require_number(
+            blind_dataset,
+            "trial_count",
+            "blind_parsing.dataset",
+        )
+        blind_parsing_f1 = _require_number(
+            blind_parsing,
+            "f1",
+            "blind_parsing.metrics.parsing",
+        )
+        blind_parsing_hallucination_rate = _require_number(
+            blind_hallucination,
+            "hallucination_rate",
+            "blind_parsing.metrics.hallucination",
+        )
+        release_blind_f1_gap = max(0.0, release_parsing_f1 - blind_parsing_f1)
+
+        checks.extend(
+            [
+                _check(
+                    check_id="generalization.blind_parsing_trial_count",
+                    source="parsing_blind_report",
+                    comparator=">=",
+                    actual=blind_parsing_trial_count,
+                    target=thresholds["blind_parsing_trial_count_min"],
+                ),
+                _check(
+                    check_id="generalization.blind_parsing_f1",
+                    source="parsing_blind_report",
+                    comparator=">=",
+                    actual=blind_parsing_f1,
+                    target=thresholds["blind_parsing_f1_min"],
+                ),
+                _check(
+                    check_id="generalization.blind_parsing_hallucination_rate",
+                    source="parsing_blind_report",
+                    comparator="<=",
+                    actual=blind_parsing_hallucination_rate,
+                    target=thresholds["blind_parsing_hallucination_rate_max"],
+                ),
+                _check(
+                    check_id="generalization.release_blind_f1_gap",
+                    source="parsing_release_report+parsing_blind_report",
+                    comparator="<=",
+                    actual=release_blind_f1_gap,
+                    target=thresholds["release_blind_f1_gap_max"],
+                ),
+            ]
+        )
+
+        generalization_summary = {
+            "blind_parsing_trial_count": int(blind_parsing_trial_count),
+            "blind_parsing_f1": blind_parsing_f1,
+            "blind_parsing_hallucination_rate": blind_parsing_hallucination_rate,
+            "release_blind_f1_gap": round(release_blind_f1_gap, 4),
+        }
+        generalization_status = "PASS"
 
     smoke_status = "PASS"
     release_status = "PASS"
@@ -232,7 +310,17 @@ def build_release_gate_report(
         if check["id"].startswith("release.") and check["status"] == "FAIL":
             release_status = "FAIL"
 
-    overall_status = "PASS" if smoke_status == "PASS" and release_status == "PASS" else "FAIL"
+    for check in checks:
+        if check["id"].startswith("generalization.") and check["status"] == "FAIL":
+            generalization_status = "FAIL"
+
+    overall_status = (
+        "PASS"
+        if smoke_status == "PASS"
+        and release_status == "PASS"
+        and generalization_status in {"PASS", "SKIP"}
+        else "FAIL"
+    )
 
     return {
         "generated_at_utc": datetime.now(timezone.utc).isoformat(),
@@ -240,11 +328,15 @@ def build_release_gate_report(
         "gate_status": {
             "smoke": smoke_status,
             "release": release_status,
+            "generalization": generalization_status,
         },
         "inputs": {
             "smoke_report_kind": "m4_evaluation_report",
             "retrieval_report_kind": "retrieval_annotation_report_v2_strict_final",
             "parsing_report_kind": "parsing_release_report",
+            "blind_parsing_report_kind": (
+                "parsing_blind_report" if blind_parsing_report is not None else None
+            ),
         },
         "checks": checks,
         "summary": {
@@ -282,6 +374,7 @@ def build_release_gate_report(
                     "parsing.metrics.hallucination",
                 ),
             },
+            "generalization": generalization_summary,
         },
     }
 
@@ -301,6 +394,7 @@ def render_markdown(report: Dict[str, Any]) -> str:
     lines.append("| --- | :---: |")
     lines.append(f"| smoke | {report['gate_status']['smoke']} |")
     lines.append(f"| release | {report['gate_status']['release']} |")
+    lines.append(f"| generalization | {report['gate_status']['generalization']} |")
     lines.append("")
     lines.append("## Check Details")
     lines.append("")
@@ -315,7 +409,7 @@ def render_markdown(report: Dict[str, Any]) -> str:
     lines.append("## Release Readiness Interpretation")
     lines.append("")
     if report["overall_status"] == "PASS":
-        lines.append("- M4 evaluation is release-ready under dual-gate policy.")
+        lines.append("- M4 evaluation is release-ready under configured gate policy.")
     else:
         lines.append("- M4 evaluation is not release-ready. Fix failed checks before merge.")
     return "\n".join(lines) + "\n"
@@ -334,6 +428,11 @@ def main() -> None:
     parser.add_argument(
         "--parsing-report",
         default="eval/reports/parsing_release_report.json",
+    )
+    parser.add_argument(
+        "--blind-parsing-report",
+        default="",
+        help="Optional blind parsing report; empty means skip generalization gate.",
     )
     parser.add_argument(
         "--output-md",
@@ -357,6 +456,10 @@ def main() -> None:
     parser.add_argument("--min-release-parsing-fields", type=int, default=6)
     parser.add_argument("--min-release-parsing-f1", type=float, default=0.80)
     parser.add_argument("--max-release-parsing-hallucination-rate", type=float, default=0.02)
+    parser.add_argument("--min-blind-parsing-trials", type=int, default=30)
+    parser.add_argument("--min-blind-parsing-f1", type=float, default=0.80)
+    parser.add_argument("--max-blind-parsing-hallucination-rate", type=float, default=0.02)
+    parser.add_argument("--max-release-blind-f1-gap", type=float, default=0.10)
     args = parser.parse_args()
 
     thresholds = {
@@ -376,15 +479,27 @@ def main() -> None:
         "release_parsing_hallucination_rate_max": float(
             args.max_release_parsing_hallucination_rate
         ),
+        "blind_parsing_trial_count_min": float(args.min_blind_parsing_trials),
+        "blind_parsing_f1_min": float(args.min_blind_parsing_f1),
+        "blind_parsing_hallucination_rate_max": float(
+            args.max_blind_parsing_hallucination_rate
+        ),
+        "release_blind_f1_gap_max": float(args.max_release_blind_f1_gap),
     }
 
     smoke_report = load_json(Path(args.smoke_report))
     retrieval_report = load_json(Path(args.retrieval_report))
     parsing_report = load_json(Path(args.parsing_report))
+    blind_parsing_report = (
+        load_json(Path(args.blind_parsing_report))
+        if args.blind_parsing_report.strip()
+        else None
+    )
     report = build_release_gate_report(
         smoke_report=smoke_report,
         retrieval_report=retrieval_report,
         parsing_report=parsing_report,
+        blind_parsing_report=blind_parsing_report,
         thresholds=thresholds,
     )
     markdown = render_markdown(report)

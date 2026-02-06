@@ -1,14 +1,16 @@
 {
-  "generated_at_utc": "2026-02-06T18:32:07.103639+00:00",
+  "generated_at_utc": "2026-02-06T19:36:05.725228+00:00",
   "overall_status": "PASS",
   "gate_status": {
     "smoke": "PASS",
-    "release": "PASS"
+    "release": "PASS",
+    "generalization": "SKIP"
   },
   "inputs": {
     "smoke_report_kind": "m4_evaluation_report",
     "retrieval_report_kind": "retrieval_annotation_report_v2_strict_final",
-    "parsing_report_kind": "parsing_release_report"
+    "parsing_report_kind": "parsing_release_report",
+    "blind_parsing_report_kind": null
   },
   "checks": [
     {
@@ -142,6 +144,7 @@
       "parsing_unique_fields": 7,
       "parsing_f1": 0.9955,
       "parsing_hallucination_rate": 0.0
-    }
+    },
+    "generalization": {}
   }
 }

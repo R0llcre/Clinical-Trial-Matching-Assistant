@@ -39,6 +39,13 @@ Evaluation
 - 结论:
 - `M4 完成 = Smoke Gate PASS 且 Release Gate PASS`
 
+**M5 泛化门禁（建议在发布前强制）**
+- `Generalization Gate`（盲评集稳健性）:
+- 额外来源: `eval/reports/parsing_blind_report.json`
+- 门槛: `blind_parsing_trial_count >= 30`、`blind_parsing_f1 >= 0.80`、`blind_parsing_hallucination_rate <= 0.02`、`release_blind_f1_gap <= 0.10`
+- 结论:
+- `M5 质量完成 = M4 双门禁 PASS 且 Generalization Gate PASS`
+
 **标准执行命令**
 1. 生成并校验评估数据
 - `python3 scripts/eval/generate_eval_data.py --output-dir eval/data`
@@ -56,8 +63,13 @@ Evaluation
 5. 生成解析发布报告
 - `python3 scripts/eval/generate_parsing_release_report.py --trials eval/data/trials_parsing_release.jsonl --output-md eval/reports/parsing_release_report.md --output-json eval/reports/parsing_release_report.json`
 
-6. 生成最终发布门禁报告
+6. （可选）生成解析盲评报告
+- `python3 scripts/eval/generate_parsing_release_report.py --trials eval/data/trials_parsing_blind.jsonl --output-md eval/reports/parsing_blind_report.md --output-json eval/reports/parsing_blind_report.json`
+
+7. 生成最终门禁报告
 - `python3 scripts/eval/check_m4_release_gate.py --smoke-report eval/reports/m4_evaluation_report.json --retrieval-report eval/reports/retrieval_annotation_report_v2_strict_final.json --parsing-report eval/reports/parsing_release_report.json --output-md eval/reports/m4_release_report.md --output-json eval/reports/m4_release_report.json`
+- 启用泛化门禁:
+- `python3 scripts/eval/check_m4_release_gate.py --smoke-report eval/reports/m4_evaluation_report.json --retrieval-report eval/reports/retrieval_annotation_report_v2_strict_final.json --parsing-report eval/reports/parsing_release_report.json --blind-parsing-report eval/reports/parsing_blind_report.json --output-md eval/reports/m4_release_report.md --output-json eval/reports/m4_release_report.json`
 
 **当前有效报告**
 - `eval/reports/m4_evaluation_report.md`

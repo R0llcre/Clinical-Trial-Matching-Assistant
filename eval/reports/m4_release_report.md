@@ -1,6 +1,6 @@
 # M4 Release Gate Report
 
-- generated_at_utc: 2026-02-06T18:32:07.103639+00:00
+- generated_at_utc: 2026-02-06T19:36:05.725228+00:00
 - overall_status: PASS
 - smoke_gate: PASS
 - release_gate: PASS
@@ -11,6 +11,7 @@
 | --- | :---: |
 | smoke | PASS |
 | release | PASS |
+| generalization | SKIP |
 
 ## Check Details
 
@@ -33,4 +34,4 @@
 
 ## Release Readiness Interpretation
 
-- M4 evaluation is release-ready under dual-gate policy.
+- M4 evaluation is release-ready under configured gate policy.
