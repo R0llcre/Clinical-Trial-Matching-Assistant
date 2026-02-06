@@ -1,0 +1,85 @@
+{
+  "generated_at_utc": "2026-02-06T15:22:02.909736+00:00",
+  "dataset": {
+    "total_pairs": 244,
+    "query_count": 7,
+    "nct_count": 244,
+    "avg_pairs_per_query": 34.8571,
+    "label_distribution": {
+      "0": 18,
+      "1": 179,
+      "2": 47
+    },
+    "relevant_rate_ge1": 0.9262,
+    "relevant_rate_eq2": 0.1926
+  },
+  "query_breakdown": [
+    {
+      "query_id": "Q0004",
+      "pair_count": 4,
+      "relevant_count_ge1": 4,
+      "relevant_count_eq2": 2,
+      "relevant_rate_ge1": 1.0
+    },
+    {
+      "query_id": "Q0005",
+      "pair_count": 40,
+      "relevant_count_ge1": 38,
+      "relevant_count_eq2": 15,
+      "relevant_rate_ge1": 0.95
+    },
+    {
+      "query_id": "Q0006",
+      "pair_count": 40,
+      "relevant_count_ge1": 34,
+      "relevant_count_eq2": 8,
+      "relevant_rate_ge1": 0.85
+    },
+    {
+      "query_id": "Q0007",
+      "pair_count": 40,
+      "relevant_count_ge1": 40,
+      "relevant_count_eq2": 12,
+      "relevant_rate_ge1": 1.0
+    },
+    {
+      "query_id": "Q0008",
+      "pair_count": 40,
+      "relevant_count_ge1": 37,
+      "relevant_count_eq2": 7,
+      "relevant_rate_ge1": 0.925
+    },
+    {
+      "query_id": "Q0009",
+      "pair_count": 40,
+      "relevant_count_ge1": 34,
+      "relevant_count_eq2": 3,
+      "relevant_rate_ge1": 0.85
+    },
+    {
+      "query_id": "Q0010",
+      "pair_count": 40,
+      "relevant_count_ge1": 39,
+      "relevant_count_eq2": 0,
+      "relevant_rate_ge1": 0.975
+    }
+  ],
+  "agreement": {
+    "overlap_pairs": 244,
+    "only_in_a": 0,
+    "only_in_b": 0,
+    "exact_match_rate": 0.9877,
+    "cohen_kappa": 0.9702,
+    "confusion": {
+      "0->0": 18,
+      "0->1": 0,
+      "0->2": 0,
+      "1->0": 0,
+      "1->1": 179,
+      "1->2": 0,
+      "2->0": 0,
+      "2->1": 3,
+      "2->2": 44
+    }
+  }
+}

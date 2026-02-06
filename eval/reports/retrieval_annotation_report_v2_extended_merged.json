@@ -1,0 +1,89 @@
+{
+  "generated_at_utc": "2026-02-06T15:22:26.573100+00:00",
+  "dataset": {
+    "total_pairs": 2044,
+    "query_count": 10,
+    "nct_count": 1888,
+    "avg_pairs_per_query": 204.4,
+    "label_distribution": {
+      "0": 335,
+      "1": 1632,
+      "2": 77
+    },
+    "relevant_rate_ge1": 0.8361,
+    "relevant_rate_eq2": 0.0377
+  },
+  "query_breakdown": [
+    {
+      "query_id": "Q0001",
+      "pair_count": 190,
+      "relevant_count_ge1": 159,
+      "relevant_count_eq2": 0,
+      "relevant_rate_ge1": 0.8368
+    },
+    {
+      "query_id": "Q0002",
+      "pair_count": 190,
+      "relevant_count_ge1": 179,
+      "relevant_count_eq2": 0,
+      "relevant_rate_ge1": 0.9421
+    },
+    {
+      "query_id": "Q0003",
+      "pair_count": 140,
+      "relevant_count_ge1": 100,
+      "relevant_count_eq2": 27,
+      "relevant_rate_ge1": 0.7143
+    },
+    {
+      "query_id": "Q0004",
+      "pair_count": 194,
+      "relevant_count_ge1": 145,
+      "relevant_count_eq2": 2,
+      "relevant_rate_ge1": 0.7474
+    },
+    {
+      "query_id": "Q0005",
+      "pair_count": 230,
+      "relevant_count_ge1": 189,
+      "relevant_count_eq2": 18,
+      "relevant_rate_ge1": 0.8217
+    },
+    {
+      "query_id": "Q0006",
+      "pair_count": 230,
+      "relevant_count_ge1": 195,
+      "relevant_count_eq2": 8,
+      "relevant_rate_ge1": 0.8478
+    },
+    {
+      "query_id": "Q0007",
+      "pair_count": 180,
+      "relevant_count_ge1": 163,
+      "relevant_count_eq2": 12,
+      "relevant_rate_ge1": 0.9056
+    },
+    {
+      "query_id": "Q0008",
+      "pair_count": 230,
+      "relevant_count_ge1": 190,
+      "relevant_count_eq2": 7,
+      "relevant_rate_ge1": 0.8261
+    },
+    {
+      "query_id": "Q0009",
+      "pair_count": 230,
+      "relevant_count_ge1": 187,
+      "relevant_count_eq2": 3,
+      "relevant_rate_ge1": 0.813
+    },
+    {
+      "query_id": "Q0010",
+      "pair_count": 230,
+      "relevant_count_ge1": 202,
+      "relevant_count_eq2": 0,
+      "relevant_rate_ge1": 0.8783
+    }
+  ],
+  "agreement": null
+}
