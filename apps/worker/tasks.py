@@ -13,6 +13,7 @@ import psycopg
 from psycopg.types.json import Json
 
 from services.eligibility_parser import parse_criteria_v1
+from services.llm_eligibility_parser import parse_criteria_llm_v1_with_fallback
 
 DEFAULT_BASE_URL = "https://clinicaltrials.gov/api/v2"
 LOGGER = logging.getLogger(__name__)
@@ -609,11 +610,24 @@ def parse_trial(
             if not trial:
                 raise ValueError(f"trial not found: {nct_id}")
 
-            if parser_version != "rule_v1":
+            parser_metadata: Dict[str, Any]
+            if parser_version == "rule_v1":
+                criteria_json = parse_criteria_v1(trial.get("eligibility_text"))
+                parser_metadata = {
+                    "parser_source": "rule_v1",
+                    "fallback_used": False,
+                    "fallback_reason": None,
+                    "llm_usage": None,
+                }
+            elif parser_version == "llm_v1":
+                criteria_json, parser_metadata = parse_criteria_llm_v1_with_fallback(
+                    trial.get("eligibility_text")
+                )
+            else:
                 raise ValueError(f"unsupported parser_version: {parser_version}")
 
-            criteria_json = parse_criteria_v1(trial.get("eligibility_text"))
             coverage_stats = _compute_coverage_stats(criteria_json)
+            coverage_stats.update(parser_metadata)
             unknown_count = int(coverage_stats["unknown_rules"])
 
             _upsert_trial_criteria(
