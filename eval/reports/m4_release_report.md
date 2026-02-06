@@ -1,6 +1,6 @@
 # M4 Release Gate Report
 
-- generated_at_utc: 2026-02-06T16:10:53.668622+00:00
+- generated_at_utc: 2026-02-06T16:29:18.601646+00:00
 - overall_status: PASS
 - smoke_gate: PASS
 - release_gate: PASS
@@ -25,6 +25,11 @@
 | release.label2_total | retrieval_annotation_report_v2_strict_final | 74.0 | >= | 60.0 | PASS |
 | release.queries_with_label2 | retrieval_annotation_report_v2_strict_final | 7.0 | >= | 6.0 | PASS |
 | release.min_pairs_per_query | retrieval_annotation_report_v2_strict_final | 140.0 | >= | 120.0 | PASS |
+| release.parsing_trial_count | parsing_release_report | 100.0 | >= | 100.0 | PASS |
+| release.parsing_rule_count | parsing_release_report | 525.0 | >= | 500.0 | PASS |
+| release.parsing_unique_fields | parsing_release_report | 7.0 | >= | 6.0 | PASS |
+| release.parsing_f1 | parsing_release_report | 0.3512 | >= | 0.3 | PASS |
+| release.parsing_hallucination_rate | parsing_release_report | 0.0 | <= | 0.02 | PASS |
 
 ## Release Readiness Interpretation
 

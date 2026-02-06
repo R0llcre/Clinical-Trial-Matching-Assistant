@@ -1,0 +1,8 @@
+{
+  "source_files": [
+    "eval/archive/m4_history/annotations/trials_labeled.batch1.annotator_b.jsonl",
+    "eval/archive/m4_history/annotations/trials_labeled.batch2.annotator_b.jsonl"
+  ],
+  "source_rows": 100,
+  "deduped_rows": 100
+}

@@ -14,6 +14,11 @@ def _thresholds() -> dict[str, float]:
         "release_label2_count_min": 60.0,
         "release_queries_with_label2_min": 6.0,
         "release_min_pairs_per_query": 120.0,
+        "release_parsing_trial_count_min": 100.0,
+        "release_parsing_rule_count_min": 500.0,
+        "release_parsing_unique_fields_min": 6.0,
+        "release_parsing_f1_min": 0.3,
+        "release_parsing_hallucination_rate_max": 0.02,
     }
 
 
@@ -50,10 +55,25 @@ def _retrieval_report_pass() -> dict[str, object]:
     }
 
 
+def _parsing_report_pass() -> dict[str, object]:
+    return {
+        "dataset": {
+            "trial_count": 100,
+            "gold_rule_count": 525,
+            "unique_fields": 7,
+        },
+        "metrics": {
+            "parsing": {"f1": 0.35},
+            "hallucination": {"hallucination_rate": 0.0},
+        },
+    }
+
+
 def test_build_release_gate_report_passes() -> None:
     report = build_release_gate_report(
         smoke_report=_smoke_report(),
         retrieval_report=_retrieval_report_pass(),
+        parsing_report=_parsing_report_pass(),
         thresholds=_thresholds(),
     )
     assert report["overall_status"] == "PASS"
@@ -63,11 +83,14 @@ def test_build_release_gate_report_passes() -> None:
 
 def test_build_release_gate_report_fails_release_constraints() -> None:
     retrieval_report = _retrieval_report_pass()
+    parsing_report = _parsing_report_pass()
     retrieval_report["dataset"]["total_pairs"] = 1100
     retrieval_report["dataset"]["label_distribution"]["2"] = 10
+    parsing_report["dataset"]["trial_count"] = 80
     report = build_release_gate_report(
         smoke_report=_smoke_report(),
         retrieval_report=retrieval_report,
+        parsing_report=parsing_report,
         thresholds=_thresholds(),
     )
 
@@ -77,12 +100,14 @@ def test_build_release_gate_report_fails_release_constraints() -> None:
     failed_checks = {check["id"] for check in report["checks"] if check["status"] == "FAIL"}
     assert "release.total_pairs" in failed_checks
     assert "release.label2_total" in failed_checks
+    assert "release.parsing_trial_count" in failed_checks
 
 
 def test_render_markdown_contains_gate_sections() -> None:
     report = build_release_gate_report(
         smoke_report=_smoke_report(),
         retrieval_report=_retrieval_report_pass(),
+        parsing_report=_parsing_report_pass(),
         thresholds=_thresholds(),
     )
     markdown = render_markdown(report)

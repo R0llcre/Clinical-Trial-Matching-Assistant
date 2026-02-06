@@ -58,6 +58,7 @@ def build_release_gate_report(
     *,
     smoke_report: Dict[str, Any],
     retrieval_report: Dict[str, Any],
+    parsing_report: Dict[str, Any],
     thresholds: Dict[str, float],
 ) -> Dict[str, Any]:
     metrics = smoke_report.get("metrics")
@@ -84,6 +85,19 @@ def build_release_gate_report(
     label_distribution = dataset.get("label_distribution")
     if not isinstance(label_distribution, dict):
         raise ValueError("retrieval report missing `dataset.label_distribution`")
+
+    parsing_dataset = parsing_report.get("dataset")
+    parsing_metrics = parsing_report.get("metrics")
+    if not isinstance(parsing_dataset, dict):
+        raise ValueError("parsing report missing `dataset`")
+    if not isinstance(parsing_metrics, dict):
+        raise ValueError("parsing report missing `metrics`")
+    release_parsing = parsing_metrics.get("parsing")
+    release_hallucination = parsing_metrics.get("hallucination")
+    if not isinstance(release_parsing, dict):
+        raise ValueError("parsing report missing `metrics.parsing`")
+    if not isinstance(release_hallucination, dict):
+        raise ValueError("parsing report missing `metrics.hallucination`")
 
     label_2_count = float(int(label_distribution.get("2", 0)))
     query_with_label_2_count = float(
@@ -169,6 +183,45 @@ def build_release_gate_report(
             actual=min_pairs_per_query,
             target=thresholds["release_min_pairs_per_query"],
         ),
+        _check(
+            check_id="release.parsing_trial_count",
+            source="parsing_release_report",
+            comparator=">=",
+            actual=_require_number(parsing_dataset, "trial_count", "parsing.dataset"),
+            target=thresholds["release_parsing_trial_count_min"],
+        ),
+        _check(
+            check_id="release.parsing_rule_count",
+            source="parsing_release_report",
+            comparator=">=",
+            actual=_require_number(parsing_dataset, "gold_rule_count", "parsing.dataset"),
+            target=thresholds["release_parsing_rule_count_min"],
+        ),
+        _check(
+            check_id="release.parsing_unique_fields",
+            source="parsing_release_report",
+            comparator=">=",
+            actual=_require_number(parsing_dataset, "unique_fields", "parsing.dataset"),
+            target=thresholds["release_parsing_unique_fields_min"],
+        ),
+        _check(
+            check_id="release.parsing_f1",
+            source="parsing_release_report",
+            comparator=">=",
+            actual=_require_number(release_parsing, "f1", "parsing.metrics.parsing"),
+            target=thresholds["release_parsing_f1_min"],
+        ),
+        _check(
+            check_id="release.parsing_hallucination_rate",
+            source="parsing_release_report",
+            comparator="<=",
+            actual=_require_number(
+                release_hallucination,
+                "hallucination_rate",
+                "parsing.metrics.hallucination",
+            ),
+            target=thresholds["release_parsing_hallucination_rate_max"],
+        ),
     ]
 
     smoke_status = "PASS"
@@ -190,7 +243,8 @@ def build_release_gate_report(
         },
         "inputs": {
             "smoke_report_kind": "m4_evaluation_report",
-            "release_report_kind": "retrieval_annotation_report_v2_strict_final",
+            "retrieval_report_kind": "retrieval_annotation_report_v2_strict_final",
+            "parsing_report_kind": "parsing_release_report",
         },
         "checks": checks,
         "summary": {
@@ -212,6 +266,21 @@ def build_release_gate_report(
                 "label2_total": int(label_2_count),
                 "queries_with_label2": int(query_with_label_2_count),
                 "min_pairs_per_query": int(min_pairs_per_query),
+                "parsing_trial_count": int(
+                    _require_number(parsing_dataset, "trial_count", "parsing.dataset")
+                ),
+                "parsing_rule_count": int(
+                    _require_number(parsing_dataset, "gold_rule_count", "parsing.dataset")
+                ),
+                "parsing_unique_fields": int(
+                    _require_number(parsing_dataset, "unique_fields", "parsing.dataset")
+                ),
+                "parsing_f1": _require_number(release_parsing, "f1", "parsing.metrics.parsing"),
+                "parsing_hallucination_rate": _require_number(
+                    release_hallucination,
+                    "hallucination_rate",
+                    "parsing.metrics.hallucination",
+                ),
             },
         },
     }
@@ -263,6 +332,10 @@ def main() -> None:
         default="eval/reports/retrieval_annotation_report_v2_strict_final.json",
     )
     parser.add_argument(
+        "--parsing-report",
+        default="eval/reports/parsing_release_report.json",
+    )
+    parser.add_argument(
         "--output-md",
         default="eval/reports/m4_release_report.md",
     )
@@ -279,6 +352,11 @@ def main() -> None:
     parser.add_argument("--min-release-label2-count", type=int, default=60)
     parser.add_argument("--min-release-queries-with-label2", type=int, default=6)
     parser.add_argument("--min-release-pairs-per-query", type=int, default=120)
+    parser.add_argument("--min-release-parsing-trials", type=int, default=100)
+    parser.add_argument("--min-release-parsing-rules", type=int, default=500)
+    parser.add_argument("--min-release-parsing-fields", type=int, default=6)
+    parser.add_argument("--min-release-parsing-f1", type=float, default=0.30)
+    parser.add_argument("--max-release-parsing-hallucination-rate", type=float, default=0.02)
     args = parser.parse_args()
 
     thresholds = {
@@ -291,13 +369,22 @@ def main() -> None:
         "release_label2_count_min": float(args.min_release_label2_count),
         "release_queries_with_label2_min": float(args.min_release_queries_with_label2),
         "release_min_pairs_per_query": float(args.min_release_pairs_per_query),
+        "release_parsing_trial_count_min": float(args.min_release_parsing_trials),
+        "release_parsing_rule_count_min": float(args.min_release_parsing_rules),
+        "release_parsing_unique_fields_min": float(args.min_release_parsing_fields),
+        "release_parsing_f1_min": float(args.min_release_parsing_f1),
+        "release_parsing_hallucination_rate_max": float(
+            args.max_release_parsing_hallucination_rate
+        ),
     }
 
     smoke_report = load_json(Path(args.smoke_report))
     retrieval_report = load_json(Path(args.retrieval_report))
+    parsing_report = load_json(Path(args.parsing_report))
     report = build_release_gate_report(
         smoke_report=smoke_report,
         retrieval_report=retrieval_report,
+        parsing_report=parsing_report,
         thresholds=thresholds,
     )
     markdown = render_markdown(report)

@@ -7,7 +7,8 @@ Evaluation
 
 **评估数据**
 - 检索查询: `eval/data/queries.jsonl`
-- 解析样本: `eval/data/trials_sample.jsonl`
+- 解析烟测样本: `eval/data/trials_sample.jsonl`
+- 解析发布样本: `eval/data/trials_parsing_release.jsonl`
 - 患者样本: `eval/data/patients.jsonl`
 
 **标签定义**
@@ -31,8 +32,10 @@ Evaluation
 - 来源: `eval/reports/m4_evaluation_report.json`
 - 门槛: `top_k_hitrate >= 0.70`、`parsing_f1 >= 0.80`、`hallucination_rate <= 0.02`、`annotation_coverage >= 1.0`
 - `Release Gate`（大样本统计稳健性）:
-- 来源: `eval/reports/retrieval_annotation_report_v2_strict_final.json`
-- 门槛: `query_count >= 10`、`total_pairs >= 1500`、`label2_total >= 60`、`queries_with_label2 >= 6`、`min_pairs_per_query >= 120`
+- 来源: `eval/reports/retrieval_annotation_report_v2_strict_final.json` + `eval/reports/parsing_release_report.json`
+- 门槛:
+- 检索侧: `query_count >= 10`、`total_pairs >= 1500`、`label2_total >= 60`、`queries_with_label2 >= 6`、`min_pairs_per_query >= 120`
+- 解析侧: `parsing_trial_count >= 100`、`parsing_rule_count >= 500`、`parsing_unique_fields >= 6`、`parsing_f1 >= 0.30`、`parsing_hallucination_rate <= 0.02`
 - 结论:
 - `M4 完成 = Smoke Gate PASS 且 Release Gate PASS`
 
@@ -47,14 +50,18 @@ Evaluation
 3. 生成烟测报告
 - `python3 scripts/eval/generate_evaluation_report.py --queries eval/data/queries.jsonl --trials eval/data/trials_sample.jsonl --relevance eval/annotations/relevance.trials_sample.annotator_a.jsonl --top-k 10 --min-relevance-coverage 1.0 --output-md eval/reports/m4_evaluation_report.md --output-json eval/reports/m4_evaluation_report.json`
 
-4. 生成最终发布门禁报告
-- `python3 scripts/eval/check_m4_release_gate.py --smoke-report eval/reports/m4_evaluation_report.json --retrieval-report eval/reports/retrieval_annotation_report_v2_strict_final.json --output-md eval/reports/m4_release_report.md --output-json eval/reports/m4_release_report.json`
+4. 生成解析发布报告
+- `python3 scripts/eval/generate_parsing_release_report.py --trials eval/data/trials_parsing_release.jsonl --output-md eval/reports/parsing_release_report.md --output-json eval/reports/parsing_release_report.json`
+
+5. 生成最终发布门禁报告
+- `python3 scripts/eval/check_m4_release_gate.py --smoke-report eval/reports/m4_evaluation_report.json --retrieval-report eval/reports/retrieval_annotation_report_v2_strict_final.json --parsing-report eval/reports/parsing_release_report.json --output-md eval/reports/m4_release_report.md --output-json eval/reports/m4_release_report.json`
 
 **当前有效报告**
 - `eval/reports/m4_evaluation_report.md`
 - `eval/reports/m4_release_report.md`
 - `eval/reports/retrieval_annotation_report_v2_strict_final.md`
 - `eval/reports/retrieval_annotation_report_v2_extended_merged.md`
+- `eval/reports/parsing_release_report.md`
 
 **历史过程数据**
 - 多轮扩样、盲评、复核任务与中间报告已归档到 `eval/archive/m4_history/`

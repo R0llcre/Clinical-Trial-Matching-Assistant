@@ -8,6 +8,7 @@ M4 Evaluation
 - 有标注数据与报告
 - `Smoke Gate` 通过（小样本能力验证）
 - `Release Gate` 通过（大样本统计稳健性）
+- `Release Gate` 同时覆盖检索与解析发布集（非仅检索）
 - 产出 `eval/reports/m4_release_report.{md,json}` 作为最终验收结论
 
 M4-1 评估数据集
