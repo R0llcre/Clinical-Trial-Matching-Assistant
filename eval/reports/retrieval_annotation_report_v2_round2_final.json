@@ -1,0 +1,106 @@
+{
+  "generated_at_utc": "2026-02-06T14:36:40.627204+00:00",
+  "dataset": {
+    "total_pairs": 700,
+    "query_count": 10,
+    "nct_count": 693,
+    "avg_pairs_per_query": 70.0,
+    "label_distribution": {
+      "0": 116,
+      "1": 565,
+      "2": 19
+    },
+    "relevant_rate_ge1": 0.8343,
+    "relevant_rate_eq2": 0.0271
+  },
+  "query_breakdown": [
+    {
+      "query_id": "Q0001",
+      "pair_count": 70,
+      "relevant_count_ge1": 67,
+      "relevant_count_eq2": 0,
+      "relevant_rate_ge1": 0.9571
+    },
+    {
+      "query_id": "Q0002",
+      "pair_count": 70,
+      "relevant_count_ge1": 67,
+      "relevant_count_eq2": 0,
+      "relevant_rate_ge1": 0.9571
+    },
+    {
+      "query_id": "Q0003",
+      "pair_count": 70,
+      "relevant_count_ge1": 46,
+      "relevant_count_eq2": 19,
+      "relevant_rate_ge1": 0.6571
+    },
+    {
+      "query_id": "Q0004",
+      "pair_count": 70,
+      "relevant_count_ge1": 55,
+      "relevant_count_eq2": 0,
+      "relevant_rate_ge1": 0.7857
+    },
+    {
+      "query_id": "Q0005",
+      "pair_count": 70,
+      "relevant_count_ge1": 50,
+      "relevant_count_eq2": 0,
+      "relevant_rate_ge1": 0.7143
+    },
+    {
+      "query_id": "Q0006",
+      "pair_count": 70,
+      "relevant_count_ge1": 60,
+      "relevant_count_eq2": 0,
+      "relevant_rate_ge1": 0.8571
+    },
+    {
+      "query_id": "Q0007",
+      "pair_count": 70,
+      "relevant_count_ge1": 53,
+      "relevant_count_eq2": 0,
+      "relevant_rate_ge1": 0.7571
+    },
+    {
+      "query_id": "Q0008",
+      "pair_count": 70,
+      "relevant_count_ge1": 63,
+      "relevant_count_eq2": 0,
+      "relevant_rate_ge1": 0.9
+    },
+    {
+      "query_id": "Q0009",
+      "pair_count": 70,
+      "relevant_count_ge1": 58,
+      "relevant_count_eq2": 0,
+      "relevant_rate_ge1": 0.8286
+    },
+    {
+      "query_id": "Q0010",
+      "pair_count": 70,
+      "relevant_count_ge1": 65,
+      "relevant_count_eq2": 0,
+      "relevant_rate_ge1": 0.9286
+    }
+  ],
+  "agreement": {
+    "overlap_pairs": 700,
+    "only_in_a": 0,
+    "only_in_b": 0,
+    "exact_match_rate": 0.89,
+    "cohen_kappa": 0.6995,
+    "confusion": {
+      "0->0": 116,
+      "0->1": 0,
+      "0->2": 0,
+      "1->0": 0,
+      "1->1": 506,
+      "1->2": 59,
+      "2->0": 0,
+      "2->1": 18,
+      "2->2": 1
+    }
+  }
+}
