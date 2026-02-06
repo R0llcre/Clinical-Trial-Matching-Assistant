@@ -95,6 +95,11 @@ export default function Home() {
           results with your care team. This tool surfaces information only and
           does not provide medical advice.
         </p>
+        <div className="meta-row">
+          <Link href="/match" className="button secondary">
+            Start patient matching
+          </Link>
+        </div>
       </header>
 
       <section className="card">
