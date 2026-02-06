@@ -1,117 +1,61 @@
 Evaluation
 
-**评估目标**
-- 检索是否找到相关试验
+**目标**
+- 检索是否能稳定命中相关试验
 - 解析是否准确且可解释
-- 输出是否与原文一致
+- 输出证据是否与原文对齐
 
-**数据集设计**
-检索相关性数据集
-- queries.jsonl
-- 字段: query, expected_conditions, expected_location
-- 标注: relevance_label 0/1/2
+**评估数据**
+- 检索查询: `eval/data/queries.jsonl`
+- 解析样本: `eval/data/trials_sample.jsonl`
+- 患者样本: `eval/data/patients.jsonl`
 
-解析评估数据集
-- trials_sample.jsonl
-- 字段: nct_id, eligibility_text, labeled_rules
+**标签定义**
+- `relevance_label=0`: 不相关
+- `relevance_label=1`: 部分相关
+- `relevance_label=2`: 强相关
 
-合成患者数据集
-- patients.jsonl
-- 字段: demographics, conditions, labs
-
-**标注规范**
-相关性标签
-- 0 不相关
-- 1 部分相关
-- 2 相关
-
-抽取字段
-- 年龄, 性别, 疾病, 药物, 实验室指标, 时间窗
-
-**指标**
+**核心指标**
 - Top-K HitRate
 - nDCG@10
-- 解析 Precision/Recall/F1
-- Hallucination rate
-- Evidence 对齐率
+- Parsing Precision/Recall/F1
+- Hallucination Rate
 
-**阈值建议**
+**阈值**
 - Top-10 HitRate >= 0.70
-- 关键字段 F1 >= 0.80
-- Hallucination <= 2%
+- Parsing F1 >= 0.80
+- Hallucination Rate <= 0.02
 
 **M4 双门禁（必须同时通过）**
 - `Smoke Gate`（小样本可运行性）:
 - 来源: `eval/reports/m4_evaluation_report.json`
-- 门槛: Top-10 HitRate >= 0.70, Parsing F1 >= 0.80, Hallucination <= 0.02, relevance coverage >= 1.0
+- 门槛: `top_k_hitrate >= 0.70`、`parsing_f1 >= 0.80`、`hallucination_rate <= 0.02`、`annotation_coverage >= 1.0`
 - `Release Gate`（大样本统计稳健性）:
 - 来源: `eval/reports/retrieval_annotation_report_v2_strict_final.json`
-- 门槛: query_count >= 10, total_pairs >= 1500, label=2 总数 >= 60, 含 label=2 的 query 数 >= 6, 每 query 最小样本 >= 120
-- 最终结论:
-- `M4` 完成 = `Smoke Gate PASS` 且 `Release Gate PASS`
+- 门槛: `query_count >= 10`、`total_pairs >= 1500`、`label2_total >= 60`、`queries_with_label2 >= 6`、`min_pairs_per_query >= 120`
+- 结论:
+- `M4 完成 = Smoke Gate PASS 且 Release Gate PASS`
 
-**评估流程**
-1. 生成或采样试验与查询
-2. 人工标注相关性与字段
-3. 运行评估脚本
-4. 输出报告与错误分析
-
-**报告内容**
-- 指标结果表
-- 错误类型统计
-- 失败样本示例
-
-**M4-1 交付文件**
-- eval/data/queries.jsonl
-- eval/data/trials_sample.jsonl
-- eval/data/patients.jsonl
-
-**M4-1 生成与校验命令**
+**标准执行命令**
+1. 生成并校验评估数据
 - `python3 scripts/eval/generate_eval_data.py --output-dir eval/data`
 - `python3 scripts/eval/validate_eval_data.py --data-dir eval/data`
 
-**M4-3 指标计算命令**
+2. 计算烟测指标
 - `python3 scripts/eval/run_evaluation.py --queries eval/data/queries.jsonl --trials eval/data/trials_sample.jsonl --relevance eval/annotations/relevance.trials_sample.annotator_a.jsonl --top-k 10 --min-relevance-coverage 1.0`
 
-**M4-4 报告生成命令**
+3. 生成烟测报告
 - `python3 scripts/eval/generate_evaluation_report.py --queries eval/data/queries.jsonl --trials eval/data/trials_sample.jsonl --relevance eval/annotations/relevance.trials_sample.annotator_a.jsonl --top-k 10 --min-relevance-coverage 1.0 --output-md eval/reports/m4_evaluation_report.md --output-json eval/reports/m4_evaluation_report.json`
 
-**M4 最终发布门禁命令（双门禁统一结论）**
+4. 生成最终发布门禁报告
 - `python3 scripts/eval/check_m4_release_gate.py --smoke-report eval/reports/m4_evaluation_report.json --retrieval-report eval/reports/retrieval_annotation_report_v2_strict_final.json --output-md eval/reports/m4_release_report.md --output-json eval/reports/m4_release_report.json`
-- 产物:
+
+**当前有效报告**
+- `eval/reports/m4_evaluation_report.md`
 - `eval/reports/m4_release_report.md`
-- `eval/reports/m4_release_report.json`
+- `eval/reports/retrieval_annotation_report_v2_strict_final.md`
+- `eval/reports/retrieval_annotation_report_v2_extended_merged.md`
 
-**大样本检索标注报告（300）**
-- `python3 scripts/eval/generate_retrieval_only_report.py --annotator-a eval/annotations/relevance.annotator_a.jsonl --annotator-b eval/annotations/relevance.annotator_b.jsonl --output-md eval/reports/retrieval_annotation_report_300.md --output-json eval/reports/retrieval_annotation_report_300.json`
-
-**扩样任务清单生成（2000 检索 + 200 解析）**
-- `python3 scripts/eval/generate_annotation_tasks.py --source eval/annotations/relevance.annotator_a.jsonl --target-retrieval-pairs 2000 --target-parsing-trials 200 --output-retrieval eval/annotation_tasks/relevance.pending.2000.jsonl --output-parsing eval/annotation_tasks/parsing.pending.200.jsonl --output-manifest eval/annotation_tasks/manifest.large_scale.json`
-
-**V2 扩池（AACT 快照）与首批 700 任务**
-- 下载最新 AACT flatfiles：`mkdir -p /tmp/aact && cd /tmp/aact && curl -L --fail -o aact_flatfiles_latest.zip https://ctti-aact.nyc3.digitaloceanspaces.com/je8x1y6mzswfseyc1q7i09ebtqb7`
-- 生成 v2 候选池与首批任务：
-- `python3 scripts/eval/generate_retrieval_v2_tasks_aact.py --aact-zip /tmp/aact/aact_flatfiles_latest.zip --queries eval/data/queries.jsonl --max-candidates-per-query 220 --background-per-query 40 --target-per-query 70 --likely2-quota 20 --likely1-quota 30 --hard-negative-quota 20 --output-pending eval/annotation_tasks/relevance.pending.v2.jsonl --output-batch eval/annotation_tasks/relevance.batch_v2_round1.700.jsonl --output-manifest eval/annotation_tasks/manifest.relevance_v2_round1.json`
-
-**V2 复核任务（adjudication）**
-- 从 `annotator_b` 标注中自动抽取复核集（默认规则：全部 label=2 + 每 query 最多 15 条 likely_2 但被标为 1）
-- `python3 scripts/eval/generate_relevance_adjudication_tasks.py --labels eval/annotations/relevance.v2.round1.annotator_b.jsonl --tasks eval/annotation_tasks/relevance.batch_v2_round1.700.jsonl --likely2-label1-per-query 15 --output-jsonl eval/annotation_tasks/relevance.v2.round1.adjudication.annotator_a.jsonl --output-manifest eval/annotation_tasks/manifest.relevance.v2.round1.adjudication.json`
-
-**V2 复核结果回写（生成 round1 final）**
-- 将复核文件覆盖到 round1 基线标签，产出可直接用于评估的 final 文件
-- `python3 scripts/eval/apply_relevance_adjudication.py --base eval/annotations/relevance.v2.round1.annotator_b.jsonl --adjudication eval/annotations/relevance.v2.round1.adjudication.annotator_a.jsonl --output-jsonl eval/annotations/relevance.v2.round1.final.jsonl --output-manifest eval/annotations/manifest.relevance.v2.round1.final.json`
-
-**V2 round2（提高 1/2 密度）**
-- 基于 AACT 重新采样并排除已标注 pair，建议提高 `likely_2` 配额、降低 hard negative
-- `python3 scripts/eval/generate_retrieval_v2_tasks_aact.py --aact-zip /tmp/aact/aact_flatfiles_latest.zip --queries eval/data/queries.jsonl --exclude eval/annotations/relevance.v2.round1.final.jsonl --max-candidates-per-query 1000 --background-per-query 40 --target-per-query 70 --likely2-quota 40 --likely1-quota 25 --hard-negative-quota 5 --task-id-prefix relevance-v2r2 --output-pending eval/annotation_tasks/relevance.pending.v2.round2.jsonl --output-batch eval/annotation_tasks/relevance.batch_v2_round2.700.jsonl --output-manifest eval/annotation_tasks/manifest.relevance_v2_round2.json`
-
-**V2 round3（仅针对 label=2 稀缺 query 的定向采样）**
-- 自动读取 `round1+round2 final`，只为 `label=2` 数量低于阈值的 query 生成任务
-- 输出同时包含标准版与 blind 版（blind 去除 `band/heuristic_score/features`）
-- `python3 scripts/eval/generate_retrieval_v2_round3_tasks.py --pending eval/annotation_tasks/relevance.pending.v2.round2.jsonl --queries eval/data/queries.jsonl --reference-labels eval/annotations/relevance.v2.round1_round2.final.jsonl --target-per-query 50 --likely2-quota 35 --likely1-quota 15 --hard-negative-quota 0 --task-id-prefix relevance-v2r3 --output-batch eval/annotation_tasks/relevance.batch_v2_round3.targeted.jsonl --output-blind eval/annotation_tasks/relevance.batch_v2_round3.targeted.blind.jsonl --output-manifest eval/annotation_tasks/manifest.relevance_v2_round3.targeted.json`
-
-**V2 round4（修复 location 归一化后，定向高价值采样）**
-- 先用更大的候选池重新打分（`max-candidates-per-query=5000`），避免被前几轮已标注样本“掏空”
-- `python3 scripts/eval/generate_retrieval_v2_tasks_aact.py --aact-zip /tmp/aact/aact_flatfiles_latest.zip --queries eval/data/queries.jsonl --exclude eval/annotations/relevance.v2.round1_round2.final.jsonl --exclude eval/annotations/relevance.v2.round3.annotator_b.jsonl --max-candidates-per-query 5000 --background-per-query 40 --target-per-query 10 --likely2-quota 10 --likely1-quota 0 --hard-negative-quota 0 --task-id-prefix probe-v2r4 --output-pending /tmp/relevance.pending.v2.round4.probe5000.jsonl --output-batch /tmp/relevance.batch.v2.round4.probe5000.jsonl --output-manifest /tmp/manifest.relevance_v2_round4.probe5000.json`
-- 再用定向脚本生成实际标注批次（带 hard constraint 过滤与 blind 输出）
-- `python3 scripts/eval/generate_retrieval_v2_round3_tasks.py --pending /tmp/relevance.pending.v2.round4.probe5000.jsonl --queries eval/data/queries.jsonl --reference-labels eval/annotations/relevance.v2.round1_round2.final.jsonl --exclude eval/annotations/relevance.v2.round3.annotator_b.jsonl --focus-query Q0004 --focus-query Q0005 --focus-query Q0006 --focus-query Q0007 --focus-query Q0008 --focus-query Q0009 --focus-query Q0010 --target-per-query 40 --likely2-quota 30 --likely1-quota 10 --hard-negative-quota 0 --require-status-match --min-location-match-score 1 --min-intent-match-count 1 --task-id-prefix relevance-v2r4 --output-batch eval/annotation_tasks/relevance.batch_v2_round4.targeted.jsonl --output-blind eval/annotation_tasks/relevance.batch_v2_round4.targeted.blind.jsonl --output-manifest eval/annotation_tasks/manifest.relevance_v2_round4.targeted.json`
+**历史过程数据**
+- 多轮扩样、盲评、复核任务与中间报告已归档到 `eval/archive/m4_history/`
+- 当前目录默认不保留历史任务文件，`eval/annotation_tasks/` 按需生成

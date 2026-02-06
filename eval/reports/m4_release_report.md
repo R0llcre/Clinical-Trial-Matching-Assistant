@@ -1,6 +1,6 @@
 # M4 Release Gate Report
 
-- generated_at_utc: 2026-02-06T15:57:02.098334+00:00
+- generated_at_utc: 2026-02-06T16:10:53.668622+00:00
 - overall_status: PASS
 - smoke_gate: PASS
 - release_gate: PASS

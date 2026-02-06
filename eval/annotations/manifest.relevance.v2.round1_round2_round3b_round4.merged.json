@@ -2,7 +2,7 @@
   "input_files": [
     "eval/annotations/relevance.v2.round1.final.jsonl",
     "eval/annotations/relevance.v2.round2.final.jsonl",
-    "eval/annotations/relevance.v2.round3.annotator_b.jsonl",
+    "eval/archive/m4_history/annotations/relevance.v2.round3.annotator_b.jsonl",
     "eval/annotations/relevance.v2.round4.final.jsonl"
   ],
   "total_rows": 2044,

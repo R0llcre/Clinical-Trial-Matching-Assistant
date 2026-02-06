@@ -214,11 +214,11 @@ def main() -> None:
     parser.add_argument("--annotator-b", default="eval/annotations/relevance.annotator_b.jsonl")
     parser.add_argument(
         "--output-md",
-        default="eval/reports/retrieval_annotation_report_300.md",
+        default="eval/reports/retrieval_annotation_report.md",
     )
     parser.add_argument(
         "--output-json",
-        default="eval/reports/retrieval_annotation_report_300.json",
+        default="eval/reports/retrieval_annotation_report.json",
     )
     args = parser.parse_args()
 

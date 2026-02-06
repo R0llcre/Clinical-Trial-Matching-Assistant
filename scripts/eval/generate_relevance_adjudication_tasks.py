@@ -192,7 +192,7 @@ def main() -> None:
     )
     parser.add_argument(
         "--labels",
-        default="eval/annotations/relevance.v2.round1.annotator_b.jsonl",
+        default="eval/archive/m4_history/annotations/relevance.v2.round1.annotator_b.jsonl",
         help="Label file from annotator_b",
     )
     parser.add_argument(
