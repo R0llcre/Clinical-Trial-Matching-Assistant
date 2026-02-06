@@ -9,6 +9,7 @@ from typing import Any, Dict, Iterable, List, Sequence, Tuple
 
 VALID_LABELS = {0, 1, 2}
 VALID_BANDS = ("likely_2", "likely_1", "hard_negative")
+DEFAULT_PENDING_PATH = "eval/archive/m4_history/annotation_tasks/relevance.pending.v2.round2.jsonl"
 BLIND_FIELDS = (
     "task_id",
     "task_type",
@@ -362,7 +363,7 @@ def main() -> None:
     )
     parser.add_argument(
         "--pending",
-        default="eval/annotation_tasks/relevance.pending.v2.round2.jsonl",
+        default=DEFAULT_PENDING_PATH,
         help="Candidate pending pool",
     )
     parser.add_argument("--queries", default="eval/data/queries.jsonl")
