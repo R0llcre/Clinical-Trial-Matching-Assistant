@@ -1,5 +1,5 @@
 {
-  "generated_at_utc": "2026-02-06T02:50:09.750101+00:00",
+  "generated_at_utc": "2026-02-06T03:00:18.577316+00:00",
   "dataset": {
     "query_count": 10,
     "trial_count": 8,
@@ -22,126 +22,22 @@
       "unannotated_queries": 0
     },
     "parsing": {
-      "precision": 0.72,
-      "recall": 0.9474,
-      "f1": 0.8182,
-      "tp": 18,
-      "fp": 7,
-      "fn": 1
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1": 1.0,
+      "tp": 26,
+      "fp": 0,
+      "fn": 0
     },
     "hallucination": {
       "hallucination_rate": 0.0,
       "hallucinated_rules": 0,
-      "total_predicted_rules": 25
+      "total_predicted_rules": 26
     }
   },
-  "error_summary": {
-    "parse_false_positive:procedure": 1,
-    "parse_false_positive:history": 3,
-    "parse_false_positive:condition": 2,
-    "parse_false_positive:medication": 1,
-    "parse_false_negative:other": 1
-  },
-  "error_samples": [
-    {
-      "error_type": "parse_false_positive:procedure",
-      "nct_id": "NCT90000001",
-      "rule": {
-        "type": "EXCLUSION",
-        "field": "procedure",
-        "operator": "WITHIN_LAST",
-        "value": "3",
-        "unit": "months"
-      },
-      "evidence_text": "Active infection or major surgery within the last 3 months."
-    },
-    {
-      "error_type": "parse_false_positive:history",
-      "nct_id": "NCT90000002",
-      "rule": {
-        "type": "EXCLUSION",
-        "field": "history",
-        "operator": "NO_HISTORY",
-        "value": "breastfeeding",
-        "unit": ""
-      },
-      "evidence_text": "Pregnancy or breastfeeding."
-    },
-    {
-      "error_type": "parse_false_positive:history",
-      "nct_id": "NCT90000002",
-      "rule": {
-        "type": "EXCLUSION",
-        "field": "history",
-        "operator": "NO_HISTORY",
-        "value": "pregnancy",
-        "unit": ""
-      },
-      "evidence_text": "Pregnancy or breastfeeding."
-    },
-    {
-      "error_type": "parse_false_positive:condition",
-      "nct_id": "NCT90000004",
-      "rule": {
-        "type": "EXCLUSION",
-        "field": "condition",
-        "operator": "NOT_IN",
-        "value": "active infection",
-        "unit": ""
-      },
-      "evidence_text": "Active infection."
-    },
-    {
-      "error_type": "parse_false_positive:medication",
-      "nct_id": "NCT90000006",
-      "rule": {
-        "type": "EXCLUSION",
-        "field": "medication",
-        "operator": "WITHIN_LAST",
-        "value": "4",
-        "unit": "weeks"
-      },
-      "evidence_text": "previous treatment in the last 4 weeks."
-    },
-    {
-      "error_type": "parse_false_negative:other",
-      "nct_id": "NCT90000007",
-      "rule": {
-        "type": "INCLUSION",
-        "field": "other",
-        "operator": "EXISTS",
-        "value": "null",
-        "unit": ""
-      },
-      "evidence_text": "for at least 3 months"
-    },
-    {
-      "error_type": "parse_false_positive:condition",
-      "nct_id": "NCT90000008",
-      "rule": {
-        "type": "EXCLUSION",
-        "field": "condition",
-        "operator": "NOT_IN",
-        "value": "active infection",
-        "unit": ""
-      },
-      "evidence_text": "pregnancy, breastfeeding, or active infection."
-    },
-    {
-      "error_type": "parse_false_positive:history",
-      "nct_id": "NCT90000008",
-      "rule": {
-        "type": "EXCLUSION",
-        "field": "history",
-        "operator": "NO_HISTORY",
-        "value": "breastfeeding",
-        "unit": ""
-      },
-      "evidence_text": "pregnancy, breastfeeding, or active infection."
-    }
-  ],
+  "error_summary": {},
+  "error_samples": [],
   "recommendations": [
-    "Metrics pass configured thresholds; continue with larger holdout validation.",
-    "Top observed error type is `parse_false_positive:history`; prioritize it first in M5 parser iteration."
+    "Metrics pass configured thresholds; continue with larger holdout validation."
   ]
 }

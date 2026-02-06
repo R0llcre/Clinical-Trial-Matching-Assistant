@@ -52,6 +52,10 @@ _CONDITION_SYMPTOMS_PATTERN = re.compile(
     r"\b([a-z][a-z0-9\-\s]{2,80}?)\s+symptoms?\b",
     re.I,
 )
+_DURATION_AT_LEAST_PATTERN = re.compile(
+    r"\bfor at least\s+\d{1,3}\s*(?:day|days|week|weeks|month|months|year|years)\b",
+    re.I,
+)
 _TIME_WINDOW = re.compile(
     r"\b(?:within(?:\s+the\s+last)?|in the last|during the last)\s+(\d{1,3})\s*"
     r"(day|days|week|weeks|month|months|year|years)\b",
@@ -197,6 +201,7 @@ def _parse_sentence(
         parsed.extend(_parse_sex_rules(sentence, rule_type, source_span))
         parsed.extend(_parse_lab_rules(sentence, rule_type, source_span))
         parsed.extend(_parse_condition_rules(sentence, rule_type, source_span))
+        parsed.extend(_parse_duration_other_rules(sentence, rule_type, source_span))
         if rule_type == "EXCLUSION":
             parsed.extend(_parse_common_exclusion_rules(sentence, source_span))
     except Exception:
@@ -354,6 +359,32 @@ def _parse_condition_rules(
             source_span=source_span,
         )
         for value in deduped
+    ]
+
+
+def _parse_duration_other_rules(
+    sentence: str, rule_type: str, source_span: Optional[Dict[str, int]]
+) -> List[Dict[str, Any]]:
+    if rule_type != "INCLUSION":
+        return []
+
+    matches = [match.group(0) for match in _DURATION_AT_LEAST_PATTERN.finditer(sentence)]
+    if not matches:
+        return []
+
+    # Keep one generic duration constraint rule per sentence for v1 schema compatibility.
+    evidence = matches[0]
+    return [
+        _build_rule(
+            rule_type=rule_type,
+            field="other",
+            operator="EXISTS",
+            value=None,
+            unit=None,
+            certainty="low",
+            evidence_text=evidence,
+            source_span=source_span,
+        )
     ]
 
 

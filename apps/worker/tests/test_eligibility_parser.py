@@ -170,3 +170,21 @@ def test_parse_criteria_v1_does_not_parse_month_window_as_age() -> None:
 
     age_rules = [rule for rule in rules if rule["field"] == "age"]
     assert age_rules == []
+
+
+def test_parse_criteria_v1_extracts_duration_as_other_rule() -> None:
+    text = """
+    Inclusion Criteria:
+    long covid symptoms for at least 3 months.
+    """
+
+    rules = parse_criteria_v1(text)
+
+    duration_rule = next(
+        rule
+        for rule in rules
+        if rule["type"] == "INCLUSION"
+        and rule["field"] == "other"
+        and rule["operator"] == "EXISTS"
+    )
+    assert duration_rule["evidence_text"].lower() == "for at least 3 months"
