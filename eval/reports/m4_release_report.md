@@ -1,16 +1,16 @@
 # M4 Release Gate Report
 
-- generated_at_utc: 2026-02-06T16:38:31.347640+00:00
-- overall_status: PASS
+- generated_at_utc: 2026-02-06T17:08:33.531091+00:00
+- overall_status: FAIL
 - smoke_gate: PASS
-- release_gate: PASS
+- release_gate: FAIL
 
 ## Gate Summary
 
 | Gate | Status |
 | --- | :---: |
 | smoke | PASS |
-| release | PASS |
+| release | FAIL |
 
 ## Check Details
 
@@ -28,9 +28,9 @@
 | release.parsing_trial_count | parsing_release_report | 100.0 | >= | 100.0 | PASS |
 | release.parsing_rule_count | parsing_release_report | 358.0 | >= | 300.0 | PASS |
 | release.parsing_unique_fields | parsing_release_report | 7.0 | >= | 6.0 | PASS |
-| release.parsing_f1 | parsing_release_report | 0.3056 | >= | 0.3 | PASS |
+| release.parsing_f1 | parsing_release_report | 0.3056 | >= | 0.8 | FAIL |
 | release.parsing_hallucination_rate | parsing_release_report | 0.0 | <= | 0.02 | PASS |
 
 ## Release Readiness Interpretation
 
-- M4 evaluation is release-ready under dual-gate policy.
+- M4 evaluation is not release-ready. Fix failed checks before merge.

@@ -1,9 +1,9 @@
 {
-  "generated_at_utc": "2026-02-06T16:38:31.347640+00:00",
-  "overall_status": "PASS",
+  "generated_at_utc": "2026-02-06T17:08:33.531091+00:00",
+  "overall_status": "FAIL",
   "gate_status": {
     "smoke": "PASS",
-    "release": "PASS"
+    "release": "FAIL"
   },
   "inputs": {
     "smoke_report_kind": "m4_evaluation_report",
@@ -112,8 +112,8 @@
       "source": "parsing_release_report",
       "comparator": ">=",
       "actual": 0.3056,
-      "target": 0.3,
-      "status": "PASS"
+      "target": 0.8,
+      "status": "FAIL"
     },
     {
       "id": "release.parsing_hallucination_rate",

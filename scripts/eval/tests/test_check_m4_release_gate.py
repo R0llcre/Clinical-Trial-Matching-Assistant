@@ -17,7 +17,7 @@ def _thresholds() -> dict[str, float]:
         "release_parsing_trial_count_min": 100.0,
         "release_parsing_rule_count_min": 300.0,
         "release_parsing_unique_fields_min": 6.0,
-        "release_parsing_f1_min": 0.3,
+        "release_parsing_f1_min": 0.8,
         "release_parsing_hallucination_rate_max": 0.02,
     }
 
@@ -63,7 +63,7 @@ def _parsing_report_pass() -> dict[str, object]:
             "unique_fields": 7,
         },
         "metrics": {
-            "parsing": {"f1": 0.35},
+            "parsing": {"f1": 0.85},
             "hallucination": {"hallucination_rate": 0.0},
         },
     }

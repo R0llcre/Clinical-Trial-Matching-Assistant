@@ -355,7 +355,7 @@ def main() -> None:
     parser.add_argument("--min-release-parsing-trials", type=int, default=100)
     parser.add_argument("--min-release-parsing-rules", type=int, default=300)
     parser.add_argument("--min-release-parsing-fields", type=int, default=6)
-    parser.add_argument("--min-release-parsing-f1", type=float, default=0.30)
+    parser.add_argument("--min-release-parsing-f1", type=float, default=0.80)
     parser.add_argument("--max-release-parsing-hallucination-rate", type=float, default=0.02)
     args = parser.parse_args()
 
