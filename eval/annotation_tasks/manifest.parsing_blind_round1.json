@@ -1,0 +1,25 @@
+{
+  "source_pending": "eval/archive/m4_history/annotation_tasks/parsing.pending.200.jsonl",
+  "source_release_trials": "eval/data/trials_parsing_release.jsonl",
+  "target_trials": 60,
+  "guideline_version": "m4-v1",
+  "task_id_prefix": "parsing-blind-r1",
+  "candidate_manifest": {
+    "input_rows": 200,
+    "invalid_rows": 0,
+    "excluded_release_overlap_rows": 100,
+    "unique_candidates": 100
+  },
+  "task_manifest": {
+    "requested_trials": 60,
+    "selected_trials": 60,
+    "shortfall": 0,
+    "support_summary": {
+      "min": 1,
+      "max": 1,
+      "avg": 1.0
+    }
+  },
+  "output_annotator_a": "eval/annotation_tasks/parsing.blind.round1.annotator_a.jsonl",
+  "output_annotator_b": "eval/annotation_tasks/parsing.blind.round1.annotator_b.jsonl"
+}
