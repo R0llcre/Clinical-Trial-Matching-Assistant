@@ -101,3 +101,21 @@ def test_parse_criteria_v1_returns_unknown_when_sentence_cannot_be_parsed() -> N
     assert rules[0]["field"] == "other"
     assert rules[0]["operator"] == "EXISTS"
     assert rules[0]["certainty"] == "low"
+
+
+def test_parse_criteria_v1_deduplicates_overlapping_infection_keywords() -> None:
+    text = """
+    Exclusion Criteria:
+    Active infection.
+    """
+
+    rules = parse_criteria_v1(text)
+
+    infection_rules = [
+        rule
+        for rule in rules
+        if rule["type"] == "EXCLUSION"
+        and rule["field"] == "condition"
+        and rule["value"] == "active infection"
+    ]
+    assert len(infection_rules) == 1

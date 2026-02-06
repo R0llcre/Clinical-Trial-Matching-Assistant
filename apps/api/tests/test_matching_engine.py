@@ -126,3 +126,46 @@ def test_evaluate_trial_prefers_parsed_criteria_rules() -> None:
     assert inclusion["rule-age"] == "PASS"
     assert inclusion["rule-sex"] == "PASS"
     assert exclusion["rule-exclusion"] == "PASS"
+
+
+def test_evaluate_trial_with_parsed_rules_keeps_condition_overlap() -> None:
+    patient_profile = {
+        "demographics": {"age": 34, "sex": "female"},
+        "conditions": ["diabetes mellitus"],
+    }
+    trial = {
+        "nct_id": "NCT-4",
+        "title": "Unrelated Cancer Trial",
+        "status": "RECRUITING",
+        "phase": "PHASE2",
+        "conditions": ["metastatic breast cancer"],
+        "criteria_json": [
+            {
+                "id": "rule-age",
+                "type": "INCLUSION",
+                "field": "age",
+                "operator": ">=",
+                "value": 18,
+                "unit": "years",
+                "evidence_text": "Participants must be at least 18 years old.",
+            },
+            {
+                "id": "rule-sex",
+                "type": "INCLUSION",
+                "field": "sex",
+                "operator": "=",
+                "value": "female",
+                "evidence_text": "Female participants only.",
+            },
+        ],
+        "raw_json": {},
+    }
+
+    result = evaluate_trial(patient_profile, trial)
+
+    inclusion = {
+        item["rule_id"]: item["verdict"] for item in result["checklist"]["inclusion"]
+    }
+    assert inclusion["condition_match"] == "FAIL"
+    assert inclusion["rule-age"] == "PASS"
+    assert inclusion["rule-sex"] == "PASS"

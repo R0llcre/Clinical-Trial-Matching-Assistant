@@ -208,3 +208,77 @@ def test_compute_coverage_stats_counts_unknown_as_failed() -> None:
     assert coverage_stats["unknown_rules"] == 2
     assert coverage_stats["failed_rules"] == 2
     assert coverage_stats["coverage_ratio"] == pytest.approx(0.3333, abs=0.0001)
+
+
+def test_sync_trials_auto_parses_new_trials(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("DATABASE_URL", "postgresql://test:test@localhost:5432/testdb")
+    fake_conn = _FakeConn()
+
+    class _FakeClient:
+        def search_studies(self, condition, status=None, page_token=None, page_size=100):
+            return {"studies": [{"stub": True}], "nextPageToken": None}
+
+    parse_calls = []
+
+    monkeypatch.setattr(tasks.psycopg, "connect", lambda _: fake_conn)
+    monkeypatch.setattr(tasks, "CTGovClient", lambda: _FakeClient())
+    monkeypatch.setattr(tasks, "_ensure_tables", lambda conn: None)
+    monkeypatch.setattr(tasks, "_write_sync_log", lambda *args, **kwargs: None)
+    monkeypatch.setattr(
+        tasks,
+        "_extract_trial",
+        lambda study: {"nct_id": "NCT123", "data_timestamp": None},
+    )
+    monkeypatch.setattr(tasks, "_upsert_trial", lambda conn, trial: True)
+    monkeypatch.setattr(
+        tasks,
+        "parse_trial",
+        lambda nct_id, parser_version="rule_v1": parse_calls.append(
+            (nct_id, parser_version)
+        ),
+    )
+
+    stats = sync_trials(condition="diabetes", status="RECRUITING", page_limit=1)
+
+    assert stats.processed == 1
+    assert stats.inserted == 1
+    assert stats.updated == 0
+    assert parse_calls == [("NCT123", "rule_v1")]
+
+
+def test_sync_trials_does_not_auto_parse_updated_trials(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("DATABASE_URL", "postgresql://test:test@localhost:5432/testdb")
+    fake_conn = _FakeConn()
+
+    class _FakeClient:
+        def search_studies(self, condition, status=None, page_token=None, page_size=100):
+            return {"studies": [{"stub": True}], "nextPageToken": None}
+
+    parse_calls = []
+
+    monkeypatch.setattr(tasks.psycopg, "connect", lambda _: fake_conn)
+    monkeypatch.setattr(tasks, "CTGovClient", lambda: _FakeClient())
+    monkeypatch.setattr(tasks, "_ensure_tables", lambda conn: None)
+    monkeypatch.setattr(tasks, "_write_sync_log", lambda *args, **kwargs: None)
+    monkeypatch.setattr(
+        tasks,
+        "_extract_trial",
+        lambda study: {"nct_id": "NCT456", "data_timestamp": None},
+    )
+    monkeypatch.setattr(tasks, "_upsert_trial", lambda conn, trial: False)
+    monkeypatch.setattr(
+        tasks,
+        "parse_trial",
+        lambda nct_id, parser_version="rule_v1": parse_calls.append(
+            (nct_id, parser_version)
+        ),
+    )
+
+    stats = sync_trials(condition="diabetes", status="RECRUITING", page_limit=1)
+
+    assert stats.processed == 1
+    assert stats.inserted == 0
+    assert stats.updated == 1
+    assert parse_calls == []

@@ -77,6 +77,29 @@ def _tokenize(text: str) -> set[str]:
     return {token for token in re.findall(r"[a-z0-9]+", text.lower()) if len(token) > 2}
 
 
+def _evaluate_condition_overlap_rule(
+    patient_profile: Dict[str, Any], trial: Dict[str, Any]
+) -> Tuple[Dict[str, str], Optional[str]]:
+    patient_conditions = _norm_text_list(patient_profile.get("conditions"))
+    trial_conditions = _norm_text_list(trial.get("conditions"))
+
+    if not patient_conditions:
+        return (
+            _rule("UNKNOWN", "condition_match", "patient conditions are missing"),
+            "conditions",
+        )
+    if not trial_conditions:
+        return _rule("UNKNOWN", "condition_match", "trial conditions are missing"), None
+
+    condition_pass = any(
+        (pc in tc) or (tc in pc) or bool(_tokenize(pc) & _tokenize(tc))
+        for pc in patient_conditions
+        for tc in trial_conditions
+    )
+    verdict = "PASS" if condition_pass else "FAIL"
+    return _rule(verdict, "condition_match", "condition overlap check"), None
+
+
 def evaluate_trial(
     patient_profile: Dict[str, Any], trial: Dict[str, Any]
 ) -> Dict[str, Any]:
@@ -94,6 +117,19 @@ def _evaluate_trial_with_parsed_rules(
     inclusion: List[Dict[str, str]] = []
     exclusion: List[Dict[str, str]] = []
     missing_info: List[str] = []
+    has_parsed_condition = any(
+        str(rule.get("type")).upper() == "INCLUSION"
+        and str(rule.get("field")).lower() == "condition"
+        for rule in parsed_rules
+    )
+
+    if not has_parsed_condition:
+        condition_rule, missing_field = _evaluate_condition_overlap_rule(
+            patient_profile, trial
+        )
+        inclusion.append(condition_rule)
+        if missing_field:
+            missing_info.append(missing_field)
 
     for parsed_rule in parsed_rules:
         verdict, missing_field = _evaluate_parsed_rule(parsed_rule, patient_profile)
@@ -271,31 +307,16 @@ def _evaluate_trial_legacy(
     else:
         patient_sex = None
 
-    patient_conditions = _norm_text_list(patient_profile.get("conditions"))
-    trial_conditions = _norm_text_list(trial.get("conditions"))
-
     missing_info: List[str] = []
     inclusion: List[Dict[str, str]] = []
     exclusion: List[Dict[str, str]] = []
 
-    if not patient_conditions:
-        missing_info.append("conditions")
-        inclusion.append(
-            _rule("UNKNOWN", "condition_match", "patient conditions are missing")
-        )
-    elif not trial_conditions:
-        inclusion.append(
-            _rule("UNKNOWN", "condition_match", "trial conditions are missing")
-        )
-    else:
-        condition_pass = any(
-            (pc in tc) or (tc in pc)
-            or bool(_tokenize(pc) & _tokenize(tc))
-            for pc in patient_conditions
-            for tc in trial_conditions
-        )
-        verdict = "PASS" if condition_pass else "FAIL"
-        inclusion.append(_rule(verdict, "condition_match", "condition overlap check"))
+    condition_rule, missing_condition = _evaluate_condition_overlap_rule(
+        patient_profile, trial
+    )
+    inclusion.append(condition_rule)
+    if missing_condition:
+        missing_info.append(missing_condition)
 
     eligibility = _extract_eligibility(trial.get("raw_json") or {})
     minimum_age = eligibility["minimum_age"]
