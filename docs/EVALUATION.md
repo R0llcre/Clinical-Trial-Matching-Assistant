@@ -59,3 +59,6 @@ Evaluation
 **M4-1 生成与校验命令**
 - `python3 scripts/eval/generate_eval_data.py --output-dir eval/data`
 - `python3 scripts/eval/validate_eval_data.py --data-dir eval/data`
+
+**M4-3 指标计算命令**
+- `python3 scripts/eval/run_evaluation.py --queries eval/data/queries.jsonl --trials eval/data/trials_sample.jsonl --relevance eval/annotations/relevance.annotator_a.jsonl --top-k 10`
