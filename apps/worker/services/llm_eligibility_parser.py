@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 import os
 import uuid
-from typing import Any, Dict, List, Optional, Sequence, Tuple
+from typing import Any, Dict, List, Optional, Sequence, Set, Tuple
 
 import httpx
 
@@ -13,6 +13,9 @@ _DEFAULT_OPENAI_BASE_URL = "https://api.openai.com/v1"
 _DEFAULT_OPENAI_MODEL = "gpt-4o-mini"
 _DEFAULT_TIMEOUT_SECONDS = 60.0
 _DEFAULT_HALLUCINATION_THRESHOLD = 0.02
+_DEFAULT_CRITICAL_FIELDS = ("age", "sex", "history")
+_DEFAULT_MIN_FINAL_RULES = 1
+_DEFAULT_MIN_RULE_COVERAGE_RATIO = 0.25
 
 _ALLOWED_TYPES = {"INCLUSION", "EXCLUSION"}
 _ALLOWED_FIELDS = {
@@ -59,41 +62,82 @@ class LLMParserError(RuntimeError):
 def parse_criteria_llm_v1_with_fallback(
     eligibility_text: Optional[str],
 ) -> Tuple[List[Dict[str, Any]], Dict[str, Any]]:
-    """Return llm_v1 result when available, otherwise fallback to rule_v1."""
+    """Return llm_v1 result with field-level safeguards, otherwise fallback to rule_v1."""
     hallucination_threshold = _read_hallucination_threshold()
+    critical_fields = _read_critical_fields()
+    min_final_rules = _read_min_final_rules()
+    min_rule_coverage_ratio = _read_min_rule_coverage_ratio()
     try:
         rules, usage = parse_criteria_llm_v1(eligibility_text)
         llm_quality = evaluate_evidence_alignment(rules, eligibility_text)
+        dropped_hallucinated_rules = 0
+        candidate_rules = list(rules)
+
         if llm_quality["hallucination_rate"] > hallucination_threshold:
-            aligned_rules = [
+            candidate_rules = [
                 rule for rule in rules if _rule_has_aligned_evidence(rule, eligibility_text or "")
             ]
-            if aligned_rules:
-                filtered_quality = evaluate_evidence_alignment(aligned_rules, eligibility_text)
-                return aligned_rules, {
-                    "parser_source": "llm_v1",
-                    "fallback_used": True,
-                    "fallback_reason": (
-                        "llm hallucination filtering applied: "
-                        f"{llm_quality['hallucinated_rules']} dropped"
-                    ),
-                    "llm_usage": usage,
-                    "llm_quality": filtered_quality,
-                    "hallucination_threshold": hallucination_threshold,
-                    "llm_dropped_hallucinated_rules": llm_quality["hallucinated_rules"],
-                }
-            raise LLMParserError(
-                "llm hallucination rate "
-                f"{llm_quality['hallucination_rate']:.4f} "
-                f"exceeds threshold {hallucination_threshold:.4f}"
+            dropped_hallucinated_rules = llm_quality["hallucinated_rules"]
+            if not candidate_rules:
+                raise LLMParserError(
+                    "llm hallucination rate "
+                    f"{llm_quality['hallucination_rate']:.4f} "
+                    f"exceeds threshold {hallucination_threshold:.4f}"
+                )
+
+        fallback_rules = parse_criteria_v1(eligibility_text)
+        merged_rules, supplemented_count, supplemented_fields = _supplement_critical_fields(
+            candidate_rules,
+            fallback_rules,
+            critical_fields,
+        )
+        final_rules = _dedupe_rules(merged_rules)
+
+        force_rule_fallback, gate_reason, gate_context = _apply_quality_gate(
+            final_rules=final_rules,
+            fallback_rules=fallback_rules,
+            min_final_rules=min_final_rules,
+            min_rule_coverage_ratio=min_rule_coverage_ratio,
+        )
+        if force_rule_fallback:
+            fallback_quality = evaluate_evidence_alignment(fallback_rules, eligibility_text)
+            return fallback_rules, {
+                "parser_source": "rule_v1",
+                "fallback_used": True,
+                "fallback_reason": gate_reason,
+                "llm_usage": usage,
+                "llm_quality": fallback_quality,
+                "hallucination_threshold": hallucination_threshold,
+                "llm_dropped_hallucinated_rules": dropped_hallucinated_rules,
+                "llm_supplemented_rules": supplemented_count,
+                "llm_supplemented_fields": supplemented_fields,
+                "llm_quality_gate": gate_context,
+            }
+
+        final_quality = evaluate_evidence_alignment(final_rules, eligibility_text)
+        fallback_reason_parts: List[str] = []
+        if dropped_hallucinated_rules:
+            fallback_reason_parts.append(
+                f"hallucination filtering applied: {dropped_hallucinated_rules} dropped"
             )
-        return rules, {
+        if supplemented_count:
+            fallback_reason_parts.append(
+                "critical field backfill from rule_v1: "
+                + ",".join(supplemented_fields)
+            )
+        fallback_reason = "; ".join(fallback_reason_parts) if fallback_reason_parts else None
+
+        return final_rules, {
             "parser_source": "llm_v1",
-            "fallback_used": False,
-            "fallback_reason": None,
+            "fallback_used": bool(fallback_reason_parts),
+            "fallback_reason": fallback_reason,
             "llm_usage": usage,
-            "llm_quality": llm_quality,
+            "llm_quality": final_quality,
             "hallucination_threshold": hallucination_threshold,
+            "llm_dropped_hallucinated_rules": dropped_hallucinated_rules,
+            "llm_supplemented_rules": supplemented_count,
+            "llm_supplemented_fields": supplemented_fields,
+            "llm_quality_gate": gate_context,
         }
     except LLMParserError as exc:
         fallback_rules = parse_criteria_v1(eligibility_text)
@@ -105,6 +149,17 @@ def parse_criteria_llm_v1_with_fallback(
             "llm_usage": None,
             "llm_quality": fallback_quality,
             "hallucination_threshold": hallucination_threshold,
+            "llm_dropped_hallucinated_rules": 0,
+            "llm_supplemented_rules": 0,
+            "llm_supplemented_fields": [],
+            "llm_quality_gate": {
+                "min_final_rules": min_final_rules,
+                "min_rule_coverage_ratio": min_rule_coverage_ratio,
+                "llm_rule_count": 0,
+                "rule_v1_rule_count": len(fallback_rules),
+                "rule_coverage_ratio": 0.0,
+                "force_fallback": True,
+            },
         }
 
 
@@ -480,6 +535,138 @@ def _read_hallucination_threshold() -> float:
     except ValueError:
         return _DEFAULT_HALLUCINATION_THRESHOLD
     return min(max(value, 0.0), 1.0)
+
+
+def _read_critical_fields() -> Set[str]:
+    raw = os.getenv("LLM_CRITICAL_FIELDS")
+    if raw is None:
+        return set(_DEFAULT_CRITICAL_FIELDS)
+    items = {item.strip().lower() for item in raw.split(",") if item.strip()}
+    return {item for item in items if item in _ALLOWED_FIELDS}
+
+
+def _read_min_final_rules() -> int:
+    raw = os.getenv("LLM_MIN_FINAL_RULES")
+    if raw is None:
+        return _DEFAULT_MIN_FINAL_RULES
+    try:
+        return max(0, int(raw))
+    except ValueError:
+        return _DEFAULT_MIN_FINAL_RULES
+
+
+def _read_min_rule_coverage_ratio() -> float:
+    raw = os.getenv("LLM_MIN_RULE_COVERAGE_RATIO")
+    if raw is None:
+        return _DEFAULT_MIN_RULE_COVERAGE_RATIO
+    try:
+        value = float(raw)
+    except ValueError:
+        return _DEFAULT_MIN_RULE_COVERAGE_RATIO
+    return min(max(value, 0.0), 1.0)
+
+
+def _rule_signature(rule: Dict[str, Any]) -> Tuple[str, str, str, str, str]:
+    try:
+        value_key = json.dumps(rule.get("value"), ensure_ascii=False, sort_keys=True)
+    except TypeError:
+        value_key = str(rule.get("value"))
+    return (
+        str(rule.get("type") or "").upper(),
+        str(rule.get("field") or "").strip().lower(),
+        str(rule.get("operator") or "").upper(),
+        value_key,
+        str(rule.get("unit") or ""),
+    )
+
+
+def _dedupe_rules(rules: Sequence[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    deduped: List[Dict[str, Any]] = []
+    seen: Set[Tuple[str, str, str, str, str]] = set()
+    for rule in rules:
+        signature = _rule_signature(rule)
+        if signature in seen:
+            continue
+        deduped.append(rule)
+        seen.add(signature)
+    return deduped
+
+
+def _supplement_critical_fields(
+    primary_rules: Sequence[Dict[str, Any]],
+    fallback_rules: Sequence[Dict[str, Any]],
+    critical_fields: Set[str],
+) -> Tuple[List[Dict[str, Any]], int, List[str]]:
+    if not critical_fields:
+        return list(primary_rules), 0, []
+
+    merged = list(primary_rules)
+    present_fields = {
+        str(rule.get("field") or "").strip().lower()
+        for rule in primary_rules
+        if isinstance(rule, dict)
+    }
+    supplemented_fields: List[str] = []
+    added = 0
+
+    for field in sorted(critical_fields):
+        if field in present_fields:
+            continue
+        field_rules = [
+            rule
+            for rule in fallback_rules
+            if isinstance(rule, dict)
+            and str(rule.get("field") or "").strip().lower() == field
+        ]
+        if not field_rules:
+            continue
+        merged.extend(field_rules)
+        added += len(field_rules)
+        supplemented_fields.append(field)
+    return merged, added, supplemented_fields
+
+
+def _apply_quality_gate(
+    *,
+    final_rules: Sequence[Dict[str, Any]],
+    fallback_rules: Sequence[Dict[str, Any]],
+    min_final_rules: int,
+    min_rule_coverage_ratio: float,
+) -> Tuple[bool, Optional[str], Dict[str, Any]]:
+    fallback_count = len(fallback_rules)
+    final_count = len(final_rules)
+    coverage_ratio = (
+        float(final_count) / float(fallback_count) if fallback_count > 0 else 1.0
+    )
+    context = {
+        "min_final_rules": min_final_rules,
+        "min_rule_coverage_ratio": min_rule_coverage_ratio,
+        "llm_rule_count": final_count,
+        "rule_v1_rule_count": fallback_count,
+        "rule_coverage_ratio": round(coverage_ratio, 4),
+        "force_fallback": False,
+    }
+
+    if fallback_count == 0:
+        return False, None, context
+
+    if final_count < min_final_rules:
+        context["force_fallback"] = True
+        reason = (
+            "llm quality gate: rule count too low "
+            f"({final_count} < {min_final_rules})"
+        )
+        return True, reason, context
+
+    if coverage_ratio < min_rule_coverage_ratio:
+        context["force_fallback"] = True
+        reason = (
+            "llm quality gate: rule coverage below threshold "
+            f"({coverage_ratio:.4f} < {min_rule_coverage_ratio:.4f})"
+        )
+        return True, reason, context
+
+    return False, None, context
 
 
 def _safe_int(value: Any) -> Optional[int]:

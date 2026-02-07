@@ -325,3 +325,120 @@ def test_parse_criteria_llm_v1_with_fallback_filters_hallucinated_rules(
     assert metadata["llm_usage"]["total_tokens"] == 12
     assert metadata["llm_dropped_hallucinated_rules"] == 1
     assert metadata["llm_quality"]["hallucination_rate"] == 0.0
+
+
+def test_parse_criteria_llm_v1_with_fallback_backfills_critical_fields(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("LLM_HALLUCINATION_THRESHOLD", "1.0")
+    monkeypatch.setenv("LLM_MIN_RULE_COVERAGE_RATIO", "0.0")
+    monkeypatch.setenv("LLM_CRITICAL_FIELDS", "age,sex,history")
+    monkeypatch.setattr(
+        parser,
+        "parse_criteria_llm_v1",
+        lambda text: (
+            [
+                {
+                    "id": "rule-llm",
+                    "type": "INCLUSION",
+                    "field": "condition",
+                    "operator": "IN",
+                    "value": "heart failure",
+                    "unit": None,
+                    "time_window": None,
+                    "certainty": "high",
+                    "evidence_text": "heart failure",
+                    "source_span": {"start": 0, "end": 13},
+                }
+            ],
+            {"prompt_tokens": 10, "completion_tokens": 2, "total_tokens": 12},
+        ),
+    )
+    monkeypatch.setattr(
+        parser,
+        "parse_criteria_v1",
+        lambda text: [
+            {
+                "id": "rule-fallback-age",
+                "type": "INCLUSION",
+                "field": "age",
+                "operator": ">=",
+                "value": 18,
+                "unit": "years",
+                "time_window": None,
+                "certainty": "high",
+                "evidence_text": "18 years or older",
+                "source_span": {"start": 0, "end": 16},
+            }
+        ],
+    )
+
+    rules, metadata = parser.parse_criteria_llm_v1_with_fallback(
+        "heart failure and 18 years or older"
+    )
+
+    assert metadata["parser_source"] == "llm_v1"
+    assert metadata["fallback_used"] is True
+    assert metadata["llm_supplemented_rules"] == 1
+    assert metadata["llm_supplemented_fields"] == ["age"]
+    fields = {rule["field"] for rule in rules}
+    assert "condition" in fields
+    assert "age" in fields
+    assert "critical field backfill" in str(metadata["fallback_reason"])
+
+
+def test_parse_criteria_llm_v1_with_fallback_quality_gate_forces_rule_parser(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("LLM_HALLUCINATION_THRESHOLD", "1.0")
+    monkeypatch.setenv("LLM_MIN_RULE_COVERAGE_RATIO", "0.8")
+    monkeypatch.setenv("LLM_CRITICAL_FIELDS", "")
+    monkeypatch.setattr(
+        parser,
+        "parse_criteria_llm_v1",
+        lambda text: (
+            [
+                {
+                    "id": "rule-llm",
+                    "type": "INCLUSION",
+                    "field": "condition",
+                    "operator": "IN",
+                    "value": "heart failure",
+                    "unit": None,
+                    "time_window": None,
+                    "certainty": "high",
+                    "evidence_text": "heart failure",
+                    "source_span": {"start": 0, "end": 13},
+                }
+            ],
+            {"prompt_tokens": 8, "completion_tokens": 2, "total_tokens": 10},
+        ),
+    )
+    monkeypatch.setattr(
+        parser,
+        "parse_criteria_v1",
+        lambda text: [
+            {
+                "id": f"rule-fallback-{i}",
+                "type": "INCLUSION",
+                "field": "condition",
+                "operator": "IN",
+                "value": f"condition-{i}",
+                "unit": None,
+                "time_window": None,
+                "certainty": "high",
+                "evidence_text": "condition evidence",
+                "source_span": {"start": 0, "end": 18},
+            }
+            for i in range(5)
+        ],
+    )
+
+    rules, metadata = parser.parse_criteria_llm_v1_with_fallback("heart failure")
+
+    assert len(rules) == 5
+    assert metadata["parser_source"] == "rule_v1"
+    assert metadata["fallback_used"] is True
+    assert "rule coverage below threshold" in str(metadata["fallback_reason"])
+    assert metadata["llm_usage"]["total_tokens"] == 10
+    assert metadata["llm_quality_gate"]["force_fallback"] is True

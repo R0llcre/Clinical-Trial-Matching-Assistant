@@ -22,7 +22,10 @@ M5-1 LLM 解析器
 - `OPENAI_API_KEY`：LLM 调用凭证。
 - `OPENAI_MODEL`：默认 `gpt-4o-mini`。
 - `OPENAI_BASE_URL`：默认 `https://api.openai.com/v1`。
-- `OPENAI_TIMEOUT_SECONDS`：默认 `20` 秒。
+- `OPENAI_TIMEOUT_SECONDS`：默认 `60` 秒。
+- `LLM_CRITICAL_FIELDS`：默认 `age,sex,history`，LLM 缺失时由 `rule_v1` 回填。
+- `LLM_MIN_FINAL_RULES`：默认 `1`，低于阈值触发回退。
+- `LLM_MIN_RULE_COVERAGE_RATIO`：默认 `0.25`，若 `LLM 规则数 / rule_v1 规则数` 低于阈值触发回退。
 
 M5-2 成本控制
 目的
