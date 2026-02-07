@@ -1,0 +1,12 @@
+{
+  "adjudicated_trials": 120,
+  "disagreement_trials": 120,
+  "ambiguous_trials_available": 34,
+  "selected_trials": 60,
+  "requested_trials": 60,
+  "shortfall": 0,
+  "selected_ambiguous_trials": 34,
+  "selected_backfill_trials": 26,
+  "target_annotator": "annotator_c",
+  "guideline_version": "m5-v1"
+}
