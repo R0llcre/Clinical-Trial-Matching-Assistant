@@ -1,0 +1,29 @@
+{
+  "source_trials": [
+    "eval/data/trials_parsing_release.jsonl",
+    "eval/data/trials_parsing_blind.jsonl"
+  ],
+  "guideline_version": "m5-v1",
+  "task_id_prefix": "parsing-relabel-r1",
+  "task_manifest": {
+    "candidate_trials": 160,
+    "selected_trials": 120,
+    "requested_trials": 120,
+    "shortfall": 0,
+    "critical_fields": [
+      "history",
+      "lab",
+      "medication",
+      "other",
+      "procedure"
+    ],
+    "score_summary": {
+      "min": 5.0,
+      "median": 25.0,
+      "mean": 47.4167,
+      "max": 229.0
+    }
+  },
+  "output_annotator_a": "eval/annotation_tasks/parsing.relabel.round1.annotator_a.jsonl",
+  "output_annotator_b": "eval/annotation_tasks/parsing.relabel.round1.annotator_b.jsonl"
+}
