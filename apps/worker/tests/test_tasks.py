@@ -146,6 +146,259 @@ def test_parse_trial_success(monkeypatch: pytest.MonkeyPatch) -> None:
     assert fake_conn.rollbacks == 0
 
 
+def test_parse_trial_llm_success(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("DATABASE_URL", "postgresql://test:test@localhost:5432/testdb")
+
+    fake_conn = _FakeConn()
+    captured = {}
+    logs = []
+    usage_logs = []
+
+    monkeypatch.setattr(tasks.psycopg, "connect", lambda _: fake_conn)
+    monkeypatch.setattr(tasks, "_ensure_tables", lambda conn: None)
+    monkeypatch.setattr(tasks, "_is_llm_budget_exceeded", lambda conn, usage_date: False)
+    monkeypatch.setattr(tasks, "_daily_llm_token_usage", lambda conn, usage_date: 30)
+    monkeypatch.setattr(tasks, "_read_llm_daily_token_budget", lambda: 200)
+    monkeypatch.setattr(
+        tasks,
+        "_fetch_trial_for_parse",
+        lambda conn, nct_id: {
+            "id": "trial-uuid",
+            "nct_id": nct_id,
+            "eligibility_text": "Female participants only",
+        },
+    )
+    monkeypatch.setattr(
+        tasks,
+        "parse_criteria_llm_v1_with_fallback",
+        lambda text: (
+            [
+                {
+                    "id": "rule-1",
+                    "type": "INCLUSION",
+                    "field": "sex",
+                    "operator": "=",
+                    "value": "female",
+                    "unit": None,
+                    "time_window": None,
+                    "certainty": "high",
+                    "evidence_text": "Female participants only",
+                    "source_span": {"start": 0, "end": 24},
+                }
+            ],
+            {
+                "parser_source": "llm_v1",
+                "fallback_used": False,
+                "fallback_reason": None,
+                "llm_usage": {
+                    "prompt_tokens": 10,
+                    "completion_tokens": 20,
+                    "total_tokens": 30,
+                },
+            },
+        ),
+    )
+
+    def _fake_upsert(conn, *, trial_id, parser_version, criteria_json, coverage_stats):
+        captured["trial_id"] = trial_id
+        captured["parser_version"] = parser_version
+        captured["criteria_json"] = criteria_json
+        captured["coverage_stats"] = coverage_stats
+
+    def _fake_write_log(
+        conn, *, run_id, nct_id, parser_version, status, error_message
+    ) -> None:
+        logs.append(
+            {
+                "run_id": run_id,
+                "nct_id": nct_id,
+                "parser_version": parser_version,
+                "status": status,
+                "error_message": error_message,
+            }
+        )
+
+    monkeypatch.setattr(tasks, "_upsert_trial_criteria", _fake_upsert)
+    monkeypatch.setattr(tasks, "_write_parse_log", _fake_write_log)
+    monkeypatch.setattr(
+        tasks,
+        "_write_llm_usage_log",
+        lambda conn, *, run_id, nct_id, parser_version, usage: usage_logs.append(
+            {
+                "run_id": run_id,
+                "nct_id": nct_id,
+                "parser_version": parser_version,
+                "usage": usage,
+            }
+        ),
+    )
+
+    stats = parse_trial("NCT123", parser_version="llm_v1")
+
+    assert stats.nct_id == "NCT123"
+    assert stats.parser_version == "llm_v1"
+    assert stats.status == "SUCCESS"
+    assert stats.rule_count == 1
+    assert stats.unknown_count == 0
+    assert captured["trial_id"] == "trial-uuid"
+    assert captured["parser_version"] == "llm_v1"
+    assert captured["coverage_stats"]["parser_source"] == "llm_v1"
+    assert captured["coverage_stats"]["fallback_used"] is False
+    assert captured["coverage_stats"]["llm_usage"]["total_tokens"] == 30
+    assert captured["coverage_stats"]["llm_budget"]["daily_token_budget"] == 200
+    assert captured["coverage_stats"]["llm_budget"]["daily_tokens_used"] == 30
+    assert usage_logs and usage_logs[0]["usage"]["total_tokens"] == 30
+    assert logs[-1]["status"] == "SUCCESS"
+    assert logs[-1]["error_message"] is None
+    assert fake_conn.rollbacks == 0
+
+
+def test_parse_trial_llm_fallback_success(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("DATABASE_URL", "postgresql://test:test@localhost:5432/testdb")
+
+    fake_conn = _FakeConn()
+    captured = {}
+    usage_logs = []
+
+    monkeypatch.setattr(tasks.psycopg, "connect", lambda _: fake_conn)
+    monkeypatch.setattr(tasks, "_ensure_tables", lambda conn: None)
+    monkeypatch.setattr(tasks, "_is_llm_budget_exceeded", lambda conn, usage_date: False)
+    monkeypatch.setattr(tasks, "_daily_llm_token_usage", lambda conn, usage_date: 0)
+    monkeypatch.setattr(tasks, "_read_llm_daily_token_budget", lambda: 200)
+    monkeypatch.setattr(
+        tasks,
+        "_fetch_trial_for_parse",
+        lambda conn, nct_id: {
+            "id": "trial-uuid",
+            "nct_id": nct_id,
+            "eligibility_text": "Adults only",
+        },
+    )
+    monkeypatch.setattr(
+        tasks,
+        "parse_criteria_llm_v1_with_fallback",
+        lambda text: (
+            [
+                {
+                    "id": "rule-1",
+                    "type": "INCLUSION",
+                    "field": "age",
+                    "operator": ">=",
+                    "value": 18,
+                    "unit": "years",
+                    "time_window": None,
+                    "certainty": "high",
+                    "evidence_text": "Adults only",
+                    "source_span": {"start": 0, "end": 11},
+                }
+            ],
+            {
+                "parser_source": "rule_v1",
+                "fallback_used": True,
+                "fallback_reason": "llm parser disabled",
+                "llm_usage": None,
+            },
+        ),
+    )
+    monkeypatch.setattr(tasks, "_write_parse_log", lambda *args, **kwargs: None)
+
+    def _fake_upsert(conn, *, trial_id, parser_version, criteria_json, coverage_stats):
+        captured["parser_version"] = parser_version
+        captured["coverage_stats"] = coverage_stats
+
+    monkeypatch.setattr(tasks, "_upsert_trial_criteria", _fake_upsert)
+    monkeypatch.setattr(
+        tasks,
+        "_write_llm_usage_log",
+        lambda conn, *, run_id, nct_id, parser_version, usage: usage_logs.append(
+            usage
+        ),
+    )
+
+    stats = parse_trial("NCT234", parser_version="llm_v1")
+
+    assert stats.status == "SUCCESS"
+    assert stats.parser_version == "llm_v1"
+    assert stats.rule_count == 1
+    assert captured["parser_version"] == "llm_v1"
+    assert captured["coverage_stats"]["parser_source"] == "rule_v1"
+    assert captured["coverage_stats"]["fallback_used"] is True
+    assert "disabled" in captured["coverage_stats"]["fallback_reason"]
+    assert captured["coverage_stats"]["llm_budget"]["daily_tokens_used"] == 0
+    assert usage_logs == []
+    assert fake_conn.rollbacks == 0
+
+
+def test_parse_trial_llm_budget_exceeded_skips_llm_parser(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("DATABASE_URL", "postgresql://test:test@localhost:5432/testdb")
+
+    fake_conn = _FakeConn()
+    captured = {}
+
+    monkeypatch.setattr(tasks.psycopg, "connect", lambda _: fake_conn)
+    monkeypatch.setattr(tasks, "_ensure_tables", lambda conn: None)
+    monkeypatch.setattr(tasks, "_is_llm_budget_exceeded", lambda conn, usage_date: True)
+    monkeypatch.setattr(tasks, "_daily_llm_token_usage", lambda conn, usage_date: 200)
+    monkeypatch.setattr(tasks, "_read_llm_daily_token_budget", lambda: 200)
+    monkeypatch.setattr(
+        tasks,
+        "_fetch_trial_for_parse",
+        lambda conn, nct_id: {
+            "id": "trial-uuid",
+            "nct_id": nct_id,
+            "eligibility_text": "Adults only",
+        },
+    )
+    monkeypatch.setattr(
+        tasks,
+        "parse_criteria_llm_v1_with_fallback",
+        lambda text: (_ for _ in ()).throw(
+            AssertionError("llm parser should not be called when budget exceeded")
+        ),
+    )
+    monkeypatch.setattr(
+        tasks,
+        "parse_criteria_v1",
+        lambda text: [
+            {
+                "id": "rule-1",
+                "type": "INCLUSION",
+                "field": "age",
+                "operator": ">=",
+                "value": 18,
+                "unit": "years",
+                "time_window": None,
+                "certainty": "high",
+                "evidence_text": "Adults only",
+                "source_span": {"start": 0, "end": 11},
+            }
+        ],
+    )
+    monkeypatch.setattr(tasks, "_write_parse_log", lambda *args, **kwargs: None)
+    monkeypatch.setattr(
+        tasks, "_write_llm_usage_log", lambda *args, **kwargs: (_ for _ in ()).throw(
+            AssertionError("llm usage should not be logged when budget exceeded")
+        )
+    )
+
+    def _fake_upsert(conn, *, trial_id, parser_version, criteria_json, coverage_stats):
+        captured["parser_version"] = parser_version
+        captured["coverage_stats"] = coverage_stats
+
+    monkeypatch.setattr(tasks, "_upsert_trial_criteria", _fake_upsert)
+
+    stats = parse_trial("NCT777", parser_version="llm_v1")
+
+    assert stats.status == "SUCCESS"
+    assert captured["parser_version"] == "llm_v1"
+    assert captured["coverage_stats"]["parser_source"] == "rule_v1"
+    assert captured["coverage_stats"]["fallback_used"] is True
+    assert "budget exceeded" in captured["coverage_stats"]["fallback_reason"]
+    assert captured["coverage_stats"]["llm_budget"]["budget_exceeded"] is True
+
+
 def test_parse_trial_records_failed_log(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("DATABASE_URL", "postgresql://test:test@localhost:5432/testdb")
 
@@ -191,6 +444,49 @@ def test_parse_trial_records_failed_log(monkeypatch: pytest.MonkeyPatch) -> None
     assert "parser crashed" in str(logs[-1]["error_message"])
     assert logs[-1]["nct_id"] == "NCT999"
     assert logs[-1]["parser_version"] == "rule_v1"
+    assert fake_conn.rollbacks == 1
+
+
+def test_parse_trial_rejects_unknown_parser_version(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("DATABASE_URL", "postgresql://test:test@localhost:5432/testdb")
+
+    fake_conn = _FakeConn()
+    logs = []
+
+    monkeypatch.setattr(tasks.psycopg, "connect", lambda _: fake_conn)
+    monkeypatch.setattr(tasks, "_ensure_tables", lambda conn: None)
+    monkeypatch.setattr(
+        tasks,
+        "_fetch_trial_for_parse",
+        lambda conn, nct_id: {
+            "id": "trial-uuid",
+            "nct_id": nct_id,
+            "eligibility_text": "Adults only",
+        },
+    )
+    monkeypatch.setattr(tasks, "_upsert_trial_criteria", lambda *args, **kwargs: None)
+
+    def _fake_write_log(
+        conn, *, run_id, nct_id, parser_version, status, error_message
+    ) -> None:
+        logs.append(
+            {
+                "status": status,
+                "error_message": error_message,
+                "parser_version": parser_version,
+            }
+        )
+
+    monkeypatch.setattr(tasks, "_write_parse_log", _fake_write_log)
+
+    with pytest.raises(ValueError, match="unsupported parser_version: bad_version"):
+        parse_trial("NCT100", parser_version="bad_version")
+
+    assert logs[-1]["status"] == "FAILED"
+    assert logs[-1]["parser_version"] == "bad_version"
+    assert "unsupported parser_version" in str(logs[-1]["error_message"])
     assert fake_conn.rollbacks == 1
 
 

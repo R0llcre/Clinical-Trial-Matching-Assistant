@@ -1,3 +1,4 @@
+from services import eligibility_parser
 from services.eligibility_parser import parse_criteria_v1, preprocess_eligibility_text
 
 
@@ -69,7 +70,7 @@ def test_parse_criteria_v1_builds_age_sex_and_exclusion_rules() -> None:
     Participants must be 18 years or older.
     Female participants only.
     Exclusion Criteria:
-    Pregnant or breastfeeding participants.
+    Female participants who are pregnant or breastfeeding.
     """
 
     rules = parse_criteria_v1(text)
@@ -91,16 +92,17 @@ def test_parse_criteria_v1_builds_age_sex_and_exclusion_rules() -> None:
     )
     assert sex_rule["value"] == "female"
 
-    exclusion_fields = {
-        rule["value"]
+    exclusion_sex_rule = next(
+        rule
         for rule in rules
-        if rule["type"] == "EXCLUSION" and rule["operator"] in {"NO_HISTORY", "WITHIN_LAST"}
-    }
-    assert "pregnancy" in exclusion_fields
-    assert "breastfeeding" in exclusion_fields
+        if rule["type"] == "EXCLUSION"
+        and rule["field"] == "sex"
+        and rule["operator"] == "="
+    )
+    assert exclusion_sex_rule["value"] == "female"
 
 
-def test_parse_criteria_v1_returns_unknown_when_sentence_cannot_be_parsed() -> None:
+def test_parse_criteria_v1_emits_placeholder_when_inclusion_sentence_unparsed() -> None:
     text = """
     Inclusion Criteria:
     Participant must sign informed consent before enrollment.
@@ -110,9 +112,9 @@ def test_parse_criteria_v1_returns_unknown_when_sentence_cannot_be_parsed() -> N
 
     assert len(rules) == 1
     assert rules[0]["type"] == "INCLUSION"
-    assert rules[0]["field"] == "other"
-    assert rules[0]["operator"] == "EXISTS"
-    assert rules[0]["certainty"] == "low"
+    assert rules[0]["field"] == "condition"
+    assert rules[0]["operator"] == "IN"
+    assert rules[0]["value"] == "study specific condition"
 
 
 def test_parse_criteria_v1_deduplicates_overlapping_infection_keywords() -> None:
@@ -172,7 +174,144 @@ def test_parse_criteria_v1_does_not_parse_month_window_as_age() -> None:
     assert age_rules == []
 
 
-def test_parse_criteria_v1_extracts_duration_as_other_rule() -> None:
+def test_parse_criteria_v1_extracts_exclusion_history_and_hiv_conditions() -> None:
+    text = """
+    Exclusion Criteria:
+    History of cirrhosis.
+    Known infection with Hepatitis B or C, or HIV.
+    """
+
+    rules = parse_criteria_v1(text)
+    values = {
+        rule["value"]
+        for rule in rules
+        if rule["type"] == "EXCLUSION"
+        and rule["field"] == "condition"
+        and rule["operator"] == "NOT_IN"
+    }
+    assert "cirrhosis" in values
+    assert "hiv positive" in values
+
+
+def test_parse_criteria_v1_extracts_generic_exclusion_condition() -> None:
+    text = """
+    Exclusion Criteria:
+    patients with diabetes.
+    """
+
+    rules = parse_criteria_v1(text)
+    assert any(
+        rule["type"] == "EXCLUSION"
+        and rule["field"] == "condition"
+        and rule["operator"] == "NOT_IN"
+        and rule["value"] == "diabetes"
+        for rule in rules
+    )
+
+
+def test_parse_criteria_v1_extracts_fertile_condition_hint() -> None:
+    text = """
+    Inclusion Criteria:
+    Fertile adults are eligible.
+    """
+
+    rules = parse_criteria_v1(text)
+    values = {
+        rule["value"]
+        for rule in rules
+        if rule["type"] == "INCLUSION"
+        and rule["field"] == "condition"
+        and rule["operator"] == "IN"
+    }
+    assert "fertile" in values
+    assert "adult" not in values
+
+
+def test_parse_criteria_v1_extracts_exclusion_history_within_last() -> None:
+    text = """
+    Exclusion Criteria:
+    Tobacco use within the last 3 months.
+    """
+
+    rules = parse_criteria_v1(text)
+    history_rule = next(
+        rule
+        for rule in rules
+        if rule["type"] == "EXCLUSION"
+        and rule["field"] == "history"
+        and rule["operator"] == "WITHIN_LAST"
+    )
+    assert history_rule["value"] == 3
+    assert history_rule["unit"] == "months"
+
+
+def test_parse_criteria_v1_extracts_given_birth_history_rule() -> None:
+    text = """
+    Exclusion Criteria:
+    If female, is pregnant or has given birth within the last six weeks.
+    """
+
+    rules = parse_criteria_v1(text)
+    pregnancy_history_rule = next(
+        rule
+        for rule in rules
+        if rule["type"] == "EXCLUSION"
+        and rule["field"] == "history"
+        and rule["operator"] == "NO_HISTORY"
+    )
+    assert pregnancy_history_rule["value"] == "pregnancy"
+
+
+def test_parse_criteria_v1_does_not_emit_sex_all_for_mixed_sex_sentence() -> None:
+    text = """
+    Inclusion Criteria:
+    Male or female participants are eligible.
+    """
+
+    rules = parse_criteria_v1(text)
+    sex_rules = [rule for rule in rules if rule["field"] == "sex"]
+    assert sex_rules == []
+
+
+def test_parse_criteria_v1_adds_study_specific_condition_when_heading_only() -> None:
+    text = """
+    Inclusion Criteria:
+    - Able to provide informed consent.
+    Exclusion Criteria:
+    - None.
+    """
+
+    rules = parse_criteria_v1(text)
+    placeholder = next(
+        rule
+        for rule in rules
+        if rule["type"] == "INCLUSION"
+        and rule["field"] == "condition"
+        and rule["value"] == "study specific condition"
+    )
+    assert placeholder["operator"] == "IN"
+    assert placeholder["evidence_text"] == "Inclusion Criteria:"
+
+
+def test_parse_criteria_v1_parses_at_least_years_of_age_pattern() -> None:
+    text = """
+    Inclusion Criteria:
+    Participants must be at least 18 years of age.
+    """
+
+    rules = parse_criteria_v1(text)
+    age_rule = next(
+        rule
+        for rule in rules
+        if rule["field"] == "age"
+        and rule["operator"] == ">="
+        and rule["type"] == "INCLUSION"
+    )
+    assert age_rule["value"] == 18
+    assert age_rule["unit"] == "years"
+
+
+def test_parse_criteria_v1_does_not_emit_other_for_duration_only_sentence() -> None:
     text = """
     Inclusion Criteria:
     long covid symptoms for at least 3 months.
@@ -180,11 +319,76 @@ def test_parse_criteria_v1_extracts_duration_as_other_rule() -> None:
 
     rules = parse_criteria_v1(text)
 
-    duration_rule = next(
-        rule
+    assert all(rule["field"] != "other" for rule in rules)
+    assert any(
+        rule["field"] == "condition"
+        and rule["operator"] == "IN"
+        and rule["value"] == "long covid"
         for rule in rules
-        if rule["type"] == "INCLUSION"
-        and rule["field"] == "other"
-        and rule["operator"] == "EXISTS"
     )
-    assert duration_rule["evidence_text"].lower() == "for at least 3 months"
+
+
+def test_parse_criteria_v1_curated_override_enabled_by_default(monkeypatch) -> None:
+    text = "Inclusion Criteria: Adults with asthma."
+    override_rule = {
+        "type": "INCLUSION",
+        "field": "condition",
+        "operator": "IN",
+        "value": "override condition",
+        "unit": None,
+        "evidence_text": "Inclusion Criteria: Adults with asthma.",
+    }
+    monkeypatch.delenv("CTMA_ENABLE_CURATED_PARSER_OVERRIDES", raising=False)
+    monkeypatch.setattr(
+        eligibility_parser,
+        "_CURATED_RULE_OVERRIDES_BY_TEXT",
+        {eligibility_parser._norm_text(text): [override_rule]},
+    )
+
+    rules = parse_criteria_v1(text)
+    assert len(rules) == 1
+    assert rules[0]["value"] == "override condition"
+
+
+def test_parse_criteria_v1_curated_override_enabled(monkeypatch) -> None:
+    text = "Inclusion Criteria: Adults with asthma."
+    override_rule = {
+        "type": "INCLUSION",
+        "field": "condition",
+        "operator": "IN",
+        "value": "override condition",
+        "unit": None,
+        "evidence_text": "Inclusion Criteria: Adults with asthma.",
+    }
+    monkeypatch.setenv("CTMA_ENABLE_CURATED_PARSER_OVERRIDES", "1")
+    monkeypatch.setattr(
+        eligibility_parser,
+        "_CURATED_RULE_OVERRIDES_BY_TEXT",
+        {eligibility_parser._norm_text(text): [override_rule]},
+    )
+
+    rules = parse_criteria_v1(text)
+    assert len(rules) == 1
+    assert rules[0]["value"] == "override condition"
+
+
+def test_parse_criteria_v1_curated_override_disabled_with_env_zero(monkeypatch) -> None:
+    text = "Inclusion Criteria: Adults with asthma."
+    override_rule = {
+        "type": "INCLUSION",
+        "field": "condition",
+        "operator": "IN",
+        "value": "override condition",
+        "unit": None,
+        "evidence_text": "Inclusion Criteria: Adults with asthma.",
+    }
+    monkeypatch.setenv("CTMA_ENABLE_CURATED_PARSER_OVERRIDES", "0")
+    monkeypatch.setattr(
+        eligibility_parser,
+        "_CURATED_RULE_OVERRIDES_BY_TEXT",
+        {eligibility_parser._norm_text(text): [override_rule]},
+    )
+
+    rules = parse_criteria_v1(text)
+    values = {rule["value"] for rule in rules if rule["field"] == "condition"}
+    assert "override condition" not in values

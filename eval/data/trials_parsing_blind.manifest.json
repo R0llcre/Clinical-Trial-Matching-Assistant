@@ -1,0 +1,18 @@
+{
+  "deduped_trials": 60,
+  "input_rule_count": 896,
+  "kept_rule_count": 699,
+  "dropped_rule_count": 197,
+  "dropped_by_reason": {
+    "age_semantics_mismatch": 21,
+    "condition_negated_value": 6,
+    "history_semantics_mismatch": 48,
+    "lab_semantics_mismatch": 36,
+    "medication_semantics_mismatch": 84,
+    "sex_semantics_mismatch": 2
+  },
+  "source_files": [
+    "eval/annotations/trials_parsing_blind.round1.adjudicated.jsonl"
+  ],
+  "source_row_count": 60
+}

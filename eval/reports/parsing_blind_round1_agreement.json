@@ -1,0 +1,16 @@
+{
+  "trial_count": 60,
+  "exact_trial_match_count": 0,
+  "exact_trial_match_rate": 0.0,
+  "rule_set_precision": 0.0097,
+  "rule_set_recall": 0.0338,
+  "rule_set_f1": 0.0151,
+  "tp": 7,
+  "fp": 715,
+  "fn": 200,
+  "mismatch_trial_count": 60,
+  "avg_jaccard": 0.0085,
+  "median_jaccard": 0.0,
+  "min_jaccard": 0.0,
+  "max_jaccard": 0.1667
+}
