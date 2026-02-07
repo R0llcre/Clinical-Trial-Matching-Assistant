@@ -26,6 +26,8 @@ M5-1 LLM 解析器
 - `LLM_CRITICAL_FIELDS`：默认 `age,sex,history`，LLM 缺失时由 `rule_v1` 回填。
 - `LLM_MIN_FINAL_RULES`：默认 `1`，低于阈值触发回退。
 - `LLM_MIN_RULE_COVERAGE_RATIO`：默认 `0.25`，若 `LLM 规则数 / rule_v1 规则数` 低于阈值触发回退。
+- `CTMA_ENABLE_CURATED_PARSER_OVERRIDES`：默认 `0`，仅在显式调试时开启，避免评估泄漏。
+- `CTMA_CURATED_OVERRIDE_PATHS`：默认空，开启 curated override 时需显式提供数据路径。
 
 M5-2 成本控制
 目的

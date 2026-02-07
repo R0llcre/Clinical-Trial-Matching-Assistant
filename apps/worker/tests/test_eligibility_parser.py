@@ -328,7 +328,7 @@ def test_parse_criteria_v1_does_not_emit_other_for_duration_only_sentence() -> N
     )
 
 
-def test_parse_criteria_v1_curated_override_enabled_by_default(monkeypatch) -> None:
+def test_parse_criteria_v1_curated_override_disabled_by_default(monkeypatch) -> None:
     text = "Inclusion Criteria: Adults with asthma."
     override_rule = {
         "type": "INCLUSION",
@@ -346,8 +346,8 @@ def test_parse_criteria_v1_curated_override_enabled_by_default(monkeypatch) -> N
     )
 
     rules = parse_criteria_v1(text)
-    assert len(rules) == 1
-    assert rules[0]["value"] == "override condition"
+    values = {rule["value"] for rule in rules if rule["field"] == "condition"}
+    assert "override condition" not in values
 
 
 def test_parse_criteria_v1_curated_override_enabled(monkeypatch) -> None:

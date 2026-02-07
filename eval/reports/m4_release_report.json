@@ -1,10 +1,10 @@
 {
-  "generated_at_utc": "2026-02-07T01:45:04.397019+00:00",
-  "overall_status": "PASS",
+  "generated_at_utc": "2026-02-07T02:19:52.761801+00:00",
+  "overall_status": "FAIL",
   "gate_status": {
     "smoke": "PASS",
-    "release": "PASS",
-    "generalization": "PASS"
+    "release": "FAIL",
+    "generalization": "FAIL"
   },
   "inputs": {
     "smoke_report_kind": "m4_evaluation_report",
@@ -113,15 +113,15 @@
       "id": "release.parsing_f1",
       "source": "parsing_release_report",
       "comparator": ">=",
-      "actual": 0.9955,
+      "actual": 0.5411,
       "target": 0.8,
-      "status": "PASS"
+      "status": "FAIL"
     },
     {
       "id": "release.parsing_hallucination_rate",
       "source": "parsing_release_report",
       "comparator": "<=",
-      "actual": 0.0,
+      "actual": 0.0024,
       "target": 0.02,
       "status": "PASS"
     },
@@ -137,9 +137,9 @@
       "id": "generalization.blind_parsing_f1",
       "source": "parsing_blind_report",
       "comparator": ">=",
-      "actual": 1.0,
+      "actual": 0.3136,
       "target": 0.8,
-      "status": "PASS"
+      "status": "FAIL"
     },
     {
       "id": "generalization.blind_parsing_hallucination_rate",
@@ -153,9 +153,9 @@
       "id": "generalization.release_blind_f1_gap",
       "source": "parsing_release_report+parsing_blind_report",
       "comparator": "<=",
-      "actual": 0.0,
+      "actual": 0.2275,
       "target": 0.1,
-      "status": "PASS"
+      "status": "FAIL"
     }
   ],
   "summary": {
@@ -174,14 +174,14 @@
       "parsing_trial_count": 100,
       "parsing_rule_count": 358,
       "parsing_unique_fields": 7,
-      "parsing_f1": 0.9955,
-      "parsing_hallucination_rate": 0.0
+      "parsing_f1": 0.5411,
+      "parsing_hallucination_rate": 0.0024
     },
     "generalization": {
       "blind_parsing_trial_count": 60,
-      "blind_parsing_f1": 1.0,
+      "blind_parsing_f1": 0.3136,
       "blind_parsing_hallucination_rate": 0.0,
-      "release_blind_f1_gap": 0.0
+      "release_blind_f1_gap": 0.2275
     }
   }
 }

@@ -3,11 +3,12 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 from collections import Counter
 from datetime import datetime, timezone
 from pathlib import Path
 from statistics import median
-from typing import Any, Dict, List, Sequence
+from typing import Any, Dict, List, Optional, Sequence
 
 from run_evaluation import (
     _load_gold_rules,
@@ -59,13 +60,14 @@ def build_report(
     *,
     trials: Sequence[Dict[str, Any]],
     predicted_rules_by_trial: Dict[str, List[Dict[str, Any]]],
+    runtime: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
     gold_rules = _load_gold_rules(trials)
     parse_metrics = compute_parse_metrics(gold_rules, predicted_rules_by_trial)
     hallucination_metrics = compute_hallucination_rate(trials, predicted_rules_by_trial)
     rule_stats = _collect_rule_stats(trials)
 
-    return {
+    report = {
         "generated_at_utc": datetime.now(timezone.utc).isoformat(),
         "dataset": {
             "trial_count": len(trials),
@@ -76,6 +78,9 @@ def build_report(
             "hallucination": hallucination_metrics,
         },
     }
+    if runtime:
+        report["runtime"] = runtime
+    return report
 
 
 def render_markdown(report: Dict[str, Any]) -> str:
@@ -90,6 +95,12 @@ def render_markdown(report: Dict[str, Any]) -> str:
     lines.append(f"- trial_count: {dataset['trial_count']}")
     lines.append(f"- gold_rule_count: {dataset['gold_rule_count']}")
     lines.append(f"- unique_fields: {dataset['unique_fields']}")
+    runtime = report.get("runtime") or {}
+    prediction_source = runtime.get("prediction_source")
+    if prediction_source:
+        lines.append(f"- prediction_source: {prediction_source}")
+    if runtime.get("curated_override_forced_off") is True:
+        lines.append("- curated_overrides_forced_off: true")
     lines.append(
         "- rules_per_trial(min/median/max): "
         f"{dataset['rules_per_trial']['min']}/"
@@ -134,15 +145,43 @@ def main() -> None:
         default="",
         help="Optional JSONL with fields nct_id/predicted_rules; empty means parse_criteria_v1.",
     )
+    parser.add_argument(
+        "--respect-curated-overrides",
+        action="store_true",
+        help=(
+            "When using in-process parser (without --predicted-rules), "
+            "keep CTMA_ENABLE_CURATED_PARSER_OVERRIDES as-is."
+        ),
+    )
     parser.add_argument("--output-md", default="eval/reports/parsing_release_report.md")
     parser.add_argument("--output-json", default="eval/reports/parsing_release_report.json")
     args = parser.parse_args()
 
     trials = load_jsonl(Path(args.trials))
-    predicted_rules_by_trial = generate_predicted_rules(trials, args.predicted_rules)
+    forced_off = False
+    previous_override_env = os.environ.get("CTMA_ENABLE_CURATED_PARSER_OVERRIDES")
+    if not args.predicted_rules and not args.respect_curated_overrides:
+        os.environ["CTMA_ENABLE_CURATED_PARSER_OVERRIDES"] = "0"
+        forced_off = True
+    try:
+        predicted_rules_by_trial = generate_predicted_rules(trials, args.predicted_rules)
+    finally:
+        if previous_override_env is None:
+            os.environ.pop("CTMA_ENABLE_CURATED_PARSER_OVERRIDES", None)
+        else:
+            os.environ["CTMA_ENABLE_CURATED_PARSER_OVERRIDES"] = previous_override_env
+
+    prediction_source = (
+        "predicted_rules_file" if args.predicted_rules else "rule_v1"
+    )
     report = build_report(
         trials=trials,
         predicted_rules_by_trial=predicted_rules_by_trial,
+        runtime={
+            "prediction_source": prediction_source,
+            "predicted_rules_path": args.predicted_rules or None,
+            "curated_override_forced_off": forced_off,
+        },
     )
 
     output_md = Path(args.output_md)

@@ -1,5 +1,5 @@
 {
-  "generated_at_utc": "2026-02-07T01:45:04.287840+00:00",
+  "generated_at_utc": "2026-02-07T02:19:44.746746+00:00",
   "dataset": {
     "trial_count": 100,
     "gold_rule_count": 358,
@@ -21,17 +21,22 @@
   },
   "metrics": {
     "parsing": {
-      "precision": 0.9911,
-      "recall": 1.0,
-      "f1": 0.9955,
-      "tp": 333,
-      "fp": 3,
-      "fn": 0
+      "precision": 0.5052,
+      "recall": 0.5826,
+      "f1": 0.5411,
+      "tp": 194,
+      "fp": 190,
+      "fn": 139
     },
     "hallucination": {
-      "hallucination_rate": 0.0,
-      "hallucinated_rules": 0,
-      "total_predicted_rules": 336
+      "hallucination_rate": 0.0024,
+      "hallucinated_rules": 1,
+      "total_predicted_rules": 416
     }
+  },
+  "runtime": {
+    "prediction_source": "rule_v1",
+    "predicted_rules_path": null,
+    "curated_override_forced_off": true
   }
 }

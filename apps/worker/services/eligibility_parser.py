@@ -71,10 +71,7 @@ _COMMON_EXCLUSION_PATTERNS = (
     ("hiv", "condition", "NOT_IN", "hiv positive"),
 )
 _INCLUSION_HEADING_MARKER = re.compile(r"\binclusion(?: criteria)?\s*[:\-]", re.I)
-_DEFAULT_CURATED_OVERRIDE_FILES = (
-    "eval/data/trials_parsing_release.jsonl",
-    "eval/data/trials_parsing_blind.jsonl",
-)
+_DEFAULT_CURATED_OVERRIDE_FILES: Tuple[str, ...] = ()
 _CURATED_RULE_OVERRIDES_BY_TEXT: Optional[Dict[str, List[Dict[str, Any]]]] = None
 
 
@@ -190,9 +187,7 @@ def _parse_with_curated_overrides(
 
 
 def _curated_override_enabled() -> bool:
-    value = os.getenv("CTMA_ENABLE_CURATED_PARSER_OVERRIDES")
-    if value is None:
-        return True
+    value = os.getenv("CTMA_ENABLE_CURATED_PARSER_OVERRIDES", "")
     return value.strip().lower() in {"1", "true", "yes", "on"}
 
 

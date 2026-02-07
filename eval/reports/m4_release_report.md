@@ -1,17 +1,17 @@
 # M4 Release Gate Report
 
-- generated_at_utc: 2026-02-07T01:45:04.397019+00:00
-- overall_status: PASS
+- generated_at_utc: 2026-02-07T02:19:52.761801+00:00
+- overall_status: FAIL
 - smoke_gate: PASS
-- release_gate: PASS
+- release_gate: FAIL
 
 ## Gate Summary
 
 | Gate | Status |
 | --- | :---: |
 | smoke | PASS |
-| release | PASS |
-| generalization | PASS |
+| release | FAIL |
+| generalization | FAIL |
 
 ## Check Details
 
@@ -29,13 +29,13 @@
 | release.parsing_trial_count | parsing_release_report | 100.0 | >= | 100.0 | PASS |
 | release.parsing_rule_count | parsing_release_report | 358.0 | >= | 300.0 | PASS |
 | release.parsing_unique_fields | parsing_release_report | 7.0 | >= | 6.0 | PASS |
-| release.parsing_f1 | parsing_release_report | 0.9955 | >= | 0.8 | PASS |
-| release.parsing_hallucination_rate | parsing_release_report | 0.0 | <= | 0.02 | PASS |
+| release.parsing_f1 | parsing_release_report | 0.5411 | >= | 0.8 | FAIL |
+| release.parsing_hallucination_rate | parsing_release_report | 0.0024 | <= | 0.02 | PASS |
 | generalization.blind_parsing_trial_count | parsing_blind_report | 60.0 | >= | 30.0 | PASS |
-| generalization.blind_parsing_f1 | parsing_blind_report | 1.0 | >= | 0.8 | PASS |
+| generalization.blind_parsing_f1 | parsing_blind_report | 0.3136 | >= | 0.8 | FAIL |
 | generalization.blind_parsing_hallucination_rate | parsing_blind_report | 0.0 | <= | 0.02 | PASS |
-| generalization.release_blind_f1_gap | parsing_release_report+parsing_blind_report | 0.0 | <= | 0.1 | PASS |
+| generalization.release_blind_f1_gap | parsing_release_report+parsing_blind_report | 0.2275 | <= | 0.1 | FAIL |
 
 ## Release Readiness Interpretation
 
-- M4 evaluation is release-ready under configured gate policy.
+- M4 evaluation is not release-ready. Fix failed checks before merge.

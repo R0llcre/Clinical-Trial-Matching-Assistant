@@ -1,19 +1,21 @@
 # Parsing Release Report
 
-- generated_at_utc: 2026-02-07T01:45:04.287840+00:00
+- generated_at_utc: 2026-02-07T02:19:44.746746+00:00
 - trial_count: 100
 - gold_rule_count: 358
 - unique_fields: 7
+- prediction_source: rule_v1
+- curated_overrides_forced_off: true
 - rules_per_trial(min/median/max): 0/3.0/15
 
 ## Metric Summary
 
 | Metric | Value |
 | --- | ---: |
-| Parsing Precision | 0.9911 |
-| Parsing Recall | 1.0 |
-| Parsing F1 | 0.9955 |
-| Hallucination Rate | 0.0 |
+| Parsing Precision | 0.5052 |
+| Parsing Recall | 0.5826 |
+| Parsing F1 | 0.5411 |
+| Hallucination Rate | 0.0024 |
 
 ## Field Distribution
 
