@@ -192,6 +192,7 @@ def test_parse_criteria_llm_v1_with_fallback_enforces_hallucination_gate(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setenv("LLM_HALLUCINATION_THRESHOLD", "0.2")
+    monkeypatch.setenv("LLM_CONTRACT_POSTPROCESS_ENABLED", "0")
     monkeypatch.setattr(
         parser,
         "parse_criteria_llm_v1",
@@ -247,6 +248,7 @@ def test_parse_criteria_llm_v1_with_fallback_accepts_aligned_evidence(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setenv("LLM_HALLUCINATION_THRESHOLD", "0.2")
+    monkeypatch.setenv("LLM_CONTRACT_POSTPROCESS_ENABLED", "0")
     monkeypatch.setattr(
         parser,
         "parse_criteria_llm_v1",
@@ -282,6 +284,7 @@ def test_parse_criteria_llm_v1_with_fallback_filters_hallucinated_rules(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setenv("LLM_HALLUCINATION_THRESHOLD", "0.2")
+    monkeypatch.setenv("LLM_CONTRACT_POSTPROCESS_ENABLED", "0")
     monkeypatch.setattr(
         parser,
         "parse_criteria_llm_v1",
@@ -442,3 +445,87 @@ def test_parse_criteria_llm_v1_with_fallback_quality_gate_forces_rule_parser(
     assert "rule coverage below threshold" in str(metadata["fallback_reason"])
     assert metadata["llm_usage"]["total_tokens"] == 10
     assert metadata["llm_quality_gate"]["force_fallback"] is True
+
+
+def test_postprocess_rewrites_condition_equals_under_negative_evidence() -> None:
+    rules, dropped, rewritten = parser._postprocess_llm_rules(
+        [
+            {
+                "id": "rule-1",
+                "type": "EXCLUSION",
+                "field": "condition",
+                "operator": "=",
+                "value": "hiv positive",
+                "unit": None,
+                "time_window": None,
+                "certainty": "high",
+                "evidence_text": "No HIV infection allowed",
+                "source_span": {"start": 0, "end": 26},
+            }
+        ],
+        "No HIV infection allowed",
+    )
+
+    assert dropped == 0
+    assert rewritten == 1
+    assert rules[0]["operator"] == "NOT_IN"
+
+
+def test_postprocess_drops_unsupported_field_operator_combo() -> None:
+    rules, dropped, rewritten = parser._postprocess_llm_rules(
+        [
+            {
+                "id": "rule-1",
+                "type": "INCLUSION",
+                "field": "other",
+                "operator": "NOT_EXISTS",
+                "value": None,
+                "unit": None,
+                "time_window": None,
+                "certainty": "low",
+                "evidence_text": "At least 3 prior visits",
+                "source_span": {"start": 0, "end": 23},
+            }
+        ],
+        "At least 3 prior visits",
+    )
+
+    assert rules == []
+    assert dropped == 1
+    assert rewritten == 0
+
+
+def test_parse_with_fallback_reports_contract_postprocess_metadata(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("LLM_CONTRACT_POSTPROCESS_ENABLED", "1")
+    monkeypatch.setenv("LLM_HALLUCINATION_THRESHOLD", "1.0")
+    monkeypatch.setenv("LLM_MIN_RULE_COVERAGE_RATIO", "0.0")
+    monkeypatch.setattr(
+        parser,
+        "parse_criteria_llm_v1",
+        lambda text: (
+            [
+                {
+                    "id": "rule-1",
+                    "type": "EXCLUSION",
+                    "field": "condition",
+                    "operator": "=",
+                    "value": "hiv positive",
+                    "unit": None,
+                    "time_window": None,
+                    "certainty": "high",
+                    "evidence_text": "No HIV infection allowed",
+                    "source_span": {"start": 0, "end": 26},
+                }
+            ],
+            {"prompt_tokens": 2, "completion_tokens": 1, "total_tokens": 3},
+        ),
+    )
+    monkeypatch.setattr(parser, "parse_criteria_v1", lambda text: [])
+
+    _, metadata = parser.parse_criteria_llm_v1_with_fallback("No HIV infection allowed")
+
+    assert metadata["llm_contract_postprocess_enabled"] is True
+    assert metadata["llm_contract_postprocess_rewritten_rules"] == 1
+    assert metadata["llm_contract_postprocess_dropped_rules"] == 0

@@ -11,11 +11,13 @@ from services.eligibility_parser import parse_criteria_v1
 
 _DEFAULT_OPENAI_BASE_URL = "https://api.openai.com/v1"
 _DEFAULT_OPENAI_MODEL = "gpt-4o-mini"
+_DEFAULT_OPENAI_PROMPT_STYLE = "strict_v1"
 _DEFAULT_TIMEOUT_SECONDS = 60.0
 _DEFAULT_HALLUCINATION_THRESHOLD = 0.02
 _DEFAULT_CRITICAL_FIELDS = ("age", "sex", "history")
 _DEFAULT_MIN_FINAL_RULES = 1
 _DEFAULT_MIN_RULE_COVERAGE_RATIO = 0.25
+_DEFAULT_CONTRACT_POSTPROCESS_ENABLED = True
 
 _ALLOWED_TYPES = {"INCLUSION", "EXCLUSION"}
 _ALLOWED_FIELDS = {
@@ -53,6 +55,63 @@ _OPERATOR_ALIASES = {
     ">": ">=",
     "<": "<=",
 }
+_NEGATIVE_EVIDENCE_MARKERS = (
+    " no ",
+    " not ",
+    " without ",
+    " excluded ",
+    " exclusion ",
+    " cannot ",
+    " must not ",
+    " negative",
+)
+_VALUE_MATCH_STOPWORDS = {
+    "and",
+    "or",
+    "the",
+    "with",
+    "without",
+    "from",
+    "for",
+    "into",
+    "onto",
+    "study",
+    "criteria",
+    "criterion",
+    "patient",
+    "patients",
+    "participant",
+    "participants",
+    "subject",
+    "subjects",
+    "history",
+    "disease",
+    "condition",
+    "disorder",
+}
+_CONTRACT_FIELD_OPERATOR_ALLOWLIST = {
+    ("age", ">="),
+    ("age", "<="),
+    ("sex", "="),
+    ("sex", "IN"),
+    ("condition", "IN"),
+    ("condition", "NOT_IN"),
+    ("history", "IN"),
+    ("history", "NO_HISTORY"),
+    ("history", "WITHIN_LAST"),
+    ("history", "EXISTS"),
+    ("medication", "IN"),
+    ("medication", "NOT_IN"),
+    ("medication", "WITHIN_LAST"),
+    ("procedure", "IN"),
+    ("procedure", "NOT_IN"),
+    ("procedure", "WITHIN_LAST"),
+    ("lab", "IN"),
+    ("lab", ">="),
+    ("lab", "<="),
+    ("other", "IN"),
+    ("other", "EXISTS"),
+}
 
 
 class LLMParserError(RuntimeError):
@@ -67,8 +126,15 @@ def parse_criteria_llm_v1_with_fallback(
     critical_fields = _read_critical_fields()
     min_final_rules = _read_min_final_rules()
     min_rule_coverage_ratio = _read_min_rule_coverage_ratio()
+    contract_postprocess_enabled = _read_contract_postprocess_enabled()
     try:
         rules, usage = parse_criteria_llm_v1(eligibility_text)
+        postprocess_dropped_rules = 0
+        postprocess_rewritten_rules = 0
+        if contract_postprocess_enabled:
+            rules, postprocess_dropped_rules, postprocess_rewritten_rules = (
+                _postprocess_llm_rules(rules, eligibility_text)
+            )
         llm_quality = evaluate_evidence_alignment(rules, eligibility_text)
         dropped_hallucinated_rules = 0
         candidate_rules = list(rules)
@@ -112,6 +178,9 @@ def parse_criteria_llm_v1_with_fallback(
                 "llm_supplemented_rules": supplemented_count,
                 "llm_supplemented_fields": supplemented_fields,
                 "llm_quality_gate": gate_context,
+                "llm_contract_postprocess_enabled": contract_postprocess_enabled,
+                "llm_contract_postprocess_dropped_rules": postprocess_dropped_rules,
+                "llm_contract_postprocess_rewritten_rules": postprocess_rewritten_rules,
             }
 
         final_quality = evaluate_evidence_alignment(final_rules, eligibility_text)
@@ -138,6 +207,9 @@ def parse_criteria_llm_v1_with_fallback(
             "llm_supplemented_rules": supplemented_count,
             "llm_supplemented_fields": supplemented_fields,
             "llm_quality_gate": gate_context,
+            "llm_contract_postprocess_enabled": contract_postprocess_enabled,
+            "llm_contract_postprocess_dropped_rules": postprocess_dropped_rules,
+            "llm_contract_postprocess_rewritten_rules": postprocess_rewritten_rules,
         }
     except LLMParserError as exc:
         fallback_rules = parse_criteria_v1(eligibility_text)
@@ -160,6 +232,9 @@ def parse_criteria_llm_v1_with_fallback(
                 "rule_coverage_ratio": 0.0,
                 "force_fallback": True,
             },
+            "llm_contract_postprocess_enabled": contract_postprocess_enabled,
+            "llm_contract_postprocess_dropped_rules": 0,
+            "llm_contract_postprocess_rewritten_rules": 0,
         }
 
 
@@ -189,6 +264,7 @@ def _llm_parser_enabled() -> bool:
 
 def _post_chat_completion(*, api_key: str, eligibility_text: str) -> Dict[str, Any]:
     model = os.getenv("OPENAI_MODEL", _DEFAULT_OPENAI_MODEL)
+    prompt_style = _read_prompt_style()
     base_url = os.getenv("OPENAI_BASE_URL", _DEFAULT_OPENAI_BASE_URL).rstrip("/")
     timeout_seconds = _read_timeout_seconds()
     url = f"{base_url}/chat/completions"
@@ -203,19 +279,7 @@ def _post_chat_completion(*, api_key: str, eligibility_text: str) -> Dict[str, A
         "messages": [
             {
                 "role": "system",
-                "content": (
-                    "You convert clinical-trial eligibility text into JSON rules. "
-                    "Output strict JSON object only with key 'rules'. "
-                    "Use this schema per rule: "
-                    "{id,type,field,operator,value,unit,time_window,certainty,"
-                    "evidence_text,source_span}. "
-                    "Allowed type: INCLUSION/EXCLUSION. "
-                    "Allowed field: age,sex,condition,medication,lab,procedure,history,other. "
-                    "Allowed operator: >=,<=,=,IN,NOT_IN,NO_HISTORY,WITHIN_LAST,EXISTS,NOT_EXISTS. "
-                    "Allowed certainty: high,medium,low. "
-                    "evidence_text must be a verbatim exact substring from the input text; never paraphrase. "
-                    "source_span is object with integer start/end or null."
-                ),
+                "content": _build_system_prompt(prompt_style),
             },
             {
                 "role": "user",
@@ -234,6 +298,43 @@ def _post_chat_completion(*, api_key: str, eligibility_text: str) -> Dict[str, A
             return response.json()
     except (httpx.RequestError, httpx.HTTPStatusError, ValueError) as exc:
         raise LLMParserError(f"llm request failed: {exc}") from exc
+
+
+def _read_prompt_style() -> str:
+    raw = os.getenv("OPENAI_PROMPT_STYLE", _DEFAULT_OPENAI_PROMPT_STYLE)
+    style = raw.strip().lower()
+    if style in {"strict_v1", "precision_v1", "recall_v1"}:
+        return style
+    return _DEFAULT_OPENAI_PROMPT_STYLE
+
+
+def _build_system_prompt(prompt_style: str) -> str:
+    base = (
+        "You convert clinical-trial eligibility text into JSON rules. "
+        "Output strict JSON object only with key 'rules'. "
+        "Use this schema per rule: "
+        "{id,type,field,operator,value,unit,time_window,certainty,"
+        "evidence_text,source_span}. "
+        "Allowed type: INCLUSION/EXCLUSION. "
+        "Allowed field: age,sex,condition,medication,lab,procedure,history,other. "
+        "Allowed operator: >=,<=,=,IN,NOT_IN,NO_HISTORY,WITHIN_LAST,EXISTS,NOT_EXISTS. "
+        "Allowed certainty: high,medium,low. "
+        "evidence_text must be a verbatim exact substring from the input text; never paraphrase. "
+        "source_span is object with integer start/end or null."
+    )
+    if prompt_style == "precision_v1":
+        return (
+            base
+            + " Prefer precision over recall: extract only explicit, unambiguous criteria; "
+            "skip inferred rules; avoid broad generic values when evidence is weak."
+        )
+    if prompt_style == "recall_v1":
+        return (
+            base
+            + " Prefer recall over precision: capture all explicit eligibility criteria, "
+            "including exclusions, windows, and threshold statements when directly stated."
+        )
+    return base
 
 
 def _build_response_format() -> Dict[str, Any]:
@@ -564,6 +665,190 @@ def _read_min_rule_coverage_ratio() -> float:
     except ValueError:
         return _DEFAULT_MIN_RULE_COVERAGE_RATIO
     return min(max(value, 0.0), 1.0)
+
+
+def _read_contract_postprocess_enabled() -> bool:
+    raw = os.getenv("LLM_CONTRACT_POSTPROCESS_ENABLED")
+    if raw is None:
+        return _DEFAULT_CONTRACT_POSTPROCESS_ENABLED
+    return raw.strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _postprocess_llm_rules(
+    rules: Sequence[Dict[str, Any]],
+    eligibility_text: Optional[str],
+) -> Tuple[List[Dict[str, Any]], int, int]:
+    source_text = eligibility_text if isinstance(eligibility_text, str) else ""
+    rewritten = 0
+    dropped = 0
+    normalized: List[Dict[str, Any]] = []
+    for rule in rules:
+        transformed, changed = _normalize_rule_for_contract(rule, source_text)
+        if transformed is None:
+            dropped += 1
+            continue
+        if changed:
+            rewritten += 1
+        normalized.append(transformed)
+    return _dedupe_rules(normalized), dropped, rewritten
+
+
+def _normalize_rule_for_contract(
+    rule: Dict[str, Any],
+    source_text: str,
+) -> Tuple[Optional[Dict[str, Any]], bool]:
+    field = str(rule.get("field") or "").strip().lower()
+    operator = str(rule.get("operator") or "").strip().upper()
+    if not field or not operator:
+        return None, False
+
+    updated = dict(rule)
+    changed = False
+    evidence = str(updated.get("evidence_text") or "")
+    evidence_norm = _norm_text(evidence)
+    if not evidence_norm:
+        return None, changed
+    negative_evidence = _is_negative_evidence(evidence_norm)
+
+    if field in {"condition", "medication", "procedure"} and operator in {
+        "=",
+        "EXISTS",
+        "NOT_EXISTS",
+    }:
+        if _is_empty_value(updated.get("value")):
+            return None, changed
+        operator = "NOT_IN" if negative_evidence else "IN"
+        changed = True
+
+    if field in {"condition", "medication", "procedure"} and operator == "IN" and negative_evidence:
+        operator = "NOT_IN"
+        changed = True
+
+    if field == "history" and operator in {"=", "EXISTS"}:
+        if _is_empty_value(updated.get("value")):
+            return None, changed
+        operator = "NO_HISTORY" if negative_evidence else "IN"
+        changed = True
+
+    if field == "history" and operator == "IN" and negative_evidence:
+        operator = "NO_HISTORY"
+        changed = True
+
+    if field == "sex" and operator == "IN":
+        operator = "="
+        changed = True
+
+    if field == "sex":
+        normalized_sex = _normalize_sex_value(updated.get("value"), evidence_norm)
+        if normalized_sex is None:
+            return None, changed
+        if updated.get("value") != normalized_sex:
+            changed = True
+        updated["value"] = normalized_sex
+
+    if field == "other" and operator in {"=", "NOT_IN", "NO_HISTORY", "WITHIN_LAST", ">=", "<="}:
+        if _is_empty_value(updated.get("value")):
+            return None, changed
+        operator = "IN"
+        changed = True
+
+    if (field, operator) not in _CONTRACT_FIELD_OPERATOR_ALLOWLIST:
+        return None, changed
+
+    updated["operator"] = operator
+    if not _value_supported_by_evidence(updated, evidence_norm):
+        return None, changed
+    return updated, changed
+
+
+def _is_empty_value(value: Any) -> bool:
+    if value is None:
+        return True
+    if isinstance(value, str):
+        return not value.strip()
+    if isinstance(value, list):
+        return not value
+    return False
+
+
+def _normalize_sex_value(value: Any, evidence_norm: str) -> Optional[str]:
+    value_norm = _norm_text(str(value or ""))
+    if value_norm in {"male", "female", "all"}:
+        return value_norm
+    if "female" in evidence_norm or "women" in evidence_norm:
+        return "female"
+    if "male" in evidence_norm or "men" in evidence_norm:
+        return "male"
+    return None
+
+
+def _is_negative_evidence(evidence_norm: str) -> bool:
+    bounded = f" {evidence_norm} "
+    return any(marker in bounded for marker in _NEGATIVE_EVIDENCE_MARKERS)
+
+
+def _value_supported_by_evidence(rule: Dict[str, Any], evidence_norm: str) -> bool:
+    operator = str(rule.get("operator") or "").strip().upper()
+    field = str(rule.get("field") or "").strip().lower()
+    value = rule.get("value")
+
+    if operator in {"EXISTS", "NOT_EXISTS"}:
+        return True
+
+    if value is None:
+        return False
+
+    if field == "age":
+        if not isinstance(value, (int, float)):
+            return False
+        number = int(value) if isinstance(value, float) and value.is_integer() else value
+        return str(number) in evidence_norm
+
+    if field == "lab":
+        if isinstance(value, (int, float)):
+            number = int(value) if isinstance(value, float) and value.is_integer() else value
+            return str(number) in evidence_norm
+        return False
+
+    if isinstance(value, list):
+        string_parts = [_norm_text(str(item)) for item in value if str(item).strip()]
+        if not string_parts:
+            return False
+        return any(_string_value_supported(part, evidence_norm) for part in string_parts)
+
+    if isinstance(value, str):
+        return _string_value_supported(_norm_text(value), evidence_norm)
+
+    if isinstance(value, bool):
+        return True
+    return _string_value_supported(_norm_text(str(value)), evidence_norm)
+
+
+def _string_value_supported(value_norm: str, evidence_norm: str) -> bool:
+    if not value_norm:
+        return False
+    if value_norm in {"study specific condition", "study specific criteria"}:
+        return False
+    if value_norm in evidence_norm:
+        return True
+
+    value_tokens = [
+        token
+        for token in value_norm.split()
+        if len(token) > 2 and token not in _VALUE_MATCH_STOPWORDS
+    ]
+    if not value_tokens:
+        return False
+    evidence_tokens = set(evidence_norm.split())
+    matched = sum(1 for token in value_tokens if token in evidence_tokens)
+    if len(value_tokens) <= 2:
+        return matched >= 1
+    required = max(2, int(len(value_tokens) * 0.6))
+    return matched >= required
+
+
+def _norm_text(text: str) -> str:
+    return " ".join(text.lower().replace("-", " ").split())
 
 
 def _rule_signature(rule: Dict[str, Any]) -> Tuple[str, str, str, str, str]:
