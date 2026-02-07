@@ -18,3 +18,17 @@ Parsing 高影响复标任务（M5）
 - `eval/annotation_tasks/parsing.relabel.round1.annotator_a.jsonl`
 - `eval/annotation_tasks/parsing.relabel.round1.annotator_b.jsonl`
 - `eval/annotation_tasks/manifest.parsing_relabel_round1.json`
+
+Parsing R1 第三人裁决任务（M5）
+- 生成命令:
+- `python3 scripts/eval/generate_parsing_adjudication_tasks.py --a eval/annotations/trials_parsing_relabel.round1.annotator_a.jsonl --b eval/annotations/trials_parsing_relabel.round1.annotator_b.jsonl --guideline-version m5-v1 --target-annotator annotator_c --max-trials 120 --output-jsonl eval/annotation_tasks/parsing.relabel.round1.adjudication.annotator_c.jsonl --output-manifest eval/annotation_tasks/manifest.parsing_relabel_round1.adjudication.json`
+- 输出:
+- `eval/annotation_tasks/parsing.relabel.round1.adjudication.annotator_c.jsonl`
+- `eval/annotation_tasks/manifest.parsing_relabel_round1.adjudication.json`
+
+Parsing R2 自复核任务（M5）
+- 生成命令:
+- `python3 scripts/eval/generate_parsing_self_review_tasks.py --adjudicated eval/annotations/trials_parsing_relabel.round1.adjudicated.annotator_c.jsonl --disagreements eval/annotation_tasks/parsing.relabel.round1.adjudication.annotator_c.jsonl --target-trials 60 --guideline-version m5-v1 --target-annotator annotator_c --output-jsonl eval/annotation_tasks/parsing.relabel.round2.self_review.annotator_c.jsonl --output-manifest eval/annotation_tasks/manifest.parsing_relabel_round2.self_review.json`
+- 输出:
+- `eval/annotation_tasks/parsing.relabel.round2.self_review.annotator_c.jsonl`
+- `eval/annotation_tasks/manifest.parsing_relabel_round2.self_review.json`

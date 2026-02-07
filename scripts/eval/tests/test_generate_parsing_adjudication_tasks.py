@@ -58,6 +58,8 @@ def test_build_parsing_adjudication_tasks_detects_disagreements() -> None:
     assert rows[0]["shared_rule_count"] == 1
     assert rows[0]["a_only_rule_count"] == 1
     assert rows[0]["b_only_rule_count"] == 1
+    assert rows[0]["target_annotator"] == "annotator_a"
+    assert manifest["target_annotator"] == "annotator_a"
 
 
 def test_build_parsing_adjudication_tasks_respects_max_trials() -> None:
@@ -74,3 +76,16 @@ def test_build_parsing_adjudication_tasks_respects_max_trials() -> None:
     assert manifest["disagreement_trial_count"] == 2
     assert manifest["selected_trial_count"] == 1
     assert len(rows) == 1
+
+
+def test_build_parsing_adjudication_tasks_supports_custom_target_annotator() -> None:
+    a_rows, b_rows = _input_rows()
+    rows, manifest = build_parsing_adjudication_tasks(
+        a_rows=a_rows,
+        b_rows=b_rows,
+        target_annotator="annotator_c",
+    )
+
+    assert len(rows) == 1
+    assert rows[0]["target_annotator"] == "annotator_c"
+    assert manifest["target_annotator"] == "annotator_c"

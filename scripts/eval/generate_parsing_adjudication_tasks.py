@@ -73,6 +73,7 @@ def build_parsing_adjudication_tasks(
     b_rows: Sequence[Dict[str, Any]],
     guideline_version: str = "m4-v1",
     max_trials: int = 0,
+    target_annotator: str = "annotator_a",
 ) -> Tuple[List[Dict[str, Any]], Dict[str, Any]]:
     a_index = index_rules_by_nct(a_rows)
     b_index = index_rules_by_nct(b_rows)
@@ -137,7 +138,7 @@ def build_parsing_adjudication_tasks(
                 "nct_id": row["nct_id"],
                 "status": "PENDING",
                 "task_type": "parsing_adjudication",
-                "target_annotator": "annotator_a",
+                "target_annotator": target_annotator,
                 "guideline_version": guideline_version,
                 "jaccard": row["jaccard"],
                 "shared_rule_count": row["shared_rule_count"],
@@ -149,7 +150,8 @@ def build_parsing_adjudication_tasks(
                 "b_only_rules": row["b_only_rules"],
                 "instructions": (
                     "Review A/B differences for this trial, keep only evidence-supported rules, "
-                    "and produce final labeled_rules."
+                    "and produce complete final labeled_rules. "
+                    "Mark ambiguous cases explicitly in your workflow output if needed."
                 ),
             }
         )
@@ -160,6 +162,7 @@ def build_parsing_adjudication_tasks(
         "selected_trial_count": len(out_rows),
         "max_trials": int(max_trials),
         "guideline_version": guideline_version,
+        "target_annotator": target_annotator,
     }
     return out_rows, manifest
 
@@ -177,6 +180,11 @@ def main() -> None:
         default="eval/annotations/trials_parsing_blind.round1.annotator_b.jsonl",
     )
     parser.add_argument("--guideline-version", default="m4-v1")
+    parser.add_argument(
+        "--target-annotator",
+        default="annotator_a",
+        help="Annotator id that should execute adjudication tasks.",
+    )
     parser.add_argument(
         "--max-trials",
         type=int,
@@ -198,6 +206,7 @@ def main() -> None:
         b_rows=load_jsonl(Path(args.b)),
         guideline_version=args.guideline_version,
         max_trials=args.max_trials,
+        target_annotator=args.target_annotator,
     )
     dump_jsonl(Path(args.output_jsonl), rows)
     dump_json(Path(args.output_manifest), manifest)
