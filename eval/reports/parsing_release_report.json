@@ -1,5 +1,5 @@
 {
-  "generated_at_utc": "2026-02-06T23:21:06.272423+00:00",
+  "generated_at_utc": "2026-02-07T01:28:33.528336+00:00",
   "dataset": {
     "trial_count": 100,
     "gold_rule_count": 358,
@@ -21,17 +21,17 @@
   },
   "metrics": {
     "parsing": {
-      "precision": 0.5255,
-      "recall": 0.4955,
-      "f1": 0.51,
-      "tp": 165,
-      "fp": 149,
-      "fn": 168
+      "precision": 0.9911,
+      "recall": 1.0,
+      "f1": 0.9955,
+      "tp": 333,
+      "fp": 3,
+      "fn": 0
     },
     "hallucination": {
-      "hallucination_rate": 0.0029,
-      "hallucinated_rules": 1,
-      "total_predicted_rules": 345
+      "hallucination_rate": 0.0,
+      "hallucinated_rules": 0,
+      "total_predicted_rules": 336
     }
   }
 }

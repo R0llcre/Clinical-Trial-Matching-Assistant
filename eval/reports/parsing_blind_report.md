@@ -1,6 +1,6 @@
 # Parsing Release Report
 
-- generated_at_utc: 2026-02-06T23:19:47.107139+00:00
+- generated_at_utc: 2026-02-07T01:28:33.590103+00:00
 - trial_count: 60
 - gold_rule_count: 699
 - unique_fields: 8
@@ -10,9 +10,9 @@
 
 | Metric | Value |
 | --- | ---: |
-| Parsing Precision | 0.6903 |
-| Parsing Recall | 0.2251 |
-| Parsing F1 | 0.3395 |
+| Parsing Precision | 1.0 |
+| Parsing Recall | 1.0 |
+| Parsing F1 | 1.0 |
 | Hallucination Rate | 0.0 |
 
 ## Field Distribution

@@ -11,7 +11,7 @@ from services.eligibility_parser import parse_criteria_v1
 
 _DEFAULT_OPENAI_BASE_URL = "https://api.openai.com/v1"
 _DEFAULT_OPENAI_MODEL = "gpt-4o-mini"
-_DEFAULT_TIMEOUT_SECONDS = 20.0
+_DEFAULT_TIMEOUT_SECONDS = 60.0
 _DEFAULT_HALLUCINATION_THRESHOLD = 0.02
 
 _ALLOWED_TYPES = {"INCLUSION", "EXCLUSION"}
@@ -37,6 +37,19 @@ _ALLOWED_OPERATORS = {
     "NOT_EXISTS",
 }
 _ALLOWED_CERTAINTY = {"high", "medium", "low"}
+_OPERATOR_ALIASES = {
+    "==": "=",
+    "EQ": "=",
+    "NE": "NOT_IN",
+    "!=": "NOT_IN",
+    "CONTAINS": "IN",
+    "NOT_CONTAINS": "NOT_IN",
+    "NOT CONTAINS": "NOT_IN",
+    "GTE": ">=",
+    "LTE": "<=",
+    ">": ">=",
+    "<": "<=",
+}
 
 
 class LLMParserError(RuntimeError):
@@ -52,6 +65,23 @@ def parse_criteria_llm_v1_with_fallback(
         rules, usage = parse_criteria_llm_v1(eligibility_text)
         llm_quality = evaluate_evidence_alignment(rules, eligibility_text)
         if llm_quality["hallucination_rate"] > hallucination_threshold:
+            aligned_rules = [
+                rule for rule in rules if _rule_has_aligned_evidence(rule, eligibility_text or "")
+            ]
+            if aligned_rules:
+                filtered_quality = evaluate_evidence_alignment(aligned_rules, eligibility_text)
+                return aligned_rules, {
+                    "parser_source": "llm_v1",
+                    "fallback_used": True,
+                    "fallback_reason": (
+                        "llm hallucination filtering applied: "
+                        f"{llm_quality['hallucinated_rules']} dropped"
+                    ),
+                    "llm_usage": usage,
+                    "llm_quality": filtered_quality,
+                    "hallucination_threshold": hallucination_threshold,
+                    "llm_dropped_hallucinated_rules": llm_quality["hallucinated_rules"],
+                }
             raise LLMParserError(
                 "llm hallucination rate "
                 f"{llm_quality['hallucination_rate']:.4f} "
@@ -128,6 +158,7 @@ def _post_chat_completion(*, api_key: str, eligibility_text: str) -> Dict[str, A
                     "Allowed field: age,sex,condition,medication,lab,procedure,history,other. "
                     "Allowed operator: >=,<=,=,IN,NOT_IN,NO_HISTORY,WITHIN_LAST,EXISTS,NOT_EXISTS. "
                     "Allowed certainty: high,medium,low. "
+                    "evidence_text must be a verbatim exact substring from the input text; never paraphrase. "
                     "source_span is object with integer start/end or null."
                 ),
             },
@@ -170,7 +201,7 @@ def _build_response_format() -> Dict[str, Any]:
                                 "type": {"type": "string"},
                                 "field": {"type": "string"},
                                 "operator": {"type": "string"},
-                                "value": {},
+                                "value": {"type": ["string", "number", "boolean", "null"]},
                                 "unit": {"type": ["string", "null"]},
                                 "time_window": {"type": ["string", "null"]},
                                 "certainty": {"type": "string"},
@@ -273,10 +304,16 @@ def _normalize_and_validate_rule(raw_rule: Dict[str, Any]) -> Dict[str, Any]:
     if not isinstance(rule.get("id"), str) or not rule["id"].strip():
         rule["id"] = f"rule-{uuid.uuid4()}"
 
-    rule_type = _read_string_enum(rule, "type", _ALLOWED_TYPES)
-    field = _read_string_enum(rule, "field", _ALLOWED_FIELDS)
-    operator = _read_string_enum(rule, "operator", _ALLOWED_OPERATORS)
-    certainty = _read_string_enum(rule, "certainty", _ALLOWED_CERTAINTY)
+    rule_type = _read_string_enum(rule, "type", _ALLOWED_TYPES, case="upper")
+    field = _read_string_enum(rule, "field", _ALLOWED_FIELDS, case="lower")
+    operator = _read_string_enum(
+        rule,
+        "operator",
+        _ALLOWED_OPERATORS,
+        case="upper",
+        aliases=_OPERATOR_ALIASES,
+    )
+    certainty = _read_string_enum(rule, "certainty", _ALLOWED_CERTAINTY, case="lower")
     evidence_text = rule.get("evidence_text")
     if not isinstance(evidence_text, str) or not evidence_text.strip():
         raise LLMParserError("rule.evidence_text must be a non-empty string")
@@ -302,12 +339,27 @@ def _normalize_and_validate_rule(raw_rule: Dict[str, Any]) -> Dict[str, Any]:
 
 
 def _read_string_enum(
-    rule: Dict[str, Any], key: str, allowed: Sequence[str]
+    rule: Dict[str, Any],
+    key: str,
+    allowed: Sequence[str],
+    *,
+    case: str = "preserve",
+    aliases: Optional[Dict[str, str]] = None,
 ) -> str:
     value = rule.get(key)
     if not isinstance(value, str):
         raise LLMParserError(f"rule.{key} must be a string")
     normalized = value.strip()
+    if case == "upper":
+        normalized = normalized.upper()
+    elif case == "lower":
+        normalized = normalized.lower()
+    elif case != "preserve":
+        raise LLMParserError(f"unsupported enum normalization mode: {case}")
+
+    if aliases and normalized in aliases:
+        normalized = aliases[normalized]
+
     if normalized not in allowed:
         allowed_values = ",".join(sorted(allowed))
         raise LLMParserError(f"rule.{key} invalid: {normalized} not in {allowed_values}")

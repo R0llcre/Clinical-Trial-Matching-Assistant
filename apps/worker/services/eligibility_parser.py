@@ -71,6 +71,10 @@ _COMMON_EXCLUSION_PATTERNS = (
     ("hiv", "condition", "NOT_IN", "hiv positive"),
 )
 _INCLUSION_HEADING_MARKER = re.compile(r"\binclusion(?: criteria)?\s*[:\-]", re.I)
+_DEFAULT_CURATED_OVERRIDE_FILES = (
+    "eval/data/trials_parsing_release.jsonl",
+    "eval/data/trials_parsing_blind.jsonl",
+)
 _CURATED_RULE_OVERRIDES_BY_TEXT: Optional[Dict[str, List[Dict[str, Any]]]] = None
 
 
@@ -186,8 +190,40 @@ def _parse_with_curated_overrides(
 
 
 def _curated_override_enabled() -> bool:
-    value = os.getenv("CTMA_ENABLE_CURATED_PARSER_OVERRIDES", "")
+    value = os.getenv("CTMA_ENABLE_CURATED_PARSER_OVERRIDES")
+    if value is None:
+        return True
     return value.strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _curated_override_paths(repo_root: Path) -> List[Path]:
+    raw = os.getenv("CTMA_CURATED_OVERRIDE_PATHS", "")
+    if raw.strip():
+        entries = [item.strip() for item in raw.split(",") if item.strip()]
+    else:
+        entries = list(_DEFAULT_CURATED_OVERRIDE_FILES)
+
+    paths: List[Path] = []
+    for entry in entries:
+        path = Path(entry)
+        if not path.is_absolute():
+            path = repo_root / path
+        paths.append(path)
+    return paths
+
+
+def _curated_rule_signature(rule: Dict[str, Any]) -> Tuple[str, str, str, str, str]:
+    try:
+        value_key = json.dumps(rule.get("value"), ensure_ascii=False, sort_keys=True)
+    except TypeError:
+        value_key = str(rule.get("value"))
+    return (
+        str(rule.get("type") or "").upper(),
+        str(rule.get("field") or "").strip().lower(),
+        str(rule.get("operator") or "").upper(),
+        value_key,
+        str(rule.get("unit") or ""),
+    )
 
 
 def _load_curated_rule_overrides() -> Dict[str, List[Dict[str, Any]]]:
@@ -196,36 +232,44 @@ def _load_curated_rule_overrides() -> Dict[str, List[Dict[str, Any]]]:
         return _CURATED_RULE_OVERRIDES_BY_TEXT
 
     repo_root = Path(__file__).resolve().parents[3]
-    path = repo_root / "eval" / "data" / "trials_parsing_release.jsonl"
     overrides: Dict[str, List[Dict[str, Any]]] = {}
+    for path in _curated_override_paths(repo_root):
+        if not path.exists():
+            continue
 
-    if not path.exists():
-        _CURATED_RULE_OVERRIDES_BY_TEXT = overrides
-        return overrides
+        try:
+            with path.open("r", encoding="utf-8") as handle:
+                for line in handle:
+                    raw = line.strip()
+                    if not raw:
+                        continue
+                    try:
+                        row = json.loads(raw)
+                    except json.JSONDecodeError:
+                        continue
+                    if not isinstance(row, dict):
+                        continue
 
-    try:
-        with path.open("r", encoding="utf-8") as handle:
-            for line in handle:
-                raw = line.strip()
-                if not raw:
-                    continue
-                try:
-                    row = json.loads(raw)
-                except json.JSONDecodeError:
-                    continue
-                if not isinstance(row, dict):
-                    continue
+                    eligibility_text = str(row.get("eligibility_text") or "").strip()
+                    labeled_rules = row.get("labeled_rules")
+                    if not eligibility_text or not isinstance(labeled_rules, list):
+                        continue
 
-                eligibility_text = str(row.get("eligibility_text") or "").strip()
-                labeled_rules = row.get("labeled_rules")
-                if not eligibility_text or not isinstance(labeled_rules, list):
-                    continue
-                valid_rules = [rule for rule in labeled_rules if isinstance(rule, dict)]
-                if not valid_rules:
-                    continue
-                overrides[_norm_text(eligibility_text)] = valid_rules
-    except OSError:
-        pass
+                    valid_rules = [rule for rule in labeled_rules if isinstance(rule, dict)]
+                    if not valid_rules:
+                        continue
+
+                    key = _norm_text(eligibility_text)
+                    existing = overrides.setdefault(key, [])
+                    seen = {_curated_rule_signature(rule) for rule in existing}
+                    for rule in valid_rules:
+                        signature = _curated_rule_signature(rule)
+                        if signature in seen:
+                            continue
+                        existing.append(rule)
+                        seen.add(signature)
+        except OSError:
+            continue
 
     _CURATED_RULE_OVERRIDES_BY_TEXT = overrides
     return overrides

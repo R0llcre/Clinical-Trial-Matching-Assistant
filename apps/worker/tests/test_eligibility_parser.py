@@ -312,7 +312,7 @@ def test_parse_criteria_v1_does_not_emit_other_for_duration_only_sentence() -> N
     )
 
 
-def test_parse_criteria_v1_curated_override_disabled_by_default(monkeypatch) -> None:
+def test_parse_criteria_v1_curated_override_enabled_by_default(monkeypatch) -> None:
     text = "Inclusion Criteria: Adults with asthma."
     override_rule = {
         "type": "INCLUSION",
@@ -330,8 +330,8 @@ def test_parse_criteria_v1_curated_override_disabled_by_default(monkeypatch) -> 
     )
 
     rules = parse_criteria_v1(text)
-    values = {rule["value"] for rule in rules if rule["field"] == "condition"}
-    assert "override condition" not in values
+    assert len(rules) == 1
+    assert rules[0]["value"] == "override condition"
 
 
 def test_parse_criteria_v1_curated_override_enabled(monkeypatch) -> None:
@@ -354,3 +354,25 @@ def test_parse_criteria_v1_curated_override_enabled(monkeypatch) -> None:
     rules = parse_criteria_v1(text)
     assert len(rules) == 1
     assert rules[0]["value"] == "override condition"
+
+
+def test_parse_criteria_v1_curated_override_disabled_with_env_zero(monkeypatch) -> None:
+    text = "Inclusion Criteria: Adults with asthma."
+    override_rule = {
+        "type": "INCLUSION",
+        "field": "condition",
+        "operator": "IN",
+        "value": "override condition",
+        "unit": None,
+        "evidence_text": "Inclusion Criteria: Adults with asthma.",
+    }
+    monkeypatch.setenv("CTMA_ENABLE_CURATED_PARSER_OVERRIDES", "0")
+    monkeypatch.setattr(
+        eligibility_parser,
+        "_CURATED_RULE_OVERRIDES_BY_TEXT",
+        {eligibility_parser._norm_text(text): [override_rule]},
+    )
+
+    rules = parse_criteria_v1(text)
+    values = {rule["value"] for rule in rules if rule["field"] == "condition"}
+    assert "override condition" not in values
