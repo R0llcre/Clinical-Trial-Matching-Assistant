@@ -10,6 +10,7 @@ Evaluation
 - 解析烟测样本: `eval/data/trials_sample.jsonl`
 - 解析发布样本: `eval/data/trials_parsing_release.jsonl`
 - 患者样本: `eval/data/patients.jsonl`
+- 解析标注契约: `docs/eval/PARSING_LABEL_CONTRACT.md`
 
 **标签定义**
 - `relevance_label=0`: 不相关
@@ -51,33 +52,36 @@ Evaluation
 - `python3 scripts/eval/generate_eval_data.py --output-dir eval/data`
 - `python3 scripts/eval/validate_eval_data.py --data-dir eval/data`
 
-2. 计算烟测指标
+2. 解析标注契约校验（发布集+盲评集）
+- `python3 scripts/eval/validate_parsing_contract.py --trials eval/data/trials_parsing_release.jsonl --trials eval/data/trials_parsing_blind.jsonl --output-json eval/reports/parsing_contract_validation.json`
+
+3. 计算烟测指标
 - `python3 scripts/eval/run_evaluation.py --queries eval/data/queries.jsonl --trials eval/data/trials_sample.jsonl --relevance eval/annotations/relevance.trials_sample.annotator_a.jsonl --top-k 10 --min-relevance-coverage 1.0`
 
-3. 生成烟测报告
+4. 生成烟测报告
 - `python3 scripts/eval/generate_evaluation_report.py --queries eval/data/queries.jsonl --trials eval/data/trials_sample.jsonl --relevance eval/annotations/relevance.trials_sample.annotator_a.jsonl --top-k 10 --min-relevance-coverage 1.0 --output-md eval/reports/m4_evaluation_report.md --output-json eval/reports/m4_evaluation_report.json`
 
-4. 构建解析发布集（含规则质量过滤）
+5. 构建解析发布集（含规则质量过滤）
 - `python3 scripts/eval/build_parsing_release_dataset.py --output-jsonl eval/data/trials_parsing_release.jsonl --output-manifest eval/data/trials_parsing_release.manifest.json`
 
-5. 生成 LLM 预测规则（发布集）
+6. 生成 LLM 预测规则（发布集）
 - `LLM_PARSER_ENABLED=1 OPENAI_API_KEY=<your_key> OPENAI_MODEL=gpt-4.1 python3 scripts/eval/generate_llm_predictions.py --trials eval/data/trials_parsing_release.jsonl --output eval/reports/llm_predictions.release.jsonl --resume`
 
-6. 生成解析发布报告（必须显式传入预测文件）
+7. 生成解析发布报告（必须显式传入预测文件）
 - `python3 scripts/eval/generate_parsing_release_report.py --trials eval/data/trials_parsing_release.jsonl --predicted-rules eval/reports/llm_predictions.release.jsonl --output-md eval/reports/parsing_release_report.md --output-json eval/reports/parsing_release_report.json`
 
-7. （可选）生成盲评预测与盲评报告（同样显式传入预测文件）
+8. （可选）生成盲评预测与盲评报告（同样显式传入预测文件）
 - `LLM_PARSER_ENABLED=1 OPENAI_API_KEY=<your_key> OPENAI_MODEL=gpt-4.1 python3 scripts/eval/generate_llm_predictions.py --trials eval/data/trials_parsing_blind.jsonl --output eval/reports/llm_predictions.blind.jsonl --resume`
 - `python3 scripts/eval/generate_parsing_release_report.py --trials eval/data/trials_parsing_blind.jsonl --predicted-rules eval/reports/llm_predictions.blind.jsonl --output-md eval/reports/parsing_blind_report.md --output-json eval/reports/parsing_blind_report.json`
 
-8. 生成解析盲评标注任务（A/B 双标）
+9. 生成解析盲评标注任务（A/B 双标）
 - `python3 scripts/eval/generate_parsing_blind_tasks.py --pending eval/archive/m4_history/annotation_tasks/parsing.pending.200.jsonl --release-trials eval/data/trials_parsing_release.jsonl --target-trials 60 --output-annotator-a eval/annotation_tasks/parsing.blind.round1.annotator_a.jsonl --output-annotator-b eval/annotation_tasks/parsing.blind.round1.annotator_b.jsonl --output-manifest eval/annotation_tasks/manifest.parsing_blind_round1.json`
 
-9. 计算盲评双标一致性并生成裁决任务
+10. 计算盲评双标一致性并生成裁决任务
 - `python3 scripts/eval/compute_parsing_agreement.py --a eval/annotations/trials_parsing_blind.round1.annotator_a.jsonl --b eval/annotations/trials_parsing_blind.round1.annotator_b.jsonl --output-json eval/reports/parsing_blind_round1_agreement.json --mismatches-out eval/annotation_tasks/parsing.blind.round1.mismatches.jsonl`
 - `python3 scripts/eval/generate_parsing_adjudication_tasks.py --a eval/annotations/trials_parsing_blind.round1.annotator_a.jsonl --b eval/annotations/trials_parsing_blind.round1.annotator_b.jsonl --output-jsonl eval/annotation_tasks/parsing.blind.round1.adjudication.annotator_a.jsonl --output-manifest eval/annotation_tasks/manifest.parsing_blind_round1.adjudication.json`
 
-10. 生成最终门禁报告
+11. 生成最终门禁报告
 - `python3 scripts/eval/check_m4_release_gate.py --smoke-report eval/reports/m4_evaluation_report.json --retrieval-report eval/reports/retrieval_annotation_report_v2_strict_final.json --parsing-report eval/reports/parsing_release_report.json --output-md eval/reports/m4_release_report.md --output-json eval/reports/m4_release_report.json`
 - 启用泛化门禁:
 - `python3 scripts/eval/check_m4_release_gate.py --smoke-report eval/reports/m4_evaluation_report.json --retrieval-report eval/reports/retrieval_annotation_report_v2_strict_final.json --parsing-report eval/reports/parsing_release_report.json --blind-parsing-report eval/reports/parsing_blind_report.json --output-md eval/reports/m4_release_report.md --output-json eval/reports/m4_release_report.json`
