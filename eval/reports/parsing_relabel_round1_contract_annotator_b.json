@@ -1,0 +1,18 @@
+{
+  "ok": true,
+  "files": [
+    {
+      "file": "eval/annotations/trials_parsing_relabel.round1.annotator_b.jsonl",
+      "trial_count": 120,
+      "rule_count": 1714,
+      "error_count": 0,
+      "warning_count": 0,
+      "error_counts": {},
+      "warning_counts": {},
+      "issues": []
+    }
+  ],
+  "total_errors": 0,
+  "total_warnings": 0,
+  "issues": []
+}

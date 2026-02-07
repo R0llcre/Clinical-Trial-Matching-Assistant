@@ -1,0 +1,8 @@
+{
+  "input_trial_count": 120,
+  "disagreement_trial_count": 120,
+  "selected_trial_count": 120,
+  "max_trials": 120,
+  "guideline_version": "m5-v1",
+  "target_annotator": "annotator_c"
+}
