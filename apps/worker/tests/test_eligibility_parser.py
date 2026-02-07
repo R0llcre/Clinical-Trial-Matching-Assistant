@@ -193,6 +193,22 @@ def test_parse_criteria_v1_extracts_exclusion_history_and_hiv_conditions() -> No
     assert "hiv positive" in values
 
 
+def test_parse_criteria_v1_extracts_generic_exclusion_condition() -> None:
+    text = """
+    Exclusion Criteria:
+    patients with diabetes.
+    """
+
+    rules = parse_criteria_v1(text)
+    assert any(
+        rule["type"] == "EXCLUSION"
+        and rule["field"] == "condition"
+        and rule["operator"] == "NOT_IN"
+        and rule["value"] == "diabetes"
+        for rule in rules
+    )
+
+
 def test_parse_criteria_v1_extracts_fertile_condition_hint() -> None:
     text = """
     Inclusion Criteria:

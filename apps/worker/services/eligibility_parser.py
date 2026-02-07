@@ -485,8 +485,11 @@ def _parse_lab_rules(
 def _parse_condition_rules(
     sentence: str, rule_type: str, source_span: Optional[Dict[str, int]]
 ) -> List[Dict[str, Any]]:
-    if rule_type != "INCLUSION":
+    if rule_type not in {"INCLUSION", "EXCLUSION"}:
         return []
+
+    operator = "IN" if rule_type == "INCLUSION" else "NOT_IN"
+    certainty = "medium"
 
     candidates: List[str] = []
     patterns = (
@@ -519,10 +522,10 @@ def _parse_condition_rules(
         _build_rule(
             rule_type=rule_type,
             field="condition",
-            operator="IN",
+            operator=operator,
             value=value,
             unit=None,
-            certainty="medium",
+            certainty=certainty,
             evidence_text=sentence,
             source_span=source_span,
         )
