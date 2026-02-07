@@ -26,6 +26,7 @@ M5-1 LLM 解析器
 - `LLM_CRITICAL_FIELDS`：默认 `age,sex,history`，LLM 缺失时由 `rule_v1` 回填。
 - `LLM_MIN_FINAL_RULES`：默认 `1`，低于阈值触发回退。
 - `LLM_MIN_RULE_COVERAGE_RATIO`：默认 `0.25`，若 `LLM 规则数 / rule_v1 规则数` 低于阈值触发回退。
+- `LLM_MAX_RULES_PER_EVIDENCE`：默认 `3`，单句 `evidence_text` 最多保留规则数，抑制单句过量泛化规则。
 - `CTMA_ENABLE_CURATED_PARSER_OVERRIDES`：默认 `0`，仅在显式调试时开启，避免评估泄漏。
 - `CTMA_CURATED_OVERRIDE_PATHS`：默认空，开启 curated override 时需显式提供数据路径。
 
@@ -46,6 +47,7 @@ M5-3 质量门槛
 1. 规则证据对齐：`evaluate_evidence_alignment`（evidence_text/source_span 对齐源文本）。
 2. 阈值参数：`LLM_HALLUCINATION_THRESHOLD`（默认 `0.02`）。
 3. 守门逻辑：若 LLM 输出幻觉率超过阈值，自动 fallback 到 `rule_v1`。
+4. 句级收敛：按 `evidence_text` 聚合后做字段限流、语义类型归一，减少“同一句子生成过多低价值规则”。
 
 验收命令
 1. Worker 测试：

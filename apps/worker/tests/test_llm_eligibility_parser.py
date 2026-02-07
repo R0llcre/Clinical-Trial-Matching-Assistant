@@ -529,3 +529,80 @@ def test_parse_with_fallback_reports_contract_postprocess_metadata(
     assert metadata["llm_contract_postprocess_enabled"] is True
     assert metadata["llm_contract_postprocess_rewritten_rules"] == 1
     assert metadata["llm_contract_postprocess_dropped_rules"] == 0
+
+
+def test_postprocess_limits_rules_per_sentence_and_drops_other(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("LLM_MAX_RULES_PER_EVIDENCE", "2")
+    rules, dropped, rewritten = parser._postprocess_llm_rules(
+        [
+            {
+                "id": "rule-1",
+                "type": "INCLUSION",
+                "field": "condition",
+                "operator": "IN",
+                "value": "diabetes mellitus",
+                "unit": None,
+                "time_window": None,
+                "certainty": "high",
+                "evidence_text": "Patients with diabetes mellitus and hypertension",
+                "source_span": {"start": 0, "end": 47},
+            },
+            {
+                "id": "rule-2",
+                "type": "INCLUSION",
+                "field": "condition",
+                "operator": "IN",
+                "value": "hypertension",
+                "unit": None,
+                "time_window": None,
+                "certainty": "high",
+                "evidence_text": "Patients with diabetes mellitus and hypertension",
+                "source_span": {"start": 0, "end": 47},
+            },
+            {
+                "id": "rule-3",
+                "type": "INCLUSION",
+                "field": "other",
+                "operator": "IN",
+                "value": "study criteria",
+                "unit": None,
+                "time_window": None,
+                "certainty": "low",
+                "evidence_text": "Patients with diabetes mellitus and hypertension",
+                "source_span": {"start": 0, "end": 47},
+            },
+        ],
+        "Patients with diabetes mellitus and hypertension",
+    )
+
+    assert len(rules) == 2
+    assert dropped == 1
+    assert rewritten == 0
+    assert all(rule["field"] == "condition" for rule in rules)
+
+
+def test_postprocess_normalizes_type_from_negative_sentence() -> None:
+    rules, dropped, rewritten = parser._postprocess_llm_rules(
+        [
+            {
+                "id": "rule-1",
+                "type": "INCLUSION",
+                "field": "condition",
+                "operator": "IN",
+                "value": "hiv infection",
+                "unit": None,
+                "time_window": None,
+                "certainty": "high",
+                "evidence_text": "No HIV infection allowed",
+                "source_span": {"start": 0, "end": 24},
+            }
+        ],
+        "No HIV infection allowed",
+    )
+
+    assert dropped == 0
+    assert rewritten >= 1
+    assert rules[0]["type"] == "EXCLUSION"
+    assert rules[0]["operator"] == "NOT_IN"

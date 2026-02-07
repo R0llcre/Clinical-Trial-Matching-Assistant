@@ -18,6 +18,7 @@ _DEFAULT_CRITICAL_FIELDS = ("age", "sex", "history")
 _DEFAULT_MIN_FINAL_RULES = 1
 _DEFAULT_MIN_RULE_COVERAGE_RATIO = 0.25
 _DEFAULT_CONTRACT_POSTPROCESS_ENABLED = True
+_DEFAULT_MAX_RULES_PER_EVIDENCE = 3
 
 _ALLOWED_TYPES = {"INCLUSION", "EXCLUSION"}
 _ALLOWED_FIELDS = {
@@ -111,6 +112,26 @@ _CONTRACT_FIELD_OPERATOR_ALLOWLIST = {
     ("lab", "<="),
     ("other", "IN"),
     ("other", "EXISTS"),
+}
+_EVIDENCE_FIELD_LIMITS = {
+    "condition": 2,
+    "history": 2,
+    "age": 2,
+    "sex": 1,
+    "lab": 1,
+    "medication": 1,
+    "procedure": 1,
+    "other": 1,
+}
+_FIELD_PRIORITY = {
+    "condition": 6,
+    "age": 5,
+    "sex": 5,
+    "history": 4,
+    "lab": 3,
+    "medication": 3,
+    "procedure": 3,
+    "other": 1,
 }
 
 
@@ -674,6 +695,17 @@ def _read_contract_postprocess_enabled() -> bool:
     return raw.strip().lower() in {"1", "true", "yes", "on"}
 
 
+def _read_max_rules_per_evidence() -> int:
+    raw = os.getenv("LLM_MAX_RULES_PER_EVIDENCE")
+    if raw is None:
+        return _DEFAULT_MAX_RULES_PER_EVIDENCE
+    try:
+        value = int(raw)
+    except ValueError:
+        return _DEFAULT_MAX_RULES_PER_EVIDENCE
+    return min(max(value, 1), 10)
+
+
 def _postprocess_llm_rules(
     rules: Sequence[Dict[str, Any]],
     eligibility_text: Optional[str],
@@ -690,7 +722,163 @@ def _postprocess_llm_rules(
         if changed:
             rewritten += 1
         normalized.append(transformed)
-    return _dedupe_rules(normalized), dropped, rewritten
+
+    sentence_max = _read_max_rules_per_evidence()
+    pruned, sentence_dropped, sentence_rewritten = _apply_sentence_rule_limits(
+        normalized,
+        max_rules_per_evidence=sentence_max,
+    )
+    dropped += sentence_dropped
+    rewritten += sentence_rewritten
+    return _dedupe_rules(pruned), dropped, rewritten
+
+
+def _apply_sentence_rule_limits(
+    rules: Sequence[Dict[str, Any]],
+    *,
+    max_rules_per_evidence: int,
+) -> Tuple[List[Dict[str, Any]], int, int]:
+    grouped: Dict[str, List[Dict[str, Any]]] = {}
+    order: List[str] = []
+    for rule in rules:
+        key = _evidence_group_key(rule)
+        if key not in grouped:
+            grouped[key] = []
+            order.append(key)
+        grouped[key].append(rule)
+
+    dropped = 0
+    rewritten = 0
+    merged: List[Dict[str, Any]] = []
+    for key in order:
+        sentence_rules = grouped[key]
+        has_specific_fields = any(
+            str(item.get("field") or "").strip().lower() != "other"
+            for item in sentence_rules
+        )
+        negative_hint = _is_negative_evidence(key)
+        ranked = sorted(
+            sentence_rules,
+            key=lambda item: _sentence_rule_score(
+                item,
+                has_specific_fields=has_specific_fields,
+                negative_hint=negative_hint,
+            ),
+            reverse=True,
+        )
+
+        kept: List[Dict[str, Any]] = []
+        field_counts: Dict[str, int] = {}
+        for rule in ranked:
+            normalized_rule, changed = _normalize_rule_type_by_semantics(
+                rule,
+                negative_hint=negative_hint,
+            )
+            if changed:
+                rewritten += 1
+
+            field = str(normalized_rule.get("field") or "").strip().lower()
+            if has_specific_fields and field == "other":
+                dropped += 1
+                continue
+
+            if len(kept) >= max_rules_per_evidence:
+                dropped += 1
+                continue
+
+            field_limit = _EVIDENCE_FIELD_LIMITS.get(field, 1)
+            if field_counts.get(field, 0) >= field_limit:
+                dropped += 1
+                continue
+
+            kept.append(normalized_rule)
+            field_counts[field] = field_counts.get(field, 0) + 1
+
+        merged.extend(kept)
+
+    return merged, dropped, rewritten
+
+
+def _evidence_group_key(rule: Dict[str, Any]) -> str:
+    evidence = _norm_text(str(rule.get("evidence_text") or ""))
+    if evidence:
+        return evidence
+    source_span = rule.get("source_span")
+    if isinstance(source_span, dict):
+        start = source_span.get("start")
+        end = source_span.get("end")
+        if isinstance(start, int) and isinstance(end, int):
+            return f"span:{start}:{end}"
+    return f"rule:{rule.get('id')}"
+
+
+def _sentence_rule_score(
+    rule: Dict[str, Any],
+    *,
+    has_specific_fields: bool,
+    negative_hint: bool,
+) -> int:
+    field = str(rule.get("field") or "").strip().lower()
+    operator = str(rule.get("operator") or "").strip().upper()
+    rule_type = str(rule.get("type") or "").strip().upper()
+    value_norm = _norm_text(str(rule.get("value") or ""))
+
+    score = _FIELD_PRIORITY.get(field, 0) * 10
+    if has_specific_fields and field == "other":
+        score -= 30
+
+    if negative_hint and rule_type == "EXCLUSION":
+        score += 8
+    if (not negative_hint) and rule_type == "INCLUSION":
+        score += 4
+
+    if operator in {"NOT_IN", "NO_HISTORY"}:
+        score += 3 if negative_hint else 1
+    elif operator in {"IN", "EXISTS"}:
+        score += 2 if not negative_hint else 0
+
+    if _is_generic_value(value_norm):
+        score -= 8
+    else:
+        token_count = len([token for token in value_norm.split() if token])
+        score += min(token_count, 5)
+
+    return score
+
+
+def _normalize_rule_type_by_semantics(
+    rule: Dict[str, Any],
+    *,
+    negative_hint: bool,
+) -> Tuple[Dict[str, Any], bool]:
+    updated = dict(rule)
+    changed = False
+    rule_type = str(updated.get("type") or "").strip().upper()
+    field = str(updated.get("field") or "").strip().lower()
+    operator = str(updated.get("operator") or "").strip().upper()
+
+    if operator in {"NOT_IN", "NO_HISTORY", "NOT_EXISTS"} and rule_type != "EXCLUSION":
+        updated["type"] = "EXCLUSION"
+        changed = True
+        return updated, changed
+
+    if (
+        negative_hint
+        and field in {"condition", "medication", "procedure", "history"}
+        and rule_type != "EXCLUSION"
+    ):
+        updated["type"] = "EXCLUSION"
+        changed = True
+    elif (
+        (not negative_hint)
+        and field in {"condition", "medication", "procedure", "history"}
+        and operator in {"IN", "EXISTS"}
+        and rule_type != "INCLUSION"
+    ):
+        updated["type"] = "INCLUSION"
+        changed = True
+
+    return updated, changed
 
 
 def _normalize_rule_for_contract(
@@ -845,6 +1033,23 @@ def _string_value_supported(value_norm: str, evidence_norm: str) -> bool:
         return matched >= 1
     required = max(2, int(len(value_tokens) * 0.6))
     return matched >= required
+
+
+def _is_generic_value(value_norm: str) -> bool:
+    if not value_norm:
+        return True
+    if value_norm in {
+        "study specific condition",
+        "study specific criteria",
+        "eligible participants",
+        "trial eligibility",
+    }:
+        return True
+    generic_tokens = {"study", "criteria", "condition", "participant", "patients", "subjects"}
+    tokens = [token for token in value_norm.split() if token]
+    if not tokens:
+        return True
+    return all(token in generic_tokens for token in tokens)
 
 
 def _norm_text(text: str) -> str:
