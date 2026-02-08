@@ -1,0 +1,18 @@
+{
+  "ok": true,
+  "files": [
+    {
+      "file": "eval/data/candidates/trials_parsing_release.r1_candidate.jsonl",
+      "trial_count": 100,
+      "rule_count": 920,
+      "error_count": 0,
+      "warning_count": 0,
+      "error_counts": {},
+      "warning_counts": {},
+      "issues": []
+    }
+  ],
+  "total_errors": 0,
+  "total_warnings": 0,
+  "issues": []
+}

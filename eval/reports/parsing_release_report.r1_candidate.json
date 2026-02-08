@@ -1,0 +1,43 @@
+{
+  "generated_at_utc": "2026-02-08T04:48:45.427196+00:00",
+  "dataset": {
+    "trial_count": 100,
+    "gold_rule_count": 920,
+    "unique_fields": 8,
+    "field_distribution": {
+      "age": 65,
+      "condition": 344,
+      "history": 70,
+      "lab": 130,
+      "medication": 86,
+      "other": 45,
+      "procedure": 110,
+      "sex": 70
+    },
+    "rules_per_trial": {
+      "min": 0,
+      "median": 6.5,
+      "max": 52
+    }
+  },
+  "metrics": {
+    "parsing": {
+      "precision": 0.75,
+      "recall": 0.3137,
+      "f1": 0.4424,
+      "tp": 288,
+      "fp": 96,
+      "fn": 630
+    },
+    "hallucination": {
+      "hallucination_rate": 0.0024,
+      "hallucinated_rules": 1,
+      "total_predicted_rules": 416
+    }
+  },
+  "runtime": {
+    "prediction_source": "rule_v1",
+    "predicted_rules_path": null,
+    "curated_override_forced_off": true
+  }
+}

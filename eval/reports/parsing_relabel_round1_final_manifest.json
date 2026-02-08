@@ -1,0 +1,13 @@
+{
+  "base_trials": 120,
+  "adjudicated_trials": 60,
+  "overlap_trials_applied": 60,
+  "missing_in_base": 0,
+  "changed_trials": 37,
+  "changed_rate": 0.6167,
+  "output_annotator_id": "annotator_c",
+  "strict_missing_in_base": true,
+  "applied_guideline_versions": {
+    "m5-v1": 60
+  }
+}
