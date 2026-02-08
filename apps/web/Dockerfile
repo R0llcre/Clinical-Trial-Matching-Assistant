@@ -2,10 +2,16 @@ FROM node:20-alpine
 
 WORKDIR /app
 
-COPY package.json ./
-RUN npm install
+ARG NEXT_PUBLIC_API_BASE=http://localhost:8000
+ENV NEXT_PUBLIC_API_BASE=${NEXT_PUBLIC_API_BASE}
+ENV NEXT_TELEMETRY_DISABLED=1
+ENV NODE_ENV=production
+
+COPY package*.json ./
+RUN npm ci
 
 COPY . .
+RUN npm run build && npm prune --omit=dev
 
 EXPOSE 3000
-CMD ["npm", "run", "dev"]
+CMD ["npm", "run", "start"]

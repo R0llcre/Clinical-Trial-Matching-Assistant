@@ -1,4 +1,7 @@
+import os
+
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.requests import Request
 from fastapi.responses import JSONResponse
 
@@ -12,9 +15,28 @@ app = FastAPI()
 _PROTECTED_PREFIXES = ("/api/patients", "/api/match", "/api/matches")
 
 
+def _load_allowed_origins() -> list[str]:
+    raw = os.getenv("ALLOWED_ORIGINS", "").strip()
+    if not raw:
+        return ["http://localhost:3000", "http://127.0.0.1:3000"]
+    origins = [item.strip() for item in raw.split(",") if item.strip()]
+    if not origins:
+        return ["http://localhost:3000", "http://127.0.0.1:3000"]
+    return origins
+
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=_load_allowed_origins(),
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+
 @app.middleware("http")
 async def auth_middleware(request: Request, call_next):
-    if request.url.path.startswith(_PROTECTED_PREFIXES):
+    if request.method != "OPTIONS" and request.url.path.startswith(_PROTECTED_PREFIXES):
         try:
             claims = decode_auth_header(request.headers.get("Authorization"))
             request.state.auth_claims = claims

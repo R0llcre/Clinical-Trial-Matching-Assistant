@@ -9,6 +9,7 @@ Docs Index
 - `ARCHITECTURE.md`: 模块划分与运行拓扑
 - `DATA_MODEL.md`: 数据模型与持久化
 - `API_SPEC.md`: API 契约与错误码
+- `DEPLOY_AZURE_PREVIEW.md`: Azure 预览环境部署手册（eastus）
 - `PIPELINES.md`: 同步与解析流水线
 - `CRITERIA_SCHEMA.md`: 条款结构化 schema
 - `MATCHING_LOGIC.md`: 匹配评分逻辑
