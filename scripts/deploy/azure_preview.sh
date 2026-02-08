@@ -98,11 +98,16 @@ if ! az postgres flexible-server show --name "${AZ_PG_SERVER}" --resource-group 
     --yes \
     --output none
 fi
-az postgres flexible-server db create \
+if ! az postgres flexible-server db show \
   --server-name "${AZ_PG_SERVER}" \
   --resource-group "${AZ_RESOURCE_GROUP}" \
-  --database-name "${AZ_PG_DB}" \
-  --output none
+  --database-name "${AZ_PG_DB}" >/dev/null 2>&1; then
+  az postgres flexible-server db create \
+    --server-name "${AZ_PG_SERVER}" \
+    --resource-group "${AZ_RESOURCE_GROUP}" \
+    --database-name "${AZ_PG_DB}" \
+    --output none
+fi
 
 PG_FQDN="$(az postgres flexible-server show --name "${AZ_PG_SERVER}" --resource-group "${AZ_RESOURCE_GROUP}" --query fullyQualifiedDomainName -o tsv)"
 DATABASE_URL="postgresql://${AZ_PG_USER}:${AZ_PG_PASSWORD}@${PG_FQDN}:5432/${AZ_PG_DB}?sslmode=require"
@@ -158,8 +163,7 @@ az containerapp up \
     CTGOV_BASE_URL="https://clinicaltrials.gov/api/v2" \
     JWT_SECRET="${JWT_SECRET}" \
     JWT_ALGORITHM="HS256" \
-    ALLOWED_ORIGINS="https://placeholder.invalid" \
-  --output none
+    ALLOWED_ORIGINS="https://placeholder.invalid"
 
 API_FQDN="$(az containerapp show --name "${AZ_API_APP}" --resource-group "${AZ_RESOURCE_GROUP}" --query properties.configuration.ingress.fqdn -o tsv)"
 API_BASE_URL="https://${API_FQDN}"
@@ -185,8 +189,7 @@ az containerapp up \
   --target-port 3000 \
   --registry-server "${ACR_LOGIN_SERVER}" \
   --registry-username "${ACR_USERNAME}" \
-  --registry-password "${ACR_PASSWORD}" \
-  --output none
+  --registry-password "${ACR_PASSWORD}"
 
 WEB_FQDN="$(az containerapp show --name "${AZ_WEB_APP}" --resource-group "${AZ_RESOURCE_GROUP}" --query properties.configuration.ingress.fqdn -o tsv)"
 WEB_ORIGIN="https://${WEB_FQDN}"
