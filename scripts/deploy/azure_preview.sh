@@ -163,6 +163,7 @@ az containerapp up \
     CTGOV_BASE_URL="https://clinicaltrials.gov/api/v2" \
     JWT_SECRET="${JWT_SECRET}" \
     JWT_ALGORITHM="HS256" \
+    CTMA_PREVIEW_TOKEN_ENABLED="1" \
     ALLOWED_ORIGINS="https://placeholder.invalid"
 
 API_FQDN="$(az containerapp show --name "${AZ_API_APP}" --resource-group "${AZ_RESOURCE_GROUP}" --query properties.configuration.ingress.fqdn -o tsv)"
@@ -204,6 +205,7 @@ az containerapp update \
     CTGOV_BASE_URL="https://clinicaltrials.gov/api/v2" \
     JWT_SECRET="${JWT_SECRET}" \
     JWT_ALGORITHM="HS256" \
+    CTMA_PREVIEW_TOKEN_ENABLED="1" \
     ALLOWED_ORIGINS="${WEB_ORIGIN}" \
   --output none
 

@@ -62,11 +62,12 @@ curl -fsS "https://<api-domain>/api/trials?page=1&page_size=5"
 
 手工功能验收
 1. 打开 `https://<web-domain>`，确认试验检索可用。
-2. 生成 JWT（本地）：
+2. 打开 `https://<web-domain>/match`，提交匹配，确认可跳转 `matches/<id>`。
+   - 若使用 `scripts/deploy/azure_preview.sh` 部署，API 会启用预览 Token 发放接口 `GET /api/auth/preview-token`，页面会自动获取并保存 JWT（无需手工生成）。
+   - 若该接口未启用，则需要本地生成 JWT：
 ```bash
 python3 scripts/gen_dev_jwt.py
 ```
-3. 打开 `https://<web-domain>/match`，填入 JWT，提交匹配，确认可跳转 `matches/<id>`。
 
 回滚
 - Container Apps 回滚到上一镜像 tag:
