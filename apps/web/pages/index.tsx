@@ -29,6 +29,14 @@ type TrialsResponse = {
 const API_BASE =
   process.env.NEXT_PUBLIC_API_BASE ?? "http://localhost:8000";
 
+const formatFetchedDate = (value?: string | null) => {
+  if (!value) {
+    return null;
+  }
+  // API timestamps may include fractional seconds without timezone. Keep it stable and readable.
+  return value.length >= 10 ? value.slice(0, 10) : value;
+};
+
 export default function Home() {
   const [condition, setCondition] = useState("");
   const [status, setStatus] = useState("");
@@ -43,19 +51,26 @@ export default function Home() {
     return total > 0 ? Math.ceil(total / 20) : 1;
   }, [total]);
 
-  const fetchTrials = async (nextPage: number) => {
+  const fetchTrials = async (
+    nextPage: number,
+    overrides?: Partial<{ condition: string; status: string; phase: string }>
+  ) => {
     setLoading(true);
     setError(null);
 
+    const conditionValue = overrides?.condition ?? condition;
+    const statusValue = overrides?.status ?? status;
+    const phaseValue = overrides?.phase ?? phase;
+
     const params = new URLSearchParams();
-    if (condition.trim()) {
-      params.set("condition", condition.trim());
+    if (conditionValue.trim()) {
+      params.set("condition", conditionValue.trim());
     }
-    if (status) {
-      params.set("status", status);
+    if (statusValue) {
+      params.set("status", statusValue);
     }
-    if (phase) {
-      params.set("phase", phase);
+    if (phaseValue) {
+      params.set("phase", phaseValue);
     }
     params.set("page", String(nextPage));
     params.set("page_size", "20");
@@ -84,6 +99,23 @@ export default function Home() {
     event.preventDefault();
     fetchTrials(1);
   };
+
+  const suggestedConditions = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const trial of trials) {
+      for (const rawCondition of trial.conditions ?? []) {
+        const value = rawCondition.trim();
+        if (!value) {
+          continue;
+        }
+        counts.set(value, (counts.get(value) ?? 0) + 1);
+      }
+    }
+    return Array.from(counts.entries())
+      .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
+      .slice(0, 10)
+      .map(([value]) => value);
+  }, [trials]);
 
   useEffect(() => {
     void fetchTrials(1);
@@ -121,6 +153,26 @@ export default function Home() {
                   value={condition}
                   onChange={(event) => setCondition(event.target.value)}
                 />
+                {suggestedConditions.length > 0 && (
+                  <div className="suggestions">
+                    <span className="suggestions-label">Try:</span>
+                    <div className="pills">
+                      {suggestedConditions.map((value) => (
+                        <button
+                          key={value}
+                          type="button"
+                          className="pill pill-button"
+                          onClick={() => {
+                            setCondition(value);
+                            void fetchTrials(1, { condition: value });
+                          }}
+                        >
+                          {value}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </div>
               <div className="field">
                 <label htmlFor="status">Status</label>
@@ -180,26 +232,46 @@ export default function Home() {
           </div>
 
           <section className="trials-grid">
+            {loading && trials.length === 0 && (
+              <>
+                {Array.from({ length: 4 }).map((_, index) => (
+                  <article className="card trial-card" key={`skeleton-${index}`}>
+                    <div className="skeleton skeleton-line short" />
+                    <div className="skeleton skeleton-line long" />
+                    <div className="skeleton skeleton-line medium" />
+                    <div className="skeleton skeleton-line long" />
+                  </article>
+                ))}
+              </>
+            )}
+
             {trials.map((trial) => (
               <article className="card trial-card" key={trial.nct_id}>
                 <div className="pills">
+                  <span className="pill warm">{trial.nct_id}</span>
                   {trial.status && <span className="pill">{trial.status}</span>}
-                  {trial.phase && (
-                    <span className="pill warm">{trial.phase}</span>
-                  )}
+                  {trial.phase && <span className="pill">{trial.phase}</span>}
                 </div>
                 <Link href={`/trials/${trial.nct_id}`} className="trial-title">
                   {trial.title}
                 </Link>
-                <div className="location-list">
+                <div className="trial-subtitle">
                   {trial.locations.length > 0
                     ? trial.locations.slice(0, 3).join(" · ")
                     : "Location data pending"}
                 </div>
-                <div className="meta-row">
-                  <span>{trial.conditions.slice(0, 3).join(" · ")}</span>
-                  {trial.fetched_at && <span>Updated {trial.fetched_at}</span>}
+                <div className="pills">
+                  {trial.conditions.slice(0, 4).map((value) => (
+                    <span className="pill" key={`${trial.nct_id}-${value}`}>
+                      {value}
+                    </span>
+                  ))}
                 </div>
+                {trial.fetched_at && (
+                  <div className="meta-row">
+                    <span>Synced {formatFetchedDate(trial.fetched_at)}</span>
+                  </div>
+                )}
               </article>
             ))}
           </section>

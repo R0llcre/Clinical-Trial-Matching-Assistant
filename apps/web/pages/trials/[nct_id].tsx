@@ -46,6 +46,13 @@ type TrialResponse = {
 const API_BASE =
   process.env.NEXT_PUBLIC_API_BASE ?? "http://localhost:8000";
 
+const formatFetchedDate = (value?: string | null) => {
+  if (!value) {
+    return null;
+  }
+  return value.length >= 10 ? value.slice(0, 10) : value;
+};
+
 export default function TrialDetailPage() {
   const router = useRouter();
   const { nct_id } = router.query;
@@ -107,7 +114,9 @@ export default function TrialDetailPage() {
                 {trial.status && <span className="pill">{trial.status}</span>}
                 {trial.phase && <span className="pill warm">{trial.phase}</span>}
                 {trial.fetched_at && (
-                  <span className="pill">updated {trial.fetched_at}</span>
+                  <span className="pill">
+                    synced {formatFetchedDate(trial.fetched_at)}
+                  </span>
                 )}
               </div>
             )}
