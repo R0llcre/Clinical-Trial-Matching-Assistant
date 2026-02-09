@@ -1225,6 +1225,330 @@ textarea {
   font-size: 13px;
 }
 
+.trial-toast {
+  margin-top: -6px;
+}
+
+.trial-detail-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1.65fr) minmax(0, 0.9fr);
+  gap: 18px;
+  align-items: start;
+}
+
+.trial-detail-main {
+  display: grid;
+  gap: 16px;
+}
+
+.trial-detail-aside {
+  position: sticky;
+  top: 92px;
+  display: grid;
+  gap: 16px;
+  align-self: start;
+}
+
+.trial-detail-hero {
+  padding: 18px;
+}
+
+.trial-detail-hero__meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.trial-detail-hero__pills {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+
+.trial-pill-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  margin-right: 6px;
+}
+
+.trial-detail-hero__external {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: rgba(255, 255, 255, 0.8);
+  color: var(--ink);
+  font-weight: 700;
+  font-size: 13px;
+  transition: background 0.2s ease, border-color 0.2s ease,
+    transform 0.2s ease;
+}
+
+.trial-detail-hero__external:hover {
+  transform: translateY(-1px);
+  background: rgba(255, 255, 255, 0.95);
+  border-color: rgba(15, 107, 122, 0.24);
+}
+
+.trial-detail-hero__external:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+
+.trial-panel {
+  display: grid;
+  gap: 16px;
+}
+
+.trial-section__header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.trial-section__icon {
+  width: 34px;
+  height: 34px;
+  border-radius: 14px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(11, 114, 133, 0.12);
+  color: var(--accent-strong);
+}
+
+.trial-section__title {
+  margin: 0;
+  font-size: 18px;
+}
+
+.trial-prose {
+  color: rgba(11, 18, 32, 0.84);
+  font-size: 15px;
+  line-height: 1.7;
+}
+
+.trial-prose--preline {
+  white-space: pre-line;
+}
+
+.trial-expand {
+  margin-top: 12px;
+}
+
+.trial-section--callout {
+  padding: 16px;
+}
+
+.trial-callout {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  gap: 14px;
+  align-items: center;
+}
+
+.trial-callout__icon {
+  width: 40px;
+  height: 40px;
+  border-radius: 16px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(34, 197, 94, 0.14);
+  color: #166534;
+}
+
+.trial-callout__title {
+  font-weight: 900;
+  color: var(--ink);
+}
+
+.trial-callout__desc {
+  margin-top: 4px;
+  color: var(--muted);
+  font-size: 14px;
+  line-height: 1.55;
+}
+
+.trial-coverage {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  margin-bottom: 14px;
+}
+
+.trial-rules {
+  display: grid;
+  gap: 16px;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  align-items: start;
+}
+
+.trial-rules__section {
+  display: grid;
+  gap: 12px;
+}
+
+.trial-rules__heading {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.trial-rules__title {
+  font-family: var(--font-display), ui-serif, Georgia, serif;
+  font-size: 16px;
+}
+
+.trial-rules__count {
+  padding: 2px 10px;
+  border-radius: 999px;
+  border: 1px solid rgba(11, 18, 32, 0.1);
+  background: rgba(11, 18, 32, 0.06);
+  font-weight: 800;
+  font-size: 12px;
+  color: var(--ink);
+}
+
+.trial-rules__list {
+  display: grid;
+  gap: 10px;
+}
+
+.trial-rules__empty {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 14px;
+  border-radius: var(--radius-md);
+  border: 1px solid rgba(11, 18, 32, 0.1);
+  background: rgba(245, 247, 251, 0.74);
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.trial-rule-title {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  width: 100%;
+}
+
+.trial-rule-title__expr {
+  font-weight: 900;
+  color: var(--ink);
+}
+
+.trial-rule-title__meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.trial-rule-body__label {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+  color: var(--muted);
+}
+
+.trial-rule-body__text {
+  margin-top: 6px;
+  color: rgba(11, 18, 32, 0.84);
+  font-size: 14px;
+  line-height: 1.55;
+}
+
+.trial-aside-card {
+  padding: 18px;
+}
+
+.trial-aside-card__title {
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+  font-size: 12px;
+  color: var(--muted);
+  font-weight: 800;
+}
+
+.trial-aside-facts {
+  display: grid;
+  gap: 10px;
+  margin-top: 14px;
+}
+
+.trial-aside-fact {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 12px;
+  border-radius: var(--radius-sm);
+  border: 1px solid rgba(11, 18, 32, 0.08);
+  background: rgba(245, 247, 251, 0.72);
+}
+
+.trial-aside-fact__label {
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: var(--muted);
+}
+
+.trial-aside-fact__value {
+  font-weight: 800;
+  color: var(--ink);
+  text-align: right;
+}
+
+.trial-aside-actions {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-top: 16px;
+}
+
+.trial-aside-pills {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 14px;
+}
+
+.trial-location-list {
+  margin: 14px 0 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: 10px;
+  color: var(--muted);
+  font-size: 14px;
+}
+
+.trial-location-list li {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+}
+
+.trial-aside-muted {
+  margin-top: 12px;
+  color: var(--muted);
+  font-size: 14px;
+  line-height: 1.55;
+}
+
 .search-panel {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
@@ -1814,6 +2138,20 @@ textarea {
 
   .browse-rail__row {
     grid-template-columns: 1fr;
+  }
+
+  .trial-detail-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .trial-detail-aside {
+    position: relative;
+    top: 0;
+  }
+
+  .trial-callout {
+    grid-template-columns: 1fr;
+    align-items: start;
   }
 
   .hero-grid {
