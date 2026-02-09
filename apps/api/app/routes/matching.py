@@ -3,7 +3,7 @@ import os
 import uuid
 from typing import Any, Dict, Optional
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
 from psycopg.types.json import Json
 from sqlalchemy import text
@@ -11,6 +11,7 @@ from sqlalchemy.engine import Engine, create_engine
 from sqlalchemy.exc import SQLAlchemyError
 
 from app.services.matching_engine import match_trials
+from app.services.rate_limiter import get_match_rate_limiter
 
 router = APIRouter()
 
@@ -84,6 +85,32 @@ def _get_engine() -> Engine:
             raise RuntimeError("DATABASE_URL not set")
         _ENGINE = create_engine(_normalize_db_url(database_url), pool_pre_ping=True)
     return _ENGINE
+
+
+def _env_int(name: str, default: int) -> int:
+    raw = os.getenv(name)
+    if raw is None:
+        return default
+    try:
+        return int(raw)
+    except ValueError:
+        return default
+
+
+def _rate_limit_key(request: Request) -> str:
+    claims = getattr(request.state, "auth_claims", None)
+    subject = claims.get("sub") if isinstance(claims, dict) else None
+    if subject:
+        client_id = f"sub:{subject}"
+    else:
+        xff = request.headers.get("x-forwarded-for")
+        ip = (
+            xff.split(",")[0].strip()
+            if xff
+            else (request.client.host if request.client else "unknown")
+        )
+        client_id = f"ip:{ip}"
+    return f"ratelimit:match:{client_id}"
 
 
 def _ensure_match_tables(engine: Engine) -> None:
@@ -199,7 +226,7 @@ def _get_match_by_id(engine: Engine, match_id: str) -> Optional[Dict[str, Any]]:
 
 
 @router.post("/api/match")
-def create_match(payload: Dict[str, Any]):
+def create_match(payload: Dict[str, Any], request: Request):
     patient_profile_id = payload.get("patient_profile_id")
     filters = payload.get("filters") or {}
     top_k = payload.get("top_k", 10)
@@ -227,6 +254,31 @@ def create_match(payload: Dict[str, Any]):
             400,
             {"filters": filters},
         )
+
+    limit_per_minute = _env_int("MATCH_RATE_LIMIT_PER_MINUTE", 30)
+    if limit_per_minute > 0:
+        decision = get_match_rate_limiter().allow(
+            key=_rate_limit_key(request),
+            limit=limit_per_minute,
+            window_seconds=60,
+        )
+        if not decision.allowed:
+            response = _error(
+                "RATE_LIMITED",
+                "too many match requests; please retry later",
+                429,
+                {
+                    "limit": decision.limit,
+                    "remaining": decision.remaining,
+                    "reset_seconds": decision.reset_seconds,
+                    "backend": decision.backend,
+                },
+            )
+            response.headers["Retry-After"] = str(decision.retry_after_seconds)
+            response.headers["X-RateLimit-Limit"] = str(decision.limit)
+            response.headers["X-RateLimit-Remaining"] = str(decision.remaining)
+            response.headers["X-RateLimit-Reset"] = str(decision.reset_seconds)
+            return response
 
     try:
         engine = _get_engine()
