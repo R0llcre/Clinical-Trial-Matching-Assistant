@@ -64,11 +64,42 @@ export default function MatchResultsPage() {
   const [data, setData] = useState<MatchData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [expanded, setExpanded] = useState<Record<string, boolean>>({});
+
+  const countVerdicts = (rules: RuleVerdict[]) => {
+    const counts = { PASS: 0, FAIL: 0, UNKNOWN: 0 };
+    for (const rule of rules) {
+      counts[rule.verdict] += 1;
+    }
+    return counts;
+  };
 
   useEffect(() => {
     const savedToken = window.localStorage.getItem("ctmatch.jwt");
     if (savedToken && !jwtToken) {
       setJwtToken(savedToken);
+      return;
+    }
+    if (!jwtToken) {
+      void (async () => {
+        try {
+          const response = await fetch(`${API_BASE}/api/auth/preview-token`);
+          if (!response.ok) {
+            return;
+          }
+          const payload = (await response.json()) as {
+            ok: boolean;
+            data?: { token?: string };
+          };
+          const token = payload.data?.token;
+          if (payload.ok && token && token.trim()) {
+            window.localStorage.setItem("ctmatch.jwt", token.trim());
+            setJwtToken(token.trim());
+          }
+        } catch {
+          // ignore
+        }
+      })();
     }
   }, [jwtToken]);
 
@@ -76,18 +107,21 @@ export default function MatchResultsPage() {
     if (!router.isReady || typeof id !== "string") {
       return;
     }
-    if (!jwtToken.trim()) {
-      setLoading(false);
-      setError("JWT token is required to load match results.");
-      return;
-    }
 
     const loadMatch = async () => {
       setLoading(true);
       setError(null);
       try {
+        const token = (
+          window.localStorage.getItem("ctmatch.jwt") ?? jwtToken
+        ).trim();
+        if (!token) {
+          throw new Error(
+            "JWT token is required. In preview deployments it can be auto-issued; otherwise open /match first."
+          );
+        }
         const response = await fetch(`${API_BASE}/api/matches/${id}`, {
-          headers: {Authorization: `Bearer ${jwtToken.trim()}`},
+          headers: {Authorization: `Bearer ${token}`},
         });
         const payload = (await response.json()) as MatchResponse;
         if (!response.ok || !payload.ok || !payload.data) {
@@ -155,37 +189,76 @@ export default function MatchResultsPage() {
                   {item.phase && <span className="pill">{item.phase}</span>}
                 </div>
 
-                <div className="checklist-grid">
-                  <section className="detail-block">
-                    <h3>Inclusion</h3>
-                    <ul className="checklist-list">
-                      {item.checklist.inclusion.map((rule) => (
-                        <li key={`inc-${item.nct_id}-${rule.rule_id}`}>
-                          <span className={verdictClass(rule.verdict)}>
-                            {rule.verdict}
-                          </span>
-                          <strong>{rule.rule_id}</strong>
-                          <span>{rule.evidence}</span>
-                        </li>
-                      ))}
-                    </ul>
-                  </section>
+                {(() => {
+                  const inclusionCounts = countVerdicts(item.checklist.inclusion);
+                  const exclusionCounts = countVerdicts(item.checklist.exclusion);
+                  const isExpanded = Boolean(expanded[item.nct_id]);
+                  return (
+                    <>
+                      <div className="pills">
+                        <span className="pill verdict-pass">
+                          pass {inclusionCounts.PASS + exclusionCounts.PASS}
+                        </span>
+                        <span className="pill verdict-unknown">
+                          unknown{" "}
+                          {inclusionCounts.UNKNOWN + exclusionCounts.UNKNOWN}
+                        </span>
+                        <span className="pill verdict-fail">
+                          fail {inclusionCounts.FAIL + exclusionCounts.FAIL}
+                        </span>
+                        <span className="pill">
+                          missing {item.checklist.missing_info.length}
+                        </span>
+                        <button
+                          type="button"
+                          className="link-button"
+                          onClick={() =>
+                            setExpanded((prev) => ({
+                              ...prev,
+                              [item.nct_id]: !isExpanded,
+                            }))
+                          }
+                        >
+                          {isExpanded ? "Hide checklist" : "Show checklist"}
+                        </button>
+                      </div>
 
-                  <section className="detail-block">
-                    <h3>Exclusion</h3>
-                    <ul className="checklist-list">
-                      {item.checklist.exclusion.map((rule) => (
-                        <li key={`exc-${item.nct_id}-${rule.rule_id}`}>
-                          <span className={verdictClass(rule.verdict)}>
-                            {rule.verdict}
-                          </span>
-                          <strong>{rule.rule_id}</strong>
-                          <span>{rule.evidence}</span>
-                        </li>
-                      ))}
-                    </ul>
-                  </section>
-                </div>
+                      {isExpanded && (
+                        <div className="checklist-grid">
+                          <section className="detail-block">
+                            <h3>Inclusion</h3>
+                            <ul className="checklist-list">
+                              {item.checklist.inclusion.map((rule) => (
+                                <li key={`inc-${item.nct_id}-${rule.rule_id}`}>
+                                  <span className={verdictClass(rule.verdict)}>
+                                    {rule.verdict}
+                                  </span>
+                                  <strong>{rule.rule_id}</strong>
+                                  <span>{rule.evidence}</span>
+                                </li>
+                              ))}
+                            </ul>
+                          </section>
+
+                          <section className="detail-block">
+                            <h3>Exclusion</h3>
+                            <ul className="checklist-list">
+                              {item.checklist.exclusion.map((rule) => (
+                                <li key={`exc-${item.nct_id}-${rule.rule_id}`}>
+                                  <span className={verdictClass(rule.verdict)}>
+                                    {rule.verdict}
+                                  </span>
+                                  <strong>{rule.rule_id}</strong>
+                                  <span>{rule.evidence}</span>
+                                </li>
+                              ))}
+                            </ul>
+                          </section>
+                        </div>
+                      )}
+                    </>
+                  );
+                })()}
 
                 <section className="detail-block">
                   <h3>Missing Info</h3>

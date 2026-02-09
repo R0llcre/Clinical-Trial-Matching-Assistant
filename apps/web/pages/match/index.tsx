@@ -24,6 +24,17 @@ type CreateMatchResponse = {
   error?: ApiError;
 };
 
+type TrialForSuggestions = {
+  conditions: string[];
+};
+
+type TrialsSuggestionResponse = {
+  ok: boolean;
+  data?: {
+    trials: TrialForSuggestions[];
+  };
+};
+
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE ?? "http://localhost:8000";
 
 export default function MatchPage() {
@@ -31,14 +42,16 @@ export default function MatchPage() {
   const [jwtToken, setJwtToken] = useState(
     process.env.NEXT_PUBLIC_DEV_JWT ?? ""
   );
-  const [age, setAge] = useState("52");
+  const [showAuthAdvanced, setShowAuthAdvanced] = useState(false);
+  const [age, setAge] = useState("45");
   const [sex, setSex] = useState("female");
-  const [conditions, setConditions] = useState("type 2 diabetes");
-  const [status, setStatus] = useState("RECRUITING");
+  const [conditions, setConditions] = useState("Leukemia");
+  const [status, setStatus] = useState("");
   const [phase, setPhase] = useState("");
   const [topK, setTopK] = useState("10");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [conditionSuggestions, setConditionSuggestions] = useState<string[]>([]);
 
   useEffect(() => {
     const savedToken = window.localStorage.getItem("ctmatch.jwt");
@@ -63,11 +76,43 @@ export default function MatchPage() {
             setJwtToken(token.trim());
           }
         } catch {
-          // Ignore; preview token endpoint may be disabled.
+          // ignore; preview token endpoint may be disabled.
         }
       })();
     }
   }, [jwtToken]);
+
+  useEffect(() => {
+    void (async () => {
+      try {
+        const response = await fetch(`${API_BASE}/api/trials?page=1&page_size=50`);
+        if (!response.ok) {
+          return;
+        }
+        const payload = (await response.json()) as TrialsSuggestionResponse;
+        const trials = payload.ok ? payload.data?.trials ?? [] : [];
+
+        const counts = new Map<string, number>();
+        for (const trial of trials) {
+          for (const rawCondition of trial.conditions ?? []) {
+            const value = rawCondition.trim();
+            if (!value) {
+              continue;
+            }
+            counts.set(value, (counts.get(value) ?? 0) + 1);
+          }
+        }
+
+        const suggestions = Array.from(counts.entries())
+          .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
+          .slice(0, 12)
+          .map(([value]) => value);
+        setConditionSuggestions(suggestions);
+      } catch {
+        // ignore
+      }
+    })();
+  }, []);
 
   const onSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -186,15 +231,27 @@ export default function MatchPage() {
 
       <section className="card">
         <form className="search-panel" onSubmit={onSubmit}>
-          <div className="field">
-            <label htmlFor="jwt">JWT Token</label>
-            <input
-              id="jwt"
-              value={jwtToken}
-              onChange={(event) => setJwtToken(event.target.value)}
-              placeholder="Bearer token (required)"
-            />
+          <div className="meta-row">
+            <button
+              type="button"
+              className="link-button"
+              onClick={() => setShowAuthAdvanced((value) => !value)}
+            >
+              {showAuthAdvanced ? "Hide advanced auth" : "Advanced auth"}
+            </button>
           </div>
+
+          {showAuthAdvanced && (
+            <div className="field">
+              <label htmlFor="jwt">JWT Token (advanced)</label>
+              <input
+                id="jwt"
+                value={jwtToken}
+                onChange={(event) => setJwtToken(event.target.value)}
+                placeholder="Paste token if preview auto-auth is disabled"
+              />
+            </div>
+          )}
 
           <div className="field">
             <label htmlFor="age">Age</label>
@@ -226,8 +283,25 @@ export default function MatchPage() {
               id="conditions"
               value={conditions}
               onChange={(event) => setConditions(event.target.value)}
-              placeholder="e.g. diabetes, hypertension"
+              placeholder="e.g. leukemia, breast cancer"
             />
+            {conditionSuggestions.length > 0 && (
+              <div className="suggestions">
+                <span className="suggestions-label">Try:</span>
+                <div className="pills">
+                  {conditionSuggestions.map((value) => (
+                    <button
+                      key={value}
+                      type="button"
+                      className="pill pill-button"
+                      onClick={() => setConditions(value)}
+                    >
+                      {value}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
 
           <div className="field">
