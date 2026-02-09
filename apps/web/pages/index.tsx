@@ -1,7 +1,8 @@
 import Link from "next/link";
 import type { GetServerSideProps } from "next";
+import { useRouter } from "next/router";
 import type { FormEvent } from "react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 type TrialSummary = {
   nct_id: string;
@@ -161,6 +162,7 @@ export const getServerSideProps: GetServerSideProps<HomeProps> = async (ctx) => 
 };
 
 export default function Home(props: HomeProps) {
+  const router = useRouter();
   const [condition, setCondition] = useState(props.initialCondition);
   const [status, setStatus] = useState(props.initialStatus);
   const [phase, setPhase] = useState(props.initialPhase);
@@ -170,6 +172,7 @@ export default function Home(props: HomeProps) {
   const [total, setTotal] = useState(props.initialTotal);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const abortRef = useRef<AbortController | null>(null);
 
   const lastSyncedDate = useMemo(() => {
     let latest: string | null = null;
@@ -189,33 +192,64 @@ export default function Home(props: HomeProps) {
     return total > 0 ? Math.ceil(total / pageSize) : 1;
   }, [total, pageSize]);
 
-  const fetchTrials = async (
-    nextPage: number,
-    overrides?: Partial<{ condition: string; status: string; phase: string }>
-  ) => {
+  const buildQuery = (input: {
+    conditionValue: string;
+    statusValue: string;
+    phaseValue: string;
+    pageValue: number;
+    pageSizeValue: number;
+  }) => {
+    const query: Record<string, string> = {};
+    const trimmedCondition = input.conditionValue.trim();
+    if (trimmedCondition) {
+      query.condition = trimmedCondition;
+    }
+    if (input.statusValue) {
+      query.status = input.statusValue;
+    }
+    if (input.phaseValue) {
+      query.phase = input.phaseValue;
+    }
+    if (input.pageValue > 1) {
+      query.page = String(input.pageValue);
+    }
+    if (input.pageSizeValue !== 20) {
+      query.page_size = String(input.pageSizeValue);
+    }
+    return query;
+  };
+
+  const fetchTrials = async (input: {
+    conditionValue: string;
+    statusValue: string;
+    phaseValue: string;
+    pageValue: number;
+    pageSizeValue: number;
+  }) => {
     setLoading(true);
     setError(null);
 
-    const conditionValue = overrides?.condition ?? condition;
-    const statusValue = overrides?.status ?? status;
-    const phaseValue = overrides?.phase ?? phase;
+    abortRef.current?.abort();
+    const controller = new AbortController();
+    abortRef.current = controller;
 
     const params = new URLSearchParams();
-    if (conditionValue.trim()) {
-      params.set("condition", conditionValue.trim());
+    if (input.conditionValue.trim()) {
+      params.set("condition", input.conditionValue.trim());
     }
-    if (statusValue) {
-      params.set("status", statusValue);
+    if (input.statusValue) {
+      params.set("status", input.statusValue);
     }
-    if (phaseValue) {
-      params.set("phase", phaseValue);
+    if (input.phaseValue) {
+      params.set("phase", input.phaseValue);
     }
-    params.set("page", String(nextPage));
-    params.set("page_size", String(pageSize));
+    params.set("page", String(input.pageValue));
+    params.set("page_size", String(input.pageSizeValue));
 
     try {
       const response = await fetch(
-        `${API_BASE}/api/trials?${params.toString()}`
+        `${API_BASE}/api/trials?${params.toString()}`,
+        { signal: controller.signal }
       );
       const payload = (await response.json()) as TrialsResponse;
       if (!response.ok || !payload.ok) {
@@ -223,9 +257,12 @@ export default function Home(props: HomeProps) {
       }
       setTrials(payload.data?.trials ?? []);
       setTotal(payload.data?.total ?? 0);
-      setPage(payload.data?.page ?? nextPage);
-      setPageSize(payload.data?.page_size ?? pageSize);
+      setPage(payload.data?.page ?? input.pageValue);
+      setPageSize(payload.data?.page_size ?? input.pageSizeValue);
     } catch (err) {
+      if (err instanceof DOMException && err.name === "AbortError") {
+        return;
+      }
       setTrials([]);
       setTotal(0);
       setError(err instanceof Error ? err.message : "Unknown error");
@@ -236,14 +273,28 @@ export default function Home(props: HomeProps) {
 
   const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    fetchTrials(1);
+    const query = buildQuery({
+      conditionValue: condition,
+      statusValue: status,
+      phaseValue: phase,
+      pageValue: 1,
+      pageSizeValue: pageSize,
+    });
+    void router.push({ pathname: "/", query }, undefined, { shallow: true });
   };
 
   const clearFilters = () => {
     setCondition("");
     setStatus("");
     setPhase("");
-    void fetchTrials(1, { condition: "", status: "", phase: "" });
+    const query = buildQuery({
+      conditionValue: "",
+      statusValue: "",
+      phaseValue: "",
+      pageValue: 1,
+      pageSizeValue: pageSize,
+    });
+    void router.push({ pathname: "/", query }, undefined, { shallow: true });
   };
 
   const suggestedConditions = useMemo(() => {
@@ -264,7 +315,10 @@ export default function Home(props: HomeProps) {
   }, [trials]);
 
   useEffect(() => {
-    // Keep client state aligned if user navigates with back/forward and SSR query changes.
+    // When Next.js re-hydrates new SSR props (non-shallow navigation), prefer them.
+    abortRef.current?.abort();
+    setLoading(false);
+    setError(null);
     setCondition(props.initialCondition);
     setStatus(props.initialStatus);
     setPhase(props.initialPhase);
@@ -280,6 +334,67 @@ export default function Home(props: HomeProps) {
     props.initialPageSize,
     props.initialTotal,
     props.initialTrials,
+  ]);
+
+  useEffect(() => {
+    if (!router.isReady) {
+      return;
+    }
+
+    const nextCondition =
+      typeof router.query.condition === "string" ? router.query.condition : "";
+    const nextStatus =
+      typeof router.query.status === "string" ? router.query.status : "";
+    const nextPhase =
+      typeof router.query.phase === "string" ? router.query.phase : "";
+    const nextPageRaw =
+      typeof router.query.page === "string" ? Number(router.query.page) : 1;
+    const nextPageSizeRaw =
+      typeof router.query.page_size === "string"
+        ? Number(router.query.page_size)
+        : 20;
+
+    const safePage =
+      Number.isFinite(nextPageRaw) && nextPageRaw > 0 ? nextPageRaw : 1;
+    const safePageSize =
+      Number.isFinite(nextPageSizeRaw) &&
+      nextPageSizeRaw > 0 &&
+      nextPageSizeRaw <= 50
+        ? nextPageSizeRaw
+        : 20;
+
+    const shouldFetch =
+      nextCondition !== props.initialCondition ||
+      nextStatus !== props.initialStatus ||
+      nextPhase !== props.initialPhase ||
+      safePage !== props.initialPage ||
+      safePageSize !== props.initialPageSize;
+
+    setCondition(nextCondition);
+    setStatus(nextStatus);
+    setPhase(nextPhase);
+    setPage(safePage);
+    setPageSize(safePageSize);
+
+    if (!shouldFetch) {
+      return;
+    }
+
+    void fetchTrials({
+      conditionValue: nextCondition,
+      statusValue: nextStatus,
+      phaseValue: nextPhase,
+      pageValue: safePage,
+      pageSizeValue: safePageSize,
+    });
+  }, [
+    router.isReady,
+    router.asPath,
+    props.initialCondition,
+    props.initialStatus,
+    props.initialPhase,
+    props.initialPage,
+    props.initialPageSize,
   ]);
 
   return (
@@ -350,7 +465,18 @@ export default function Home(props: HomeProps) {
                           className="pill pill-button"
                           onClick={() => {
                             setCondition(value);
-                            void fetchTrials(1, { condition: value });
+                            const query = buildQuery({
+                              conditionValue: value,
+                              statusValue: status,
+                              phaseValue: phase,
+                              pageValue: 1,
+                              pageSizeValue: pageSize,
+                            });
+                            void router.push(
+                              { pathname: "/", query },
+                              undefined,
+                              { shallow: true }
+                            );
                           }}
                         >
                           {value}
@@ -414,6 +540,34 @@ export default function Home(props: HomeProps) {
                 ? `${total} trials found`
                 : "Showing the latest synced trials."}
             </span>
+            <div className="meta-select">
+              <label htmlFor="page_size" className="sr-only">
+                Page size
+              </label>
+              <select
+                id="page_size"
+                value={String(pageSize)}
+                onChange={(event) => {
+                  const nextSize = Number(event.target.value);
+                  const query = buildQuery({
+                    conditionValue: condition,
+                    statusValue: status,
+                    phaseValue: phase,
+                    pageValue: 1,
+                    pageSizeValue: nextSize,
+                  });
+                  void router.push(
+                    { pathname: "/", query },
+                    undefined,
+                    { shallow: true }
+                  );
+                }}
+                disabled={loading}
+              >
+                <option value="20">20 / page</option>
+                <option value="50">50 / page</option>
+              </select>
+            </div>
             {(condition || status || phase) && (
               <button
                 type="button"
@@ -511,7 +665,20 @@ export default function Home(props: HomeProps) {
             <div className="pagination">
               <button
                 className="button secondary"
-                onClick={() => fetchTrials(Math.max(1, page - 1))}
+                onClick={() => {
+                  const query = buildQuery({
+                    conditionValue: condition,
+                    statusValue: status,
+                    phaseValue: phase,
+                    pageValue: Math.max(1, page - 1),
+                    pageSizeValue: pageSize,
+                  });
+                  void router.push(
+                    { pathname: "/", query },
+                    undefined,
+                    { shallow: true }
+                  );
+                }}
                 disabled={loading || page <= 1}
               >
                 Previous
@@ -521,7 +688,20 @@ export default function Home(props: HomeProps) {
               </span>
               <button
                 className="button secondary"
-                onClick={() => fetchTrials(Math.min(totalPages, page + 1))}
+                onClick={() => {
+                  const query = buildQuery({
+                    conditionValue: condition,
+                    statusValue: status,
+                    phaseValue: phase,
+                    pageValue: Math.min(totalPages, page + 1),
+                    pageSizeValue: pageSize,
+                  });
+                  void router.push(
+                    { pathname: "/", query },
+                    undefined,
+                    { shallow: true }
+                  );
+                }}
                 disabled={loading || page >= totalPages}
               >
                 Next
