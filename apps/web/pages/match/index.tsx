@@ -37,12 +37,49 @@ type TrialsSuggestionResponse = {
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE ?? "http://localhost:8000";
 
+type DemoProfile = {
+  label: string;
+  age: string;
+  sex: string;
+  conditions: string;
+  status: string;
+  phase: string;
+};
+
+const DEMO_PROFILES: DemoProfile[] = [
+  {
+    label: "Breast cancer (female, 45)",
+    age: "45",
+    sex: "female",
+    conditions: "Breast Cancer",
+    status: "RECRUITING",
+    phase: "PHASE2",
+  },
+  {
+    label: "Melanoma (male, 62)",
+    age: "62",
+    sex: "male",
+    conditions: "Melanoma",
+    status: "RECRUITING",
+    phase: "PHASE2",
+  },
+  {
+    label: "Long COVID (female, 38)",
+    age: "38",
+    sex: "female",
+    conditions: "Long COVID",
+    status: "RECRUITING",
+    phase: "",
+  },
+];
+
 export default function MatchPage() {
   const router = useRouter();
   const [jwtToken, setJwtToken] = useState(
     process.env.NEXT_PUBLIC_DEV_JWT ?? ""
   );
   const [showAuthAdvanced, setShowAuthAdvanced] = useState(false);
+  const [authReady, setAuthReady] = useState(false);
   const [age, setAge] = useState("45");
   const [sex, setSex] = useState("female");
   const [conditions, setConditions] = useState("Leukemia");
@@ -52,11 +89,25 @@ export default function MatchPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [conditionSuggestions, setConditionSuggestions] = useState<string[]>([]);
+  const [demo, setDemo] = useState("");
+
+  const applyDemo = (value: string) => {
+    const selected = DEMO_PROFILES.find((profile) => profile.label === value);
+    if (!selected) {
+      return;
+    }
+    setAge(selected.age);
+    setSex(selected.sex);
+    setConditions(selected.conditions);
+    setStatus(selected.status);
+    setPhase(selected.phase);
+  };
 
   useEffect(() => {
     const savedToken = window.localStorage.getItem("ctmatch.jwt");
     if (savedToken && !jwtToken) {
       setJwtToken(savedToken);
+      setAuthReady(true);
       return;
     }
     if (!jwtToken) {
@@ -74,11 +125,17 @@ export default function MatchPage() {
           if (payload.ok && token && token.trim()) {
             window.localStorage.setItem("ctmatch.jwt", token.trim());
             setJwtToken(token.trim());
+            setAuthReady(true);
+            setShowAuthAdvanced(false);
+            return;
           }
         } catch {
           // ignore; preview token endpoint may be disabled.
         }
+        setAuthReady(false);
       })();
+    } else {
+      setAuthReady(true);
     }
   }, [jwtToken]);
 
@@ -132,26 +189,11 @@ export default function MatchPage() {
       return;
     }
     if (!jwtToken.trim()) {
-      try {
-        const response = await fetch(`${API_BASE}/api/auth/preview-token`);
-        if (response.ok) {
-          const payload = (await response.json()) as {
-            ok: boolean;
-            data?: { token?: string };
-          };
-          const token = payload.data?.token;
-          if (payload.ok && token && token.trim()) {
-            window.localStorage.setItem("ctmatch.jwt", token.trim());
-            setJwtToken(token.trim());
-          }
-        }
-      } catch {
-        // ignore
-      }
-      if (!window.localStorage.getItem("ctmatch.jwt") && !jwtToken.trim()) {
+      if (!window.localStorage.getItem("ctmatch.jwt")) {
         setLoading(false);
+        setShowAuthAdvanced(true);
         setError(
-          "JWT token is required for /api/patients. In preview deployments it can be auto-issued; otherwise generate one via scripts/gen_dev_jwt.py."
+          "Authentication is required to create a patient profile. This preview can auto-issue a token, or you can paste one under “Auth options”."
         );
         return;
       }
@@ -229,138 +271,177 @@ export default function MatchPage() {
         </p>
       </header>
 
-      <section className="card">
-        <form className="search-panel" onSubmit={onSubmit}>
-          <div className="meta-row">
-            <button
-              type="button"
-              className="link-button"
-              onClick={() => setShowAuthAdvanced((value) => !value)}
-            >
-              {showAuthAdvanced ? "Hide advanced auth" : "Advanced auth"}
-            </button>
-          </div>
+      {error && <p className="notice">{error}</p>}
 
-          {showAuthAdvanced && (
-            <div className="field">
-              <label htmlFor="jwt">JWT Token (advanced)</label>
-              <input
-                id="jwt"
-                value={jwtToken}
-                onChange={(event) => setJwtToken(event.target.value)}
-                placeholder="Paste token if preview auto-auth is disabled"
-              />
+      {!authReady && (
+        <section className="card subtle">
+          <h2 className="section-title">Authentication</h2>
+          <p className="help-text">
+            This deployment issues a preview JWT automatically when available.
+            If auto-auth is disabled, open “Auth options” and paste a token.
+          </p>
+        </section>
+      )}
+
+      <form className="stack" onSubmit={onSubmit}>
+        <div className="match-grid">
+          <section className="card">
+            <div className="match-card-header">
+              <h2 className="section-title">Patient</h2>
+              {(!authReady || showAuthAdvanced) && (
+                <button
+                  type="button"
+                  className="link-button"
+                  onClick={() => setShowAuthAdvanced((value) => !value)}
+                >
+                  {showAuthAdvanced ? "Hide auth options" : "Auth options"}
+                </button>
+              )}
             </div>
-          )}
 
-          <div className="field">
-            <label htmlFor="age">Age</label>
-            <input
-              id="age"
-              type="number"
-              min={0}
-              value={age}
-              onChange={(event) => setAge(event.target.value)}
-            />
-          </div>
-
-          <div className="field">
-            <label htmlFor="sex">Sex</label>
-            <select
-              id="sex"
-              value={sex}
-              onChange={(event) => setSex(event.target.value)}
-            >
-              <option value="female">Female</option>
-              <option value="male">Male</option>
-              <option value="other">Other</option>
-            </select>
-          </div>
-
-          <div className="field">
-            <label htmlFor="conditions">Conditions (comma separated)</label>
-            <input
-              id="conditions"
-              value={conditions}
-              onChange={(event) => setConditions(event.target.value)}
-              placeholder="e.g. leukemia, breast cancer"
-            />
-            {conditionSuggestions.length > 0 && (
-              <div className="suggestions">
-                <span className="suggestions-label">Try:</span>
-                <div className="pills">
-                  {conditionSuggestions.map((value) => (
-                    <button
-                      key={value}
-                      type="button"
-                      className="pill pill-button"
-                      onClick={() => setConditions(value)}
-                    >
-                      {value}
-                    </button>
-                  ))}
-                </div>
+            {showAuthAdvanced && (
+              <div className="field">
+                <label htmlFor="jwt">JWT Token (advanced)</label>
+                <input
+                  id="jwt"
+                  value={jwtToken}
+                  onChange={(event) => setJwtToken(event.target.value)}
+                  placeholder="Paste token if preview auto-auth is disabled"
+                />
               </div>
             )}
-          </div>
 
-          <div className="field">
-            <label htmlFor="status">Trial Status</label>
-            <select
-              id="status"
-              value={status}
-              onChange={(event) => setStatus(event.target.value)}
-            >
-              <option value="">Any</option>
-              <option value="RECRUITING">Recruiting</option>
-              <option value="NOT_YET_RECRUITING">Not yet recruiting</option>
-              <option value="ACTIVE_NOT_RECRUITING">
-                Active, not recruiting
-              </option>
-              <option value="COMPLETED">Completed</option>
-            </select>
-          </div>
+            <div className="field">
+              <label htmlFor="demo">Demo profile</label>
+              <select
+                id="demo"
+                value={demo}
+                onChange={(event) => {
+                  const value = event.target.value;
+                  setDemo(value);
+                  applyDemo(value);
+                }}
+              >
+                <option value="">Choose a preset...</option>
+                {DEMO_PROFILES.map((profile) => (
+                  <option key={profile.label} value={profile.label}>
+                    {profile.label}
+                  </option>
+                ))}
+              </select>
+            </div>
 
-          <div className="field">
-            <label htmlFor="phase">Trial Phase</label>
-            <select
-              id="phase"
-              value={phase}
-              onChange={(event) => setPhase(event.target.value)}
-            >
-              <option value="">Any</option>
-              <option value="EARLY_PHASE1">Early Phase 1</option>
-              <option value="PHASE1">Phase 1</option>
-              <option value="PHASE2">Phase 2</option>
-              <option value="PHASE3">Phase 3</option>
-              <option value="PHASE4">Phase 4</option>
-            </select>
-          </div>
+            <div className="field">
+              <label htmlFor="age">Age</label>
+              <input
+                id="age"
+                type="number"
+                min={0}
+                value={age}
+                onChange={(event) => setAge(event.target.value)}
+              />
+            </div>
 
-          <div className="field">
-            <label htmlFor="top_k">Top K</label>
-            <input
-              id="top_k"
-              type="number"
-              min={1}
-              max={50}
-              value={topK}
-              onChange={(event) => setTopK(event.target.value)}
-            />
-          </div>
+            <div className="field">
+              <label htmlFor="sex">Sex</label>
+              <select
+                id="sex"
+                value={sex}
+                onChange={(event) => setSex(event.target.value)}
+              >
+                <option value="female">Female</option>
+                <option value="male">Male</option>
+                <option value="other">Other</option>
+              </select>
+            </div>
 
-          <button className="button" type="submit" disabled={loading}>
-            {loading ? "Running matching..." : "Run match"}
-          </button>
-        </form>
-      </section>
+            <div className="field">
+              <label htmlFor="conditions">Conditions (comma separated)</label>
+              <input
+                id="conditions"
+                value={conditions}
+                onChange={(event) => setConditions(event.target.value)}
+                placeholder="e.g. leukemia, breast cancer"
+              />
+              {conditionSuggestions.length > 0 && (
+                <div className="suggestions">
+                  <span className="suggestions-label">Try:</span>
+                  <div className="pills">
+                    {conditionSuggestions.map((value) => (
+                      <button
+                        key={value}
+                        type="button"
+                        className="pill pill-button"
+                        onClick={() => setConditions(value)}
+                      >
+                        {value}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          </section>
 
-      <div className="meta-row">
-        <Link href="/" className="button secondary">
-          Back to trial browse
-        </Link>
-        {error && <span className="notice">{error}</span>}
-      </div>
+          <section className="card">
+            <h2 className="section-title">Match preferences</h2>
+
+            <div className="field">
+              <label htmlFor="status">Trial status</label>
+              <select
+                id="status"
+                value={status}
+                onChange={(event) => setStatus(event.target.value)}
+              >
+                <option value="">Any</option>
+                <option value="RECRUITING">Recruiting</option>
+                <option value="NOT_YET_RECRUITING">Not yet recruiting</option>
+                <option value="ACTIVE_NOT_RECRUITING">
+                  Active, not recruiting
+                </option>
+                <option value="COMPLETED">Completed</option>
+              </select>
+            </div>
+
+            <div className="field">
+              <label htmlFor="phase">Trial phase</label>
+              <select
+                id="phase"
+                value={phase}
+                onChange={(event) => setPhase(event.target.value)}
+              >
+                <option value="">Any</option>
+                <option value="EARLY_PHASE1">Early Phase 1</option>
+                <option value="PHASE1">Phase 1</option>
+                <option value="PHASE2">Phase 2</option>
+                <option value="PHASE3">Phase 3</option>
+                <option value="PHASE4">Phase 4</option>
+              </select>
+            </div>
+
+            <div className="field">
+              <label htmlFor="top_k">Top K</label>
+              <input
+                id="top_k"
+                type="number"
+                min={1}
+                max={50}
+                value={topK}
+                onChange={(event) => setTopK(event.target.value)}
+              />
+            </div>
+
+            <div className="meta-row">
+              <button className="button" type="submit" disabled={loading}>
+                {loading ? "Running matching..." : "Run match"}
+              </button>
+              <Link href="/" className="button secondary">
+                Browse trials
+              </Link>
+            </div>
+          </section>
+        </div>
+      </form>
     </main>
   );
 }

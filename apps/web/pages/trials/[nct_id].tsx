@@ -1,6 +1,6 @@
 import Link from "next/link";
-import { useRouter } from "next/router";
-import { useEffect, useState } from "react";
+import type { GetServerSideProps } from "next";
+import { useState } from "react";
 
 type TrialDetail = {
   nct_id: string;
@@ -46,6 +46,47 @@ type TrialResponse = {
 const API_BASE =
   process.env.NEXT_PUBLIC_API_BASE ?? "http://localhost:8000";
 
+const statusLabel = (value?: string | null) => {
+  if (!value) {
+    return null;
+  }
+  if (value === "RECRUITING") {
+    return "Recruiting";
+  }
+  if (value === "NOT_YET_RECRUITING") {
+    return "Not yet recruiting";
+  }
+  if (value === "ACTIVE_NOT_RECRUITING") {
+    return "Active, not recruiting";
+  }
+  if (value === "COMPLETED") {
+    return "Completed";
+  }
+  return value
+    .replaceAll("_", " ")
+    .toLowerCase()
+    .replace(/\b\w/g, (match) => match.toUpperCase());
+};
+
+const statusPillClass = (value?: string | null) => {
+  if (!value) {
+    return "";
+  }
+  if (value === "RECRUITING") {
+    return "status-recruiting";
+  }
+  if (value === "NOT_YET_RECRUITING") {
+    return "status-not-yet";
+  }
+  if (value === "ACTIVE_NOT_RECRUITING") {
+    return "status-active";
+  }
+  if (value === "COMPLETED") {
+    return "status-completed";
+  }
+  return "";
+};
+
 const formatFetchedDate = (value?: string | null) => {
   if (!value) {
     return null;
@@ -53,40 +94,41 @@ const formatFetchedDate = (value?: string | null) => {
   return value.length >= 10 ? value.slice(0, 10) : value;
 };
 
-export default function TrialDetailPage() {
-  const router = useRouter();
-  const { nct_id } = router.query;
+type TrialDetailPageProps = {
+  trial: TrialDetail | null;
+  error: string | null;
+};
 
-  const [trial, setTrial] = useState<TrialDetail | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [eligibilityExpanded, setEligibilityExpanded] = useState(false);
+export const getServerSideProps: GetServerSideProps<TrialDetailPageProps> = async (
+  ctx
+) => {
+  const nctId =
+    typeof ctx.params?.nct_id === "string" ? ctx.params.nct_id : null;
+  if (!nctId) {
+    return { props: { trial: null, error: "Missing nct_id" } };
+  }
 
-  useEffect(() => {
-    if (!router.isReady || typeof nct_id !== "string") {
-      return;
+  try {
+    const response = await fetch(`${API_BASE}/api/trials/${encodeURIComponent(nctId)}`);
+    const payload = (await response.json()) as TrialResponse;
+    if (!response.ok || !payload.ok) {
+      return {
+        props: {
+          trial: null,
+          error: payload.error?.message || "Failed to load trial",
+        },
+      };
     }
+    return { props: { trial: payload.data ?? null, error: null } };
+  } catch {
+    return { props: { trial: null, error: "Failed to load trial" } };
+  }
+};
 
-    const fetchDetail = async () => {
-      setLoading(true);
-      setError(null);
-      try {
-        const response = await fetch(`${API_BASE}/api/trials/${nct_id}`);
-        const payload = (await response.json()) as TrialResponse;
-        if (!response.ok || !payload.ok) {
-          throw new Error(payload.error?.message || "Failed to load trial");
-        }
-        setTrial(payload.data ?? null);
-      } catch (err) {
-        setError(err instanceof Error ? err.message : "Unknown error");
-        setTrial(null);
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    fetchDetail();
-  }, [router.isReady, nct_id]);
+export default function TrialDetailPage(props: TrialDetailPageProps) {
+  const trial = props.trial;
+  const error = props.error;
+  const [eligibilityExpanded, setEligibilityExpanded] = useState(false);
 
   const eligibilityText = trial?.eligibility_text ?? "";
   const eligibilityLines = eligibilityText ? eligibilityText.split("\n") : [];
@@ -97,61 +139,49 @@ export default function TrialDetailPage() {
       ? `${eligibilityPreview}\n\n…`
       : eligibilityText || "No eligibility text provided.";
 
+  const inclusionRules =
+    trial?.criteria?.filter((rule) => rule.type === "INCLUSION") ?? [];
+  const exclusionRules =
+    trial?.criteria?.filter((rule) => rule.type === "EXCLUSION") ?? [];
+
   return (
     <main>
       <header className="page-header">
         <span className="kicker">{trial?.nct_id ?? "Trial"}</span>
-        {loading ? (
-          <>
-            <div className="skeleton skeleton-line long" />
-            <div className="skeleton skeleton-line medium" />
-          </>
-        ) : (
-          <>
-            {trial && <h1 className="title">{trial.title}</h1>}
-            {trial && (
-              <div className="pills">
-                {trial.status && <span className="pill">{trial.status}</span>}
-                {trial.phase && <span className="pill warm">{trial.phase}</span>}
-                {trial.fetched_at && (
-                  <span className="pill">
-                    synced {formatFetchedDate(trial.fetched_at)}
-                  </span>
-                )}
-              </div>
+        {trial && <h1 className="title">{trial.title}</h1>}
+        {trial && (
+          <div className="pills">
+            {trial.status && (
+              <span
+                className={`pill ${statusPillClass(trial.status)}`}
+                title={trial.status}
+              >
+                {statusLabel(trial.status)}
+              </span>
             )}
-          </>
+            {trial.phase && <span className="pill warm">{trial.phase}</span>}
+            {trial.fetched_at && (
+              <span className="pill">
+                synced {formatFetchedDate(trial.fetched_at)}
+              </span>
+            )}
+          </div>
         )}
         {error && <p className="notice">{error}</p>}
       </header>
 
-      {loading && (
-        <div className="detail-grid">
-          <section className="detail-block">
-            <div className="skeleton skeleton-block" />
-          </section>
-          <section className="detail-block">
-            <div className="skeleton skeleton-block" />
-          </section>
-          <section className="detail-block">
-            <div className="skeleton skeleton-block" />
-          </section>
-          <section className="detail-block">
-            <div className="skeleton skeleton-block" />
-          </section>
-        </div>
-      )}
-
       {trial && (
-        <div className="detail-grid">
-          <section className="detail-block">
+        <div className="detail-layout">
+          <section className="stack detail-main">
+            <section className="detail-block">
             <h3>Summary</h3>
             <pre>
               {trial.summary ||
                 "Summary unavailable. Review eligibility criteria for details."}
             </pre>
-          </section>
-          <section className="detail-block">
+            </section>
+
+            <section className="detail-block">
             <h3>Eligibility</h3>
             <pre>{eligibilityShown}</pre>
             {eligibilityTruncated && (
@@ -163,68 +193,138 @@ export default function TrialDetailPage() {
                 {eligibilityExpanded ? "Collapse" : "Expand"}
               </button>
             )}
-          </section>
-          <section className="detail-block">
-            <h3>Parsed Criteria</h3>
-            <div className="pills">
-              {trial.criteria_parser_version && (
-                <span className="pill warm">{trial.criteria_parser_version}</span>
+            </section>
+
+            <section className="detail-block">
+              <h3>Parsed Criteria</h3>
+              <div className="pills">
+                {trial.criteria_parser_version && (
+                  <span className="pill warm">{trial.criteria_parser_version}</span>
+                )}
+                {trial.coverage_stats?.total_rules !== undefined && (
+                  <span className="pill">
+                    rules {trial.coverage_stats.total_rules}
+                  </span>
+                )}
+                {trial.coverage_stats?.unknown_rules !== undefined && (
+                  <span className="pill">
+                    unknown {trial.coverage_stats.unknown_rules}
+                  </span>
+                )}
+              </div>
+
+              {trial.criteria && trial.criteria.length > 0 ? (
+                <div className="stack">
+                  <section className="detail-block inner">
+                    <h3>Inclusion ({inclusionRules.length})</h3>
+                    <ul className="checklist-list">
+                      {inclusionRules.map((rule) => (
+                        <li key={rule.id}>
+                          <strong>
+                            {rule.field} {rule.operator} {String(rule.value ?? "")}
+                            {rule.unit ? ` ${rule.unit}` : ""}
+                          </strong>
+                          <span>{rule.evidence_text}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </section>
+
+                  <section className="detail-block inner">
+                    <h3>Exclusion ({exclusionRules.length})</h3>
+                    <ul className="checklist-list">
+                      {exclusionRules.map((rule) => (
+                        <li key={rule.id}>
+                          <strong>
+                            {rule.field} {rule.operator} {String(rule.value ?? "")}
+                            {rule.unit ? ` ${rule.unit}` : ""}
+                          </strong>
+                          <span>{rule.evidence_text}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </section>
+                </div>
+              ) : (
+                <p className="notice">No parsed criteria available yet.</p>
               )}
-              {trial.coverage_stats?.total_rules !== undefined && (
-                <span className="pill">
-                  rules {trial.coverage_stats.total_rules}
-                </span>
-              )}
-              {trial.coverage_stats?.unknown_rules !== undefined && (
-                <span className="pill">
-                  unknown {trial.coverage_stats.unknown_rules}
-                </span>
-              )}
-            </div>
-            {trial.criteria && trial.criteria.length > 0 ? (
-              <ul className="checklist-list">
-                {trial.criteria.map((rule) => (
-                  <li key={rule.id}>
-                    <span className="pill">{rule.type}</span>
-                    <strong>
-                      {rule.field} {rule.operator} {String(rule.value ?? "")}
-                      {rule.unit ? ` ${rule.unit}` : ""}
-                    </strong>
-                    <span>{rule.evidence_text}</span>
-                  </li>
-                ))}
-              </ul>
-            ) : (
-              <p className="notice">No parsed criteria available yet.</p>
-            )}
+            </section>
           </section>
-          <section className="detail-block">
-            <h3>Locations</h3>
-            <ul className="location-list">
-              {trial.locations.length > 0
-                ? trial.locations.map((location) => (
-                    <li key={location}>{location}</li>
-                  ))
-                : "Location data pending"}
-            </ul>
-          </section>
-          <section className="detail-block">
-            <h3>Conditions</h3>
-            <div className="pills">
-              {trial.conditions.length > 0
-                ? trial.conditions.map((condition) => (
-                    <span className="pill" key={condition}>
-                      {condition}
+
+          <aside className="stack detail-aside">
+            <section className="detail-block">
+              <h3>Quick facts</h3>
+              <div className="pills">
+                <span className="pill warm">{trial.nct_id}</span>
+                {trial.status && (
+                  <span
+                    className={`pill ${statusPillClass(trial.status)}`}
+                    title={trial.status}
+                  >
+                    {statusLabel(trial.status)}
+                  </span>
+                )}
+                {trial.phase && <span className="pill">{trial.phase}</span>}
+              </div>
+              <div className="stack">
+                {trial.fetched_at && (
+                  <div className="fact-row">
+                    <span className="fact-label">Synced</span>
+                    <span className="fact-value">
+                      {formatFetchedDate(trial.fetched_at)}
                     </span>
-                  ))
-                : "Condition data pending"}
+                  </div>
+                )}
+                {trial.criteria_parser_version && (
+                  <div className="fact-row">
+                    <span className="fact-label">Parser</span>
+                    <span className="fact-value">{trial.criteria_parser_version}</span>
+                  </div>
+                )}
+                {trial.coverage_stats?.coverage_ratio !== undefined && (
+                  <div className="fact-row">
+                    <span className="fact-label">Coverage</span>
+                    <span className="fact-value">
+                      {(trial.coverage_stats.coverage_ratio * 100).toFixed(0)}%
+                    </span>
+                  </div>
+                )}
+              </div>
+            </section>
+
+            <section className="detail-block">
+              <h3>Conditions</h3>
+              <div className="pills">
+                {trial.conditions.length > 0
+                  ? trial.conditions.map((condition) => (
+                      <span className="pill" key={condition}>
+                        {condition}
+                      </span>
+                    ))
+                  : "Condition data pending"}
+              </div>
+            </section>
+
+            <section className="detail-block">
+              <h3>Locations</h3>
+              <ul className="location-list">
+                {trial.locations.length > 0
+                  ? trial.locations.map((location) => (
+                      <li key={location}>{location}</li>
+                    ))
+                  : "Location data pending"}
+              </ul>
+            </section>
+
+            <div className="meta-row">
+              <Link href="/" className="button secondary">
+                Back to browse
+              </Link>
+              <Link href="/match" className="button">
+                Run matching
+              </Link>
             </div>
-          </section>
-          <div className="meta-row">
-            <Link href="/" className="button secondary">
-              Back to browse
-            </Link>
-          </div>
+          </aside>
         </div>
       )}
     </main>
