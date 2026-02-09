@@ -50,6 +50,35 @@ def _rule(verdict: str, rule_id: str, evidence: str) -> Dict[str, str]:
     return {"rule_id": rule_id, "verdict": verdict, "evidence": evidence}
 
 
+def _summarize_match(
+    inclusion: List[Dict[str, str]],
+    exclusion: List[Dict[str, str]],
+    missing_info: List[str],
+) -> Dict[str, Any]:
+    all_rules = inclusion + exclusion
+    pass_count = sum(1 for rule in all_rules if rule.get("verdict") == "PASS")
+    fail_count = sum(1 for rule in all_rules if rule.get("verdict") == "FAIL")
+    unknown_count = sum(
+        1 for rule in all_rules if rule.get("verdict") not in {"PASS", "FAIL"}
+    )
+    missing_count = len(set(missing_info))
+
+    if fail_count > 0:
+        tier = "INELIGIBLE"
+    elif unknown_count > 0 or missing_count > 0:
+        tier = "POTENTIAL"
+    else:
+        tier = "ELIGIBLE"
+
+    return {
+        "tier": tier,
+        "pass": pass_count,
+        "fail": fail_count,
+        "unknown": unknown_count,
+        "missing": missing_count,
+    }
+
+
 def _score_from_rules(rules: List[Dict[str, str]]) -> float:
     score = 0.0
     for rule in rules:
@@ -170,6 +199,7 @@ def _evaluate_trial_with_parsed_rules(
         "phase": trial.get("phase"),
         "score": round(score, 4),
         "certainty": round(certainty, 4),
+        "match_summary": _summarize_match(inclusion, exclusion, missing_info),
         "checklist": {
             "inclusion": inclusion,
             "exclusion": exclusion,
@@ -377,6 +407,7 @@ def _evaluate_trial_legacy(
         "phase": trial.get("phase"),
         "score": round(score, 4),
         "certainty": round(certainty, 4),
+        "match_summary": _summarize_match(inclusion, exclusion, missing_info),
         "checklist": {
             "inclusion": inclusion,
             "exclusion": exclusion,
