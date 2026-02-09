@@ -190,9 +190,9 @@ def _parse_with_curated_overrides(
 
 
 def _curated_override_enabled() -> bool:
-    value = os.getenv("CTMA_ENABLE_CURATED_PARSER_OVERRIDES")
-    if value is None:
-        return True
+    # Curated overrides are evaluation-only. Default to disabled to avoid
+    # accidentally leaking labeled rules into runtime parsing.
+    value = os.getenv("CTMA_ENABLE_CURATED_PARSER_OVERRIDES", "0")
     return value.strip().lower() in {"1", "true", "yes", "on"}
 
 
@@ -231,7 +231,10 @@ def _load_curated_rule_overrides() -> Dict[str, List[Dict[str, Any]]]:
     if _CURATED_RULE_OVERRIDES_BY_TEXT is not None:
         return _CURATED_RULE_OVERRIDES_BY_TEXT
 
-    repo_root = Path(__file__).resolve().parents[3]
+    resolved = Path(__file__).resolve()
+    # In production images, this module may be copied into a shallow path like
+    # /app/services, so `parents[3]` can raise. Fall back to the module dir.
+    repo_root = resolved.parents[3] if len(resolved.parents) >= 4 else resolved.parent
     overrides: Dict[str, List[Dict[str, Any]]] = {}
     for path in _curated_override_paths(repo_root):
         if not path.exists():
