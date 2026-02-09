@@ -42,6 +42,8 @@ export AZ_PG_DB=ctmatch
 export AZ_PG_USER=ctmatchadmin
 export AZ_PG_PASSWORD='<strong-password>'
 export AZ_REDIS_NAME=redis-ctmatch-preview
+export AZ_API_MIN_REPLICAS=1
+export AZ_WEB_MIN_REPLICAS=1
 export IMAGE_TAG=$(date +%Y%m%d%H%M%S)
 export SYNC_CONDITION=cancer
 export SYNC_PAGE_LIMIT=1
@@ -52,6 +54,7 @@ export SYNC_INTERVAL_SECONDS=3600
 - `AZ_ACR_NAME` 需要全局唯一。若默认名称冲突，请改成带前缀后缀的唯一值。
 - 脚本会为 API 设置 `ALLOWED_ORIGINS=https://<web-domain>`，并在构建 Web 镜像时注入 `NEXT_PUBLIC_API_BASE=https://<api-domain>`。
 - 首次部署后，worker 会按 `SYNC_*` 参数周期拉取试验数据。
+- 若 `AZ_API_MIN_REPLICAS` / `AZ_WEB_MIN_REPLICAS` 为 1，则可以避免 Container Apps scale-to-zero 导致的冷启动（首次打开更快，但成本会上升）。
 
 上线后验收
 ```bash
