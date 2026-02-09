@@ -1,4 +1,8 @@
+import json
+import logging
 import os
+import time
+import uuid
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -14,6 +18,25 @@ from app.services.auth import AuthError, decode_auth_header
 
 app = FastAPI()
 _PROTECTED_PREFIXES = ("/api/patients", "/api/match", "/api/matches")
+_REQUEST_ID_HEADER = "X-Request-ID"
+
+LOGGER = logging.getLogger("ctmatch.api")
+
+
+def _coerce_request_id(raw: str | None) -> str | None:
+    if raw is None:
+        return None
+    value = raw.strip()
+    if not value:
+        return None
+    # Keep it bounded so logs/headers cannot be abused.
+    if len(value) > 128:
+        return None
+    return value
+
+
+def _new_request_id() -> str:
+    return uuid.uuid4().hex
 
 
 def _load_allowed_origins() -> list[str]:
@@ -33,6 +56,37 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+@app.middleware("http")
+async def request_id_middleware(request: Request, call_next):
+    request_id = _coerce_request_id(request.headers.get(_REQUEST_ID_HEADER))
+    if request_id is None:
+        request_id = _new_request_id()
+    request.state.request_id = request_id
+
+    start = time.perf_counter()
+    response = await call_next(request)
+    duration_ms = (time.perf_counter() - start) * 1000.0
+
+    response.headers[_REQUEST_ID_HEADER] = request_id
+
+    claims = getattr(request.state, "auth_claims", None)
+    subject = claims.get("sub") if isinstance(claims, dict) else None
+    LOGGER.info(
+        json.dumps(
+            {
+                "event": "http_request",
+                "request_id": request_id,
+                "method": request.method,
+                "path": request.url.path,
+                "status_code": response.status_code,
+                "duration_ms": round(duration_ms, 2),
+                "subject": subject,
+            }
+        )
+    )
+    return response
 
 
 @app.middleware("http")
