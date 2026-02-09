@@ -33,7 +33,13 @@ export default function App({ Component, pageProps }: AppProps) {
       <header className="topbar">
         <div className="topbar-inner">
           <Link href="/" className="brand">
-            CTMatch
+            <span className="brand-mark" aria-hidden="true">
+              <span className="brand-mark-dot" />
+            </span>
+            <span className="brand-text">
+              <span className="brand-name">CTMatch</span>
+              <span className="brand-subtitle">clinical trial explorer</span>
+            </span>
           </Link>
           <nav className="topnav">
             <Link href="/" className={`topnav-link ${isBrowse ? "active" : ""}`}>

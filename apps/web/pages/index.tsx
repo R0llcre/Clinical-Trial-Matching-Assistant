@@ -30,6 +30,47 @@ type TrialsResponse = {
 const API_BASE =
   process.env.NEXT_PUBLIC_API_BASE ?? "http://localhost:8000";
 
+const statusLabel = (value?: string | null) => {
+  if (!value) {
+    return null;
+  }
+  if (value === "RECRUITING") {
+    return "Recruiting";
+  }
+  if (value === "NOT_YET_RECRUITING") {
+    return "Not yet recruiting";
+  }
+  if (value === "ACTIVE_NOT_RECRUITING") {
+    return "Active, not recruiting";
+  }
+  if (value === "COMPLETED") {
+    return "Completed";
+  }
+  return value
+    .replaceAll("_", " ")
+    .toLowerCase()
+    .replace(/\b\w/g, (match) => match.toUpperCase());
+};
+
+const statusPillClass = (value?: string | null) => {
+  if (!value) {
+    return "";
+  }
+  if (value === "RECRUITING") {
+    return "status-recruiting";
+  }
+  if (value === "NOT_YET_RECRUITING") {
+    return "status-not-yet";
+  }
+  if (value === "ACTIVE_NOT_RECRUITING") {
+    return "status-active";
+  }
+  if (value === "COMPLETED") {
+    return "status-completed";
+  }
+  return "";
+};
+
 const formatFetchedDate = (value?: string | null) => {
   if (!value) {
     return null;
@@ -125,6 +166,7 @@ export default function Home(props: HomeProps) {
   const [phase, setPhase] = useState(props.initialPhase);
   const [trials, setTrials] = useState<TrialSummary[]>(props.initialTrials);
   const [page, setPage] = useState(props.initialPage);
+  const [pageSize, setPageSize] = useState(props.initialPageSize);
   const [total, setTotal] = useState(props.initialTotal);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -144,8 +186,8 @@ export default function Home(props: HomeProps) {
   }, [trials]);
 
   const totalPages = useMemo(() => {
-    return total > 0 ? Math.ceil(total / 20) : 1;
-  }, [total]);
+    return total > 0 ? Math.ceil(total / pageSize) : 1;
+  }, [total, pageSize]);
 
   const fetchTrials = async (
     nextPage: number,
@@ -169,7 +211,7 @@ export default function Home(props: HomeProps) {
       params.set("phase", phaseValue);
     }
     params.set("page", String(nextPage));
-    params.set("page_size", "20");
+    params.set("page_size", String(pageSize));
 
     try {
       const response = await fetch(
@@ -182,6 +224,7 @@ export default function Home(props: HomeProps) {
       setTrials(payload.data?.trials ?? []);
       setTotal(payload.data?.total ?? 0);
       setPage(payload.data?.page ?? nextPage);
+      setPageSize(payload.data?.page_size ?? pageSize);
     } catch (err) {
       setTrials([]);
       setTotal(0);
@@ -194,6 +237,13 @@ export default function Home(props: HomeProps) {
   const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     fetchTrials(1);
+  };
+
+  const clearFilters = () => {
+    setCondition("");
+    setStatus("");
+    setPhase("");
+    void fetchTrials(1, { condition: "", status: "", phase: "" });
   };
 
   const suggestedConditions = useMemo(() => {
@@ -221,11 +271,13 @@ export default function Home(props: HomeProps) {
     setTrials(props.initialTrials);
     setTotal(props.initialTotal);
     setPage(props.initialPage);
+    setPageSize(props.initialPageSize);
   }, [
     props.initialCondition,
     props.initialStatus,
     props.initialPhase,
     props.initialPage,
+    props.initialPageSize,
     props.initialTotal,
     props.initialTrials,
   ]);
@@ -233,7 +285,8 @@ export default function Home(props: HomeProps) {
   return (
     <main>
       <header className="hero">
-        <div className="hero-grid">
+        <div className="card hero-shell">
+          <div className="hero-grid">
           <div className="hero-copy">
             <span className="kicker">Clinical Trial Matching Assistant</span>
             <h1 className="title">Find the right clinical trials, faster.</h1>
@@ -251,7 +304,7 @@ export default function Home(props: HomeProps) {
               </a>
             </div>
           </div>
-          <div className="card hero-stats">
+          <div className="card subtle hero-stats">
             <h2 className="section-title">Preview dataset</h2>
             <div className="stats-grid">
               <div className="stat">
@@ -269,10 +322,11 @@ export default function Home(props: HomeProps) {
             </p>
           </div>
         </div>
+        </div>
       </header>
 
       <div className="layout-grid" id="browse">
-        <aside className="stack">
+        <aside className="stack sidebar">
           <section className="card">
             <h2 className="section-title">Search</h2>
             <form className="search-panel" onSubmit={handleSubmit}>
@@ -360,6 +414,16 @@ export default function Home(props: HomeProps) {
                 ? `${total} trials found`
                 : "Showing the latest synced trials."}
             </span>
+            {(condition || status || phase) && (
+              <button
+                type="button"
+                className="button ghost"
+                onClick={clearFilters}
+                disabled={loading}
+              >
+                Clear filters
+              </button>
+            )}
             {error && <span className="notice">{error}</span>}
           </div>
 
@@ -377,11 +441,40 @@ export default function Home(props: HomeProps) {
               </>
             )}
 
+            {!loading && trials.length === 0 && (
+              <article className="card subtle empty-state">
+                <h3 className="section-title">No trials found.</h3>
+                <p className="help-text">
+                  Try a broader condition, remove filters, or browse the latest
+                  synced trials.
+                </p>
+                <div className="hero-actions">
+                  <button
+                    type="button"
+                    className="button"
+                    onClick={clearFilters}
+                  >
+                    Clear filters
+                  </button>
+                  <Link href="/match" className="button secondary">
+                    Try matching instead
+                  </Link>
+                </div>
+              </article>
+            )}
+
             {trials.map((trial) => (
               <article className="card trial-card" key={trial.nct_id}>
                 <div className="pills">
                   <span className="pill warm">{trial.nct_id}</span>
-                  {trial.status && <span className="pill">{trial.status}</span>}
+                  {trial.status && (
+                    <span
+                      className={`pill ${statusPillClass(trial.status)}`}
+                      title={trial.status}
+                    >
+                      {statusLabel(trial.status)}
+                    </span>
+                  )}
                   {trial.phase && <span className="pill">{trial.phase}</span>}
                 </div>
                 <Link href={`/trials/${trial.nct_id}`} className="trial-title">
@@ -402,6 +495,12 @@ export default function Home(props: HomeProps) {
                 {trial.fetched_at && (
                   <div className="meta-row">
                     <span>Synced {formatFetchedDate(trial.fetched_at)}</span>
+                    <Link
+                      href={`/trials/${trial.nct_id}`}
+                      className="link-button"
+                    >
+                      View details
+                    </Link>
                   </div>
                 )}
               </article>

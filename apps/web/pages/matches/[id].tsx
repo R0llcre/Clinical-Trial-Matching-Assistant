@@ -44,6 +44,47 @@ type MatchResponse = {
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE ?? "http://localhost:8000";
 
+const statusLabel = (value?: string | null) => {
+  if (!value) {
+    return null;
+  }
+  if (value === "RECRUITING") {
+    return "Recruiting";
+  }
+  if (value === "NOT_YET_RECRUITING") {
+    return "Not yet recruiting";
+  }
+  if (value === "ACTIVE_NOT_RECRUITING") {
+    return "Active, not recruiting";
+  }
+  if (value === "COMPLETED") {
+    return "Completed";
+  }
+  return value
+    .replaceAll("_", " ")
+    .toLowerCase()
+    .replace(/\b\w/g, (match) => match.toUpperCase());
+};
+
+const statusPillClass = (value?: string | null) => {
+  if (!value) {
+    return "";
+  }
+  if (value === "RECRUITING") {
+    return "status-recruiting";
+  }
+  if (value === "NOT_YET_RECRUITING") {
+    return "status-not-yet";
+  }
+  if (value === "ACTIVE_NOT_RECRUITING") {
+    return "status-active";
+  }
+  if (value === "COMPLETED") {
+    return "status-completed";
+  }
+  return "";
+};
+
 const verdictClass = (verdict: string) => {
   if (verdict === "PASS") {
     return "pill verdict-pass";
@@ -146,7 +187,7 @@ export default function MatchResultsPage() {
           Back to patient form
         </Link>
         <Link href="/" className="button secondary">
-          Back to trials
+          Browse trials
         </Link>
       </div>
 
@@ -172,22 +213,37 @@ export default function MatchResultsPage() {
               </p>
             )}
             {data.results.map((item) => (
-              <article className="card trial-card" key={item.nct_id}>
-                <div className="meta-row">
-                  <Link href={`/trials/${item.nct_id}`} className="trial-title">
-                    {item.title || item.nct_id}
-                  </Link>
-                  <span>
-                    score {item.score.toFixed(2)} · certainty{" "}
-                    {item.certainty.toFixed(2)}
-                  </span>
-                </div>
+              <article className="card trial-card result-card" key={item.nct_id}>
+                <header className="result-head">
+                  <div className="result-title">
+                    <Link href={`/trials/${item.nct_id}`} className="trial-title">
+                      {item.title || item.nct_id}
+                    </Link>
+                    <div className="pills">
+                      <span className="pill warm">{item.nct_id}</span>
+                      {item.status && (
+                        <span
+                          className={`pill ${statusPillClass(item.status)}`}
+                          title={item.status}
+                        >
+                          {statusLabel(item.status)}
+                        </span>
+                      )}
+                      {item.phase && <span className="pill">{item.phase}</span>}
+                    </div>
+                  </div>
 
-                <div className="pills">
-                  <span className="pill warm">{item.nct_id}</span>
-                  {item.status && <span className="pill">{item.status}</span>}
-                  {item.phase && <span className="pill">{item.phase}</span>}
-                </div>
+                  <div className="result-metrics">
+                    <div className="metric">
+                      <span className="metric-label">Score</span>
+                      <span className="metric-value">{item.score.toFixed(2)}</span>
+                    </div>
+                    <div className="metric">
+                      <span className="metric-label">Certainty</span>
+                      <span className="metric-value">{item.certainty.toFixed(2)}</span>
+                    </div>
+                  </div>
+                </header>
 
                 {(() => {
                   const inclusionCounts = countVerdicts(item.checklist.inclusion);
@@ -221,6 +277,12 @@ export default function MatchResultsPage() {
                         >
                           {isExpanded ? "Hide checklist" : "Show checklist"}
                         </button>
+                        <Link
+                          href={`/trials/${item.nct_id}`}
+                          className="link-button"
+                        >
+                          Open trial
+                        </Link>
                       </div>
 
                       {isExpanded && (
