@@ -161,9 +161,7 @@ export default function MatchPage() {
       .split(",")
       .map((item) => item.trim())
       .filter(Boolean);
-    const bearerToken = (
-      window.localStorage.getItem("ctmatch.jwt") ?? jwtToken
-    ).trim();
+    const bearerToken = (window.localStorage.getItem("ctmatch.jwt") ?? jwtToken).trim();
     window.localStorage.setItem("ctmatch.jwt", bearerToken);
 
     try {

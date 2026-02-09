@@ -9,6 +9,7 @@ services:
       - CTGOV_BASE_URL=${CTGOV_BASE_URL:-https://clinicaltrials.gov/api/v2}
       - JWT_SECRET=${JWT_SECRET:-dev-secret-change-me-please-use-32bytes}
       - JWT_ALGORITHM=${JWT_ALGORITHM:-HS256}
+      - ALLOWED_ORIGINS=${ALLOWED_ORIGINS:-http://localhost:3000,http://127.0.0.1:3000}
     depends_on:
       db:
         condition: service_healthy
@@ -24,7 +25,10 @@ services:
       start_period: 10s
 
   web:
-    build: ./apps/web
+    build:
+      context: ./apps/web
+      args:
+        - NEXT_PUBLIC_API_BASE=${NEXT_PUBLIC_API_BASE:-http://localhost:8000}
     ports:
       - "3000:3000"
     depends_on:
