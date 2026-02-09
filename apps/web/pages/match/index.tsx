@@ -288,13 +288,15 @@ export default function MatchPage() {
           <section className="card">
             <div className="match-card-header">
               <h2 className="section-title">Patient</h2>
-              <button
-                type="button"
-                className="link-button"
-                onClick={() => setShowAuthAdvanced((value) => !value)}
-              >
-                {showAuthAdvanced ? "Hide auth options" : "Auth options"}
-              </button>
+              {(!authReady || showAuthAdvanced) && (
+                <button
+                  type="button"
+                  className="link-button"
+                  onClick={() => setShowAuthAdvanced((value) => !value)}
+                >
+                  {showAuthAdvanced ? "Hide auth options" : "Auth options"}
+                </button>
+              )}
             </div>
 
             {showAuthAdvanced && (
