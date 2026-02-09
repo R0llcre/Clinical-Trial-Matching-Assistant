@@ -15,6 +15,13 @@ type MatchResultItem = {
   phase?: string;
   score: number;
   certainty: number;
+  match_summary?: {
+    tier: "ELIGIBLE" | "POTENTIAL" | "INELIGIBLE";
+    pass: number;
+    fail: number;
+    unknown: number;
+    missing: number;
+  };
   checklist: {
     inclusion: RuleVerdict[];
     exclusion: RuleVerdict[];
@@ -43,6 +50,46 @@ type MatchResponse = {
 };
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE ?? "http://localhost:8000";
+
+type MatchTier = "ELIGIBLE" | "POTENTIAL" | "INELIGIBLE";
+type TierFilter = "ALL" | MatchTier;
+
+const tierFromItem = (item: MatchResultItem): MatchTier => {
+  const summary = item.match_summary;
+  if (summary?.tier) {
+    return summary.tier;
+  }
+  const allRules = item.checklist.inclusion.concat(item.checklist.exclusion);
+  const failCount = allRules.filter((rule) => rule.verdict === "FAIL").length;
+  if (failCount > 0) {
+    return "INELIGIBLE";
+  }
+  const unknownCount = allRules.filter((rule) => rule.verdict === "UNKNOWN").length;
+  if (unknownCount > 0 || item.checklist.missing_info.length > 0) {
+    return "POTENTIAL";
+  }
+  return "ELIGIBLE";
+};
+
+const tierLabel = (tier: MatchTier) => {
+  if (tier === "ELIGIBLE") {
+    return "Strong match";
+  }
+  if (tier === "POTENTIAL") {
+    return "Potential match";
+  }
+  return "Not eligible";
+};
+
+const tierPillClass = (tier: MatchTier) => {
+  if (tier === "ELIGIBLE") {
+    return "tier-eligible";
+  }
+  if (tier === "POTENTIAL") {
+    return "tier-potential";
+  }
+  return "tier-ineligible";
+};
 
 const statusLabel = (value?: string | null) => {
   if (!value) {
@@ -106,6 +153,7 @@ export default function MatchResultsPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
+  const [tierFilter, setTierFilter] = useState<TierFilter>("ALL");
 
   const countVerdicts = (rules: RuleVerdict[]) => {
     const counts = { PASS: 0, FAIL: 0, UNKNOWN: 0 };
@@ -180,6 +228,27 @@ export default function MatchResultsPage() {
     loadMatch();
   }, [router.isReady, id, jwtToken]);
 
+  const tierCounts = (() => {
+    const counts: Record<MatchTier, number> = {
+      ELIGIBLE: 0,
+      POTENTIAL: 0,
+      INELIGIBLE: 0,
+    };
+    const results = data?.results ?? [];
+    for (const item of results) {
+      counts[tierFromItem(item)] += 1;
+    }
+    return counts;
+  })();
+
+  const visibleResults = (() => {
+    const results = data?.results ?? [];
+    if (tierFilter === "ALL") {
+      return results;
+    }
+    return results.filter((item) => tierFromItem(item) === tierFilter);
+  })();
+
   return (
     <main>
       <div className="meta-row">
@@ -205,32 +274,82 @@ export default function MatchResultsPage() {
             </p>
           </header>
 
+          <div className="meta-row">
+            <div className="segmented">
+              <button
+                type="button"
+                className={`segmented-button ${tierFilter === "ALL" ? "active" : ""}`}
+                onClick={() => setTierFilter("ALL")}
+              >
+                All <span className="segmented-count">{data.results.length}</span>
+              </button>
+              <button
+                type="button"
+                className={`segmented-button ${
+                  tierFilter === "ELIGIBLE" ? "active" : ""
+                }`}
+                onClick={() => setTierFilter("ELIGIBLE")}
+              >
+                Strong{" "}
+                <span className="segmented-count">{tierCounts.ELIGIBLE}</span>
+              </button>
+              <button
+                type="button"
+                className={`segmented-button ${
+                  tierFilter === "POTENTIAL" ? "active" : ""
+                }`}
+                onClick={() => setTierFilter("POTENTIAL")}
+              >
+                Potential{" "}
+                <span className="segmented-count">{tierCounts.POTENTIAL}</span>
+              </button>
+              <button
+                type="button"
+                className={`segmented-button ${
+                  tierFilter === "INELIGIBLE" ? "active" : ""
+                }`}
+                onClick={() => setTierFilter("INELIGIBLE")}
+              >
+                Not eligible{" "}
+                <span className="segmented-count">{tierCounts.INELIGIBLE}</span>
+              </button>
+            </div>
+          </div>
+
           <section className="trials-grid">
-            {data.results.length === 0 && (
+            {visibleResults.length === 0 && (
               <p className="notice">
-                No matched trials were returned. Adjust patient conditions or
-                match filters and try again.
+                No trials were returned for the current filter. Adjust patient
+                details, broaden trial filters, or switch the match tier view.
               </p>
             )}
-            {data.results.map((item) => (
+            {visibleResults.map((item) => (
               <article className="card trial-card result-card" key={item.nct_id}>
                 <header className="result-head">
                   <div className="result-title">
+                    {(() => {
+                      const tier = tierFromItem(item);
+                      return (
+                        <div className="pills">
+                          <span className={`pill ${tierPillClass(tier)}`}>
+                            {tierLabel(tier)}
+                          </span>
+                          <span className="pill warm">{item.nct_id}</span>
+                          {item.status && (
+                            <span
+                              className={`pill ${statusPillClass(item.status)}`}
+                              title={item.status}
+                            >
+                              {statusLabel(item.status)}
+                            </span>
+                          )}
+                          {item.phase && <span className="pill">{item.phase}</span>}
+                        </div>
+                      );
+                    })()}
                     <Link href={`/trials/${item.nct_id}`} className="trial-title">
                       {item.title || item.nct_id}
                     </Link>
-                    <div className="pills">
-                      <span className="pill warm">{item.nct_id}</span>
-                      {item.status && (
-                        <span
-                          className={`pill ${statusPillClass(item.status)}`}
-                          title={item.status}
-                        >
-                          {statusLabel(item.status)}
-                        </span>
-                      )}
-                      {item.phase && <span className="pill">{item.phase}</span>}
-                    </div>
                   </div>
 
                   <div className="result-metrics">
