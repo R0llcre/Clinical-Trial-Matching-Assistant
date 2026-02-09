@@ -206,7 +206,7 @@ export default function MatchResultsPage() {
         ).trim();
         if (!token) {
           throw new Error(
-            "JWT token is required. In preview deployments it can be auto-issued; otherwise open /match first."
+            "Session is required to view match results. In preview deployments it can be auto-issued; otherwise open /match first."
           );
         }
         const response = await fetch(`${API_BASE}/api/matches/${id}`, {
