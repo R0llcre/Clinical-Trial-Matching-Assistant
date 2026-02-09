@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { useRouter } from "next/router";
 import type { FormEvent } from "react";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 type ApiError = {
   code: string;
@@ -78,6 +78,7 @@ export default function MatchPage() {
   const [jwtToken, setJwtToken] = useState(
     process.env.NEXT_PUBLIC_DEV_JWT ?? ""
   );
+  const queryPrefillAppliedRef = useRef(false);
   const [showAuthAdvanced, setShowAuthAdvanced] = useState(false);
   const [authReady, setAuthReady] = useState(false);
   const [age, setAge] = useState("45");
@@ -90,6 +91,18 @@ export default function MatchPage() {
   const [error, setError] = useState<string | null>(null);
   const [conditionSuggestions, setConditionSuggestions] = useState<string[]>([]);
   const [demo, setDemo] = useState("");
+
+  useEffect(() => {
+    if (!router.isReady || queryPrefillAppliedRef.current) {
+      return;
+    }
+    queryPrefillAppliedRef.current = true;
+
+    const prefill = router.query.condition;
+    if (typeof prefill === "string" && prefill.trim()) {
+      setConditions(prefill.trim());
+    }
+  }, [router.isReady, router.query.condition]);
 
   const applyDemo = (value: string) => {
     const selected = DEMO_PROFILES.find((profile) => profile.label === value);
