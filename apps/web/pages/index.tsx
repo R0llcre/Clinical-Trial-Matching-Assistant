@@ -3,6 +3,26 @@ import type { GetServerSideProps } from "next";
 import { useRouter } from "next/router";
 import type { FormEvent } from "react";
 import { useEffect, useMemo, useRef, useState } from "react";
+import {
+  ArrowRight,
+  Building2,
+  Filter,
+  MapPin,
+  RefreshCcw,
+  Search,
+  XCircle,
+} from "lucide-react";
+
+import { Shell } from "../components/layout/Shell";
+import { Button } from "../components/ui/Button";
+import { Card } from "../components/ui/Card";
+import { EmptyState } from "../components/ui/EmptyState";
+import { Field } from "../components/ui/Field";
+import { Input } from "../components/ui/Input";
+import { Pill } from "../components/ui/Pill";
+import { Select } from "../components/ui/Select";
+import { Skeleton } from "../components/ui/Skeleton";
+import { Toast } from "../components/ui/Toast";
 
 type TrialSummary = {
   nct_id: string;
@@ -53,23 +73,50 @@ const statusLabel = (value?: string | null) => {
     .replace(/\b\w/g, (match) => match.toUpperCase());
 };
 
-const statusPillClass = (value?: string | null) => {
+const statusTone = (
+  value?: string | null
+): "neutral" | "brand" | "success" | "warning" | "danger" | "info" => {
   if (!value) {
-    return "";
+    return "neutral";
   }
   if (value === "RECRUITING") {
-    return "status-recruiting";
+    return "success";
   }
   if (value === "NOT_YET_RECRUITING") {
-    return "status-not-yet";
+    return "info";
   }
   if (value === "ACTIVE_NOT_RECRUITING") {
-    return "status-active";
+    return "brand";
   }
   if (value === "COMPLETED") {
-    return "status-completed";
+    return "neutral";
   }
-  return "";
+  return "neutral";
+};
+
+const phaseLabel = (value?: string | null) => {
+  if (!value) {
+    return null;
+  }
+  if (value === "EARLY_PHASE1") {
+    return "Early Phase 1";
+  }
+  if (value === "PHASE1") {
+    return "Phase 1";
+  }
+  if (value === "PHASE2") {
+    return "Phase 2";
+  }
+  if (value === "PHASE3") {
+    return "Phase 3";
+  }
+  if (value === "PHASE4") {
+    return "Phase 4";
+  }
+  return value
+    .replaceAll("_", " ")
+    .toLowerCase()
+    .replace(/\b\w/g, (match) => match.toUpperCase());
 };
 
 const formatFetchedDate = (value?: string | null) => {
@@ -88,6 +135,9 @@ type HomeProps = {
   initialCondition: string;
   initialStatus: string;
   initialPhase: string;
+  initialCountry: string;
+  initialState: string;
+  initialCity: string;
 };
 
 export const getServerSideProps: GetServerSideProps<HomeProps> = async (ctx) => {
@@ -95,6 +145,12 @@ export const getServerSideProps: GetServerSideProps<HomeProps> = async (ctx) => 
     typeof ctx.query.condition === "string" ? ctx.query.condition : "";
   const status = typeof ctx.query.status === "string" ? ctx.query.status : "";
   const phase = typeof ctx.query.phase === "string" ? ctx.query.phase : "";
+  const country =
+    typeof ctx.query.country === "string" ? ctx.query.country : "";
+  const state =
+    typeof ctx.query.state === "string" ? ctx.query.state : "";
+  const city =
+    typeof ctx.query.city === "string" ? ctx.query.city : "";
   const page =
     typeof ctx.query.page === "string" ? Number(ctx.query.page) : 1;
   const pageSize =
@@ -116,6 +172,15 @@ export const getServerSideProps: GetServerSideProps<HomeProps> = async (ctx) => 
   if (phase) {
     params.set("phase", phase);
   }
+  if (country.trim()) {
+    params.set("country", country.trim());
+  }
+  if (state.trim()) {
+    params.set("state", state.trim());
+  }
+  if (city.trim()) {
+    params.set("city", city.trim());
+  }
   params.set("page", String(safePage));
   params.set("page_size", String(safePageSize));
 
@@ -132,6 +197,9 @@ export const getServerSideProps: GetServerSideProps<HomeProps> = async (ctx) => 
           initialCondition: condition,
           initialStatus: status,
           initialPhase: phase,
+          initialCountry: country,
+          initialState: state,
+          initialCity: city,
         },
       };
     }
@@ -144,6 +212,9 @@ export const getServerSideProps: GetServerSideProps<HomeProps> = async (ctx) => 
         initialCondition: condition,
         initialStatus: status,
         initialPhase: phase,
+        initialCountry: country,
+        initialState: state,
+        initialCity: city,
       },
     };
   } catch {
@@ -156,6 +227,9 @@ export const getServerSideProps: GetServerSideProps<HomeProps> = async (ctx) => 
         initialCondition: condition,
         initialStatus: status,
         initialPhase: phase,
+        initialCountry: country,
+        initialState: state,
+        initialCity: city,
       },
     };
   }
@@ -166,6 +240,9 @@ export default function Home(props: HomeProps) {
   const [condition, setCondition] = useState(props.initialCondition);
   const [status, setStatus] = useState(props.initialStatus);
   const [phase, setPhase] = useState(props.initialPhase);
+  const [country, setCountry] = useState(props.initialCountry);
+  const [regionState, setRegionState] = useState(props.initialState);
+  const [city, setCity] = useState(props.initialCity);
   const [trials, setTrials] = useState<TrialSummary[]>(props.initialTrials);
   const [page, setPage] = useState(props.initialPage);
   const [pageSize, setPageSize] = useState(props.initialPageSize);
@@ -196,6 +273,9 @@ export default function Home(props: HomeProps) {
     conditionValue: string;
     statusValue: string;
     phaseValue: string;
+    countryValue: string;
+    stateValue: string;
+    cityValue: string;
     pageValue: number;
     pageSizeValue: number;
   }) => {
@@ -210,6 +290,18 @@ export default function Home(props: HomeProps) {
     if (input.phaseValue) {
       query.phase = input.phaseValue;
     }
+    const trimmedCountry = input.countryValue.trim();
+    if (trimmedCountry) {
+      query.country = trimmedCountry;
+    }
+    const trimmedState = input.stateValue.trim();
+    if (trimmedState) {
+      query.state = trimmedState;
+    }
+    const trimmedCity = input.cityValue.trim();
+    if (trimmedCity) {
+      query.city = trimmedCity;
+    }
     if (input.pageValue > 1) {
       query.page = String(input.pageValue);
     }
@@ -223,6 +315,9 @@ export default function Home(props: HomeProps) {
     conditionValue: string;
     statusValue: string;
     phaseValue: string;
+    countryValue: string;
+    stateValue: string;
+    cityValue: string;
     pageValue: number;
     pageSizeValue: number;
   }) => {
@@ -242,6 +337,15 @@ export default function Home(props: HomeProps) {
     }
     if (input.phaseValue) {
       params.set("phase", input.phaseValue);
+    }
+    if (input.countryValue.trim()) {
+      params.set("country", input.countryValue.trim());
+    }
+    if (input.stateValue.trim()) {
+      params.set("state", input.stateValue.trim());
+    }
+    if (input.cityValue.trim()) {
+      params.set("city", input.cityValue.trim());
     }
     params.set("page", String(input.pageValue));
     params.set("page_size", String(input.pageSizeValue));
@@ -277,6 +381,9 @@ export default function Home(props: HomeProps) {
       conditionValue: condition,
       statusValue: status,
       phaseValue: phase,
+      countryValue: country,
+      stateValue: regionState,
+      cityValue: city,
       pageValue: 1,
       pageSizeValue: pageSize,
     });
@@ -287,10 +394,16 @@ export default function Home(props: HomeProps) {
     setCondition("");
     setStatus("");
     setPhase("");
+    setCountry("");
+    setRegionState("");
+    setCity("");
     const query = buildQuery({
       conditionValue: "",
       statusValue: "",
       phaseValue: "",
+      countryValue: "",
+      stateValue: "",
+      cityValue: "",
       pageValue: 1,
       pageSizeValue: pageSize,
     });
@@ -314,6 +427,63 @@ export default function Home(props: HomeProps) {
       .map(([value]) => value);
   }, [trials]);
 
+  const suggestedLocations = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const trial of trials) {
+      for (const rawLocation of trial.locations ?? []) {
+        const value = rawLocation.trim();
+        if (!value) {
+          continue;
+        }
+        counts.set(value, (counts.get(value) ?? 0) + 1);
+      }
+    }
+    return Array.from(counts.entries())
+      .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
+      .slice(0, 8)
+      .map(([value]) => value);
+  }, [trials]);
+
+  const suggestedCountries = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const location of suggestedLocations) {
+      const parts = location
+        .split(",")
+        .map((item) => item.trim())
+        .filter(Boolean);
+      const countryValue = parts.at(-1);
+      if (!countryValue) {
+        continue;
+      }
+      counts.set(countryValue, (counts.get(countryValue) ?? 0) + 1);
+    }
+    return Array.from(counts.entries())
+      .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
+      .slice(0, 6)
+      .map(([value]) => value);
+  }, [suggestedLocations]);
+
+  const hasAnyFilter = Boolean(
+    condition.trim() ||
+      status ||
+      phase ||
+      country.trim() ||
+      regionState.trim() ||
+      city.trim()
+  );
+
+  const visibleStart = total > 0 ? (page - 1) * pageSize + 1 : 0;
+  const visibleEnd = total > 0 ? Math.min(total, page * pageSize) : 0;
+
+  const SAMPLE_QUERIES = [
+    "Breast cancer",
+    "Melanoma",
+    "Asthma",
+    "Diabetes",
+    "Long COVID",
+    "Leukemia",
+  ];
+
   useEffect(() => {
     // When Next.js re-hydrates new SSR props (non-shallow navigation), prefer them.
     abortRef.current?.abort();
@@ -322,6 +492,9 @@ export default function Home(props: HomeProps) {
     setCondition(props.initialCondition);
     setStatus(props.initialStatus);
     setPhase(props.initialPhase);
+    setCountry(props.initialCountry);
+    setRegionState(props.initialState);
+    setCity(props.initialCity);
     setTrials(props.initialTrials);
     setTotal(props.initialTotal);
     setPage(props.initialPage);
@@ -330,6 +503,9 @@ export default function Home(props: HomeProps) {
     props.initialCondition,
     props.initialStatus,
     props.initialPhase,
+    props.initialCountry,
+    props.initialState,
+    props.initialCity,
     props.initialPage,
     props.initialPageSize,
     props.initialTotal,
@@ -347,6 +523,12 @@ export default function Home(props: HomeProps) {
       typeof router.query.status === "string" ? router.query.status : "";
     const nextPhase =
       typeof router.query.phase === "string" ? router.query.phase : "";
+    const nextCountry =
+      typeof router.query.country === "string" ? router.query.country : "";
+    const nextState =
+      typeof router.query.state === "string" ? router.query.state : "";
+    const nextCity =
+      typeof router.query.city === "string" ? router.query.city : "";
     const nextPageRaw =
       typeof router.query.page === "string" ? Number(router.query.page) : 1;
     const nextPageSizeRaw =
@@ -367,12 +549,18 @@ export default function Home(props: HomeProps) {
       nextCondition !== props.initialCondition ||
       nextStatus !== props.initialStatus ||
       nextPhase !== props.initialPhase ||
+      nextCountry !== props.initialCountry ||
+      nextState !== props.initialState ||
+      nextCity !== props.initialCity ||
       safePage !== props.initialPage ||
       safePageSize !== props.initialPageSize;
 
     setCondition(nextCondition);
     setStatus(nextStatus);
     setPhase(nextPhase);
+    setCountry(nextCountry);
+    setRegionState(nextState);
+    setCity(nextCity);
     setPage(safePage);
     setPageSize(safePageSize);
 
@@ -384,6 +572,9 @@ export default function Home(props: HomeProps) {
       conditionValue: nextCondition,
       statusValue: nextStatus,
       phaseValue: nextPhase,
+      countryValue: nextCountry,
+      stateValue: nextState,
+      cityValue: nextCity,
       pageValue: safePage,
       pageSizeValue: safePageSize,
     });
@@ -393,323 +584,536 @@ export default function Home(props: HomeProps) {
     props.initialCondition,
     props.initialStatus,
     props.initialPhase,
+    props.initialCountry,
+    props.initialState,
+    props.initialCity,
     props.initialPage,
     props.initialPageSize,
   ]);
 
   return (
-    <main>
-      <header className="hero">
-        <div className="card hero-shell">
-          <div className="hero-grid">
-          <div className="hero-copy">
-            <span className="kicker">Clinical Trial Matching Assistant</span>
-            <h1 className="title">Find the right clinical trials, faster.</h1>
-            <p className="subtitle">
-              Search synced ClinicalTrials.gov data, review eligibility text,
-              and run explainable matching. This tool surfaces information only
-              and does not provide medical advice.
-            </p>
-            <div className="hero-actions">
-              <Link href="/match" className="button">
-                Start patient matching
-              </Link>
-              <a className="button secondary" href="#browse">
-                Browse trials
-              </a>
+    <Shell
+      kicker="Clinical Trial Explorer"
+      title="Browse trials"
+      subtitle={
+        <>
+          Search synced <strong>ClinicalTrials.gov</strong> listings, review eligibility,
+          and hand results to a clinician. This preview surfaces information only, not
+          medical advice.
+        </>
+      }
+      actions={
+        <>
+          <Link
+            href="/match"
+            className="ui-button ui-button--primary ui-button--md"
+          >
+            Start matching
+            <span className="ui-button__icon" aria-hidden="true">
+              <ArrowRight size={18} />
+            </span>
+          </Link>
+          <Link
+            href="/"
+            className="ui-button ui-button--ghost ui-button--md"
+            onClick={(event) => {
+              if (!hasAnyFilter) {
+                event.preventDefault();
+              }
+            }}
+          >
+            Browse
+          </Link>
+        </>
+      }
+    >
+      <div className="browse-layout">
+        <aside className="browse-rail">
+          <Card className="browse-rail__card">
+            <div className="browse-rail__title">
+              <Filter size={18} aria-hidden="true" />
+              <h2 className="browse-rail__titleText">Filters</h2>
             </div>
-          </div>
-          <div className="card subtle hero-stats">
-            <h2 className="section-title">Preview dataset</h2>
-            <div className="stats-grid">
-              <div className="stat">
-                <div className="stat-value">{total || "—"}</div>
-                <div className="stat-label">trials available</div>
-              </div>
-              <div className="stat">
-                <div className="stat-value">{lastSyncedDate || "—"}</div>
-                <div className="stat-label">last sync date</div>
-              </div>
-            </div>
-            <p className="help-text">
-              Tip: start broad (for example “breast cancer”) then narrow by
-              status and phase.
-            </p>
-          </div>
-        </div>
-        </div>
-      </header>
 
-      <div className="layout-grid" id="browse">
-        <aside className="stack sidebar">
-          <section className="card">
-            <h2 className="section-title">Search</h2>
-            <form className="search-panel" onSubmit={handleSubmit}>
-              <div className="field">
-                <label htmlFor="condition">Condition</label>
-                <input
-                  id="condition"
-                  name="condition"
-                  placeholder="e.g. diabetes, breast cancer"
-                  value={condition}
-                  onChange={(event) => setCondition(event.target.value)}
-                />
-                {suggestedConditions.length > 0 && (
-                  <div className="suggestions">
-                    <span className="suggestions-label">Try:</span>
-                    <div className="pills">
-                      {suggestedConditions.map((value) => (
-                        <button
-                          key={value}
-                          type="button"
-                          className="pill pill-button"
-                          onClick={() => {
-                            setCondition(value);
-                            const query = buildQuery({
-                              conditionValue: value,
-                              statusValue: status,
-                              phaseValue: phase,
-                              pageValue: 1,
-                              pageSizeValue: pageSize,
-                            });
-                            void router.push(
-                              { pathname: "/", query },
-                              undefined,
-                              { shallow: true }
-                            );
-                          }}
-                        >
-                          {value}
-                        </button>
-                      ))}
-                    </div>
+            <form className="browse-rail__form" onSubmit={handleSubmit}>
+              <div className="browse-rail__group">
+                <div className="browse-rail__groupHeader">
+                  <Search size={16} aria-hidden="true" />
+                  <h3 className="browse-rail__groupTitle">Condition</h3>
+                </div>
+                <Field
+                  label="Condition"
+                  htmlFor="condition"
+                  hint="Matches title and listed conditions."
+                >
+                  <Input
+                    id="condition"
+                    name="condition"
+                    placeholder="e.g. breast cancer"
+                    value={condition}
+                    onChange={(event) => setCondition(event.target.value)}
+                  />
+                </Field>
+                <div className="browse-rail__chips">
+                  {(suggestedConditions.length > 0
+                    ? suggestedConditions
+                    : SAMPLE_QUERIES
+                  ).map((value) => (
+                    <button
+                      key={value}
+                      type="button"
+                      className="browse-chip ui-pill ui-pill--neutral"
+                      onClick={() => {
+                        setCondition(value);
+                        const query = buildQuery({
+                          conditionValue: value,
+                          statusValue: status,
+                          phaseValue: phase,
+                          countryValue: country,
+                          stateValue: regionState,
+                          cityValue: city,
+                          pageValue: 1,
+                          pageSizeValue: pageSize,
+                        });
+                        void router.push({ pathname: "/", query }, undefined, {
+                          shallow: true,
+                        });
+                      }}
+                    >
+                      {value}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div className="browse-rail__group">
+                <div className="browse-rail__groupHeader">
+                  <Building2 size={16} aria-hidden="true" />
+                  <h3 className="browse-rail__groupTitle">Status & phase</h3>
+                </div>
+                <Field label="Recruitment status" htmlFor="status">
+                  <Select
+                    id="status"
+                    value={status}
+                    onChange={(event) => {
+                      const value = event.target.value;
+                      setStatus(value);
+                      const query = buildQuery({
+                        conditionValue: condition,
+                        statusValue: value,
+                        phaseValue: phase,
+                        countryValue: country,
+                        stateValue: regionState,
+                        cityValue: city,
+                        pageValue: 1,
+                        pageSizeValue: pageSize,
+                      });
+                      void router.push({ pathname: "/", query }, undefined, {
+                        shallow: true,
+                      });
+                    }}
+                  >
+                    <option value="">Any</option>
+                    <option value="RECRUITING">Recruiting</option>
+                    <option value="NOT_YET_RECRUITING">Not yet recruiting</option>
+                    <option value="ACTIVE_NOT_RECRUITING">
+                      Active, not recruiting
+                    </option>
+                    <option value="COMPLETED">Completed</option>
+                  </Select>
+                </Field>
+                <Field label="Trial phase" htmlFor="phase">
+                  <Select
+                    id="phase"
+                    value={phase}
+                    onChange={(event) => {
+                      const value = event.target.value;
+                      setPhase(value);
+                      const query = buildQuery({
+                        conditionValue: condition,
+                        statusValue: status,
+                        phaseValue: value,
+                        countryValue: country,
+                        stateValue: regionState,
+                        cityValue: city,
+                        pageValue: 1,
+                        pageSizeValue: pageSize,
+                      });
+                      void router.push({ pathname: "/", query }, undefined, {
+                        shallow: true,
+                      });
+                    }}
+                  >
+                    <option value="">Any</option>
+                    <option value="EARLY_PHASE1">Early Phase 1</option>
+                    <option value="PHASE1">Phase 1</option>
+                    <option value="PHASE2">Phase 2</option>
+                    <option value="PHASE3">Phase 3</option>
+                    <option value="PHASE4">Phase 4</option>
+                  </Select>
+                </Field>
+              </div>
+
+              <div className="browse-rail__group">
+                <div className="browse-rail__groupHeader">
+                  <MapPin size={16} aria-hidden="true" />
+                  <h3 className="browse-rail__groupTitle">Location</h3>
+                </div>
+                <Field label="Country (exact match)" htmlFor="country">
+                  <Input
+                    id="country"
+                    name="country"
+                    placeholder="United States"
+                    value={country}
+                    onChange={(event) => setCountry(event.target.value)}
+                  />
+                </Field>
+                {suggestedCountries.length > 0 ? (
+                  <div className="browse-rail__chips browse-rail__chips--tight">
+                    {suggestedCountries.map((value) => (
+                      <button
+                        key={value}
+                        type="button"
+                        className="browse-chip ui-pill ui-pill--info"
+                        onClick={() => {
+                          setCountry(value);
+                          const query = buildQuery({
+                            conditionValue: condition,
+                            statusValue: status,
+                            phaseValue: phase,
+                            countryValue: value,
+                            stateValue: regionState,
+                            cityValue: city,
+                            pageValue: 1,
+                            pageSizeValue: pageSize,
+                          });
+                          void router.push({ pathname: "/", query }, undefined, {
+                            shallow: true,
+                          });
+                        }}
+                      >
+                        {value}
+                      </button>
+                    ))}
                   </div>
-                )}
+                ) : null}
+                <div className="browse-rail__row">
+                  <Field label="State" htmlFor="state">
+                    <Input
+                      id="state"
+                      name="state"
+                      placeholder="NY"
+                      value={regionState}
+                      onChange={(event) => setRegionState(event.target.value)}
+                    />
+                  </Field>
+                  <Field label="City" htmlFor="city">
+                    <Input
+                      id="city"
+                      name="city"
+                      placeholder="New York"
+                      value={city}
+                      onChange={(event) => setCity(event.target.value)}
+                    />
+                  </Field>
+                </div>
               </div>
-              <div className="field">
-                <label htmlFor="status">Status</label>
-                <select
-                  id="status"
-                  value={status}
-                  onChange={(event) => setStatus(event.target.value)}
-                >
-                  <option value="">Any</option>
-                  <option value="RECRUITING">Recruiting</option>
-                  <option value="NOT_YET_RECRUITING">Not yet recruiting</option>
-                  <option value="ACTIVE_NOT_RECRUITING">
-                    Active, not recruiting
-                  </option>
-                  <option value="COMPLETED">Completed</option>
-                </select>
-              </div>
-              <div className="field">
-                <label htmlFor="phase">Phase</label>
-                <select
-                  id="phase"
-                  value={phase}
-                  onChange={(event) => setPhase(event.target.value)}
-                >
-                  <option value="">Any</option>
-                  <option value="EARLY_PHASE1">Early Phase 1</option>
-                  <option value="PHASE1">Phase 1</option>
-                  <option value="PHASE2">Phase 2</option>
-                  <option value="PHASE3">Phase 3</option>
-                  <option value="PHASE4">Phase 4</option>
-                </select>
-              </div>
-              <button className="button" type="submit" disabled={loading}>
-                {loading ? "Searching..." : "Search trials"}
-              </button>
-            </form>
-          </section>
 
-          <section className="card subtle">
-            <h2 className="section-title">How to use</h2>
-            <p className="help-text">
-              Start with a broad condition (for example “breast cancer”) and
-              then narrow by status and phase. Use the trial detail page to
-              review eligibility text before sharing with a clinician.
-            </p>
-          </section>
+              <div className="browse-rail__actions">
+                <Button type="submit" tone="primary" disabled={loading}>
+                  {loading ? "Searching..." : "Search"}
+                </Button>
+                {hasAnyFilter ? (
+                  <Button
+                    type="button"
+                    tone="ghost"
+                    disabled={loading}
+                    iconLeft={<XCircle size={18} />}
+                    onClick={clearFilters}
+                  >
+                    Clear
+                  </Button>
+                ) : null}
+              </div>
+            </form>
+          </Card>
+
+          <Card tone="subtle" className="browse-rail__card">
+            <div className="browse-dataset">
+              <div className="browse-dataset__header">Dataset</div>
+              <div className="browse-dataset__grid">
+                <div className="browse-dataset__stat">
+                  <div className="browse-dataset__value">{total || "—"}</div>
+                  <div className="browse-dataset__label">trials indexed</div>
+                </div>
+                <div className="browse-dataset__stat">
+                  <div className="browse-dataset__value">{lastSyncedDate || "—"}</div>
+                  <div className="browse-dataset__label">latest sync</div>
+                </div>
+              </div>
+              <div className="browse-dataset__hint">
+                Filters match exact location fields, so start broad then narrow.
+              </div>
+            </div>
+          </Card>
         </aside>
 
-        <section className="stack">
-          <div className="meta-row">
-            <span>
-              {total > 0
-                ? `${total} trials found`
-                : "Showing the latest synced trials."}
-            </span>
-            <div className="meta-select">
-              <label htmlFor="page_size" className="sr-only">
-                Page size
-              </label>
-              <select
-                id="page_size"
-                value={String(pageSize)}
-                onChange={(event) => {
-                  const nextSize = Number(event.target.value);
-                  const query = buildQuery({
+        <section className="browse-results">
+          <div className="browse-results__header">
+            <div className="browse-results__meta">
+              <div className="browse-results__title">Results</div>
+              <div className="browse-results__subtitle">
+                {total > 0
+                  ? `Showing ${visibleStart}–${visibleEnd} of ${total}`
+                  : "No trials in the current view."}
+              </div>
+            </div>
+
+            <div className="browse-results__controls">
+              <div className="browse-control">
+                <span className="browse-control__label">Page size</span>
+                <Select
+                  value={String(pageSize)}
+                  onChange={(event) => {
+                    const nextSize = Number(event.target.value);
+                    const query = buildQuery({
+                      conditionValue: condition,
+                      statusValue: status,
+                      phaseValue: phase,
+                      countryValue: country,
+                      stateValue: regionState,
+                      cityValue: city,
+                      pageValue: 1,
+                      pageSizeValue: nextSize,
+                    });
+                    void router.push({ pathname: "/", query }, undefined, {
+                      shallow: true,
+                    });
+                  }}
+                  disabled={loading}
+                >
+                  <option value="20">20</option>
+                  <option value="50">50</option>
+                </Select>
+              </div>
+              <button
+                type="button"
+                className="ui-button ui-button--ghost ui-button--sm browse-refresh"
+                disabled={loading}
+                onClick={() => {
+                  void fetchTrials({
                     conditionValue: condition,
                     statusValue: status,
                     phaseValue: phase,
-                    pageValue: 1,
-                    pageSizeValue: nextSize,
+                    countryValue: country,
+                    stateValue: regionState,
+                    cityValue: city,
+                    pageValue: page,
+                    pageSizeValue: pageSize,
                   });
-                  void router.push(
-                    { pathname: "/", query },
-                    undefined,
-                    { shallow: true }
-                  );
                 }}
-                disabled={loading}
               >
-                <option value="20">20 / page</option>
-                <option value="50">50 / page</option>
-              </select>
-            </div>
-            {(condition || status || phase) && (
-              <button
-                type="button"
-                className="button ghost"
-                onClick={clearFilters}
-                disabled={loading}
-              >
-                Clear filters
+                <span className="ui-button__icon" aria-hidden="true">
+                  <RefreshCcw size={18} />
+                </span>
+                Refresh
               </button>
-            )}
-            {error && <span className="notice">{error}</span>}
+            </div>
           </div>
 
-          <section className="trials-grid">
-            {loading && trials.length === 0 && (
+          {error ? (
+            <Toast
+              tone="danger"
+              title="Search failed"
+              description={error}
+              className="browse-toast"
+            />
+          ) : null}
+
+          <div className="browse-list">
+            {loading && trials.length === 0 ? (
               <>
-                {Array.from({ length: 4 }).map((_, index) => (
-                  <article className="card trial-card" key={`skeleton-${index}`}>
-                    <div className="skeleton skeleton-line short" />
-                    <div className="skeleton skeleton-line long" />
-                    <div className="skeleton skeleton-line medium" />
-                    <div className="skeleton skeleton-line long" />
-                  </article>
+                {Array.from({ length: 6 }).map((_, index) => (
+                  <Card key={`skeleton-${index}`} className="trial-card-v3">
+                    <div className="trial-card-v3__header">
+                      <div className="trial-card-v3__pills">
+                        <Skeleton width="short" />
+                        <Skeleton width="medium" />
+                      </div>
+                      <Skeleton width="short" />
+                    </div>
+                    <div className="trial-card-v3__title">
+                      <Skeleton width="long" />
+                    </div>
+                    <Skeleton width="long" />
+                    <div className="trial-card-v3__chips">
+                      <Skeleton width="short" />
+                      <Skeleton width="short" />
+                      <Skeleton width="short" />
+                    </div>
+                  </Card>
                 ))}
               </>
-            )}
+            ) : null}
 
-            {!loading && trials.length === 0 && (
-              <article className="card subtle empty-state">
-                <h3 className="section-title">No trials found.</h3>
-                <p className="help-text">
-                  Try a broader condition, remove filters, or browse the latest
-                  synced trials.
-                </p>
-                <div className="hero-actions">
-                  <button
-                    type="button"
-                    className="button"
-                    onClick={clearFilters}
-                  >
-                    Clear filters
-                  </button>
-                  <Link href="/match" className="button secondary">
-                    Try matching instead
-                  </Link>
-                </div>
-              </article>
-            )}
-
-            {trials.map((trial) => (
-              <article className="card trial-card" key={trial.nct_id}>
-                <div className="pills">
-                  <span className="pill warm">{trial.nct_id}</span>
-                  {trial.status && (
-                    <span
-                      className={`pill ${statusPillClass(trial.status)}`}
-                      title={trial.status}
+            {!loading && trials.length === 0 ? (
+              <EmptyState
+                title="No trials found"
+                description="Try a broader condition, loosen filters (especially location), or run a patient match instead."
+                icon={<Search size={22} />}
+                actions={
+                  <>
+                    <button
+                      type="button"
+                      className="ui-button ui-button--primary ui-button--md"
+                      onClick={clearFilters}
                     >
-                      {statusLabel(trial.status)}
+                      Clear filters
+                    </button>
+                    <Link
+                      href="/match"
+                      className="ui-button ui-button--secondary ui-button--md"
+                    >
+                      Go to matching
+                    </Link>
+                  </>
+                }
+              />
+            ) : null}
+
+            {trials.map((trial) => {
+              const statusText = statusLabel(trial.status);
+              const phaseText = phaseLabel(trial.phase);
+              const conditionsShown = (trial.conditions ?? []).slice(0, 3);
+              const conditionsRemaining =
+                (trial.conditions?.length ?? 0) - conditionsShown.length;
+              const locationsShown = (trial.locations ?? []).slice(0, 2);
+              const locationsRemaining =
+                (trial.locations?.length ?? 0) - locationsShown.length;
+
+              return (
+                <Card className="trial-card-v3" key={trial.nct_id}>
+                  <div className="trial-card-v3__header">
+                    <div className="trial-card-v3__pills">
+                      <Pill tone="warning">{trial.nct_id}</Pill>
+                      {statusText ? (
+                        <Pill tone={statusTone(trial.status)}>{statusText}</Pill>
+                      ) : null}
+                      {phaseText ? <Pill tone="neutral">{phaseText}</Pill> : null}
+                    </div>
+                    {trial.fetched_at ? (
+                      <div className="trial-card-v3__updated">
+                        Synced {formatFetchedDate(trial.fetched_at)}
+                      </div>
+                    ) : null}
+                  </div>
+
+                  <Link
+                    href={`/trials/${trial.nct_id}`}
+                    className="trial-card-v3__link"
+                  >
+                    {trial.title}
+                  </Link>
+
+                  <div className="trial-card-v3__locations">
+                    <MapPin size={16} aria-hidden="true" />
+                    <span className="trial-card-v3__locationsText">
+                      {locationsShown.length > 0
+                        ? locationsShown.join(" · ")
+                        : "Location data pending"}
+                      {locationsRemaining > 0 ? ` · +${locationsRemaining} more` : ""}
                     </span>
-                  )}
-                  {trial.phase && <span className="pill">{trial.phase}</span>}
-                </div>
-                <Link href={`/trials/${trial.nct_id}`} className="trial-title">
-                  {trial.title}
-                </Link>
-                <div className="trial-subtitle">
-                  {trial.locations.length > 0
-                    ? trial.locations.slice(0, 3).join(" · ")
-                    : "Location data pending"}
-                </div>
-                <div className="pills">
-                  {trial.conditions.slice(0, 4).map((value) => (
-                    <span className="pill" key={`${trial.nct_id}-${value}`}>
-                      {value}
-                    </span>
-                  ))}
-                </div>
-                {trial.fetched_at && (
-                  <div className="meta-row">
-                    <span>Synced {formatFetchedDate(trial.fetched_at)}</span>
+                  </div>
+
+                  <div className="trial-card-v3__chips">
+                    {conditionsShown.map((value) => (
+                      <Pill key={`${trial.nct_id}-${value}`} tone="neutral">
+                        {value}
+                      </Pill>
+                    ))}
+                    {conditionsRemaining > 0 ? (
+                      <Pill tone="info">+{conditionsRemaining} conditions</Pill>
+                    ) : null}
+                  </div>
+
+                  <div className="trial-card-v3__actions">
                     <Link
                       href={`/trials/${trial.nct_id}`}
-                      className="link-button"
+                      className="ui-button ui-button--ghost ui-button--sm"
                     >
                       View details
                     </Link>
+                    <Link
+                      href={{
+                        pathname: "/match",
+                        query: trial.conditions?.[0]
+                          ? { condition: trial.conditions[0] }
+                          : undefined,
+                      }}
+                      className="ui-button ui-button--secondary ui-button--sm"
+                    >
+                      Use for match
+                      <span className="ui-button__icon" aria-hidden="true">
+                        <ArrowRight size={18} />
+                      </span>
+                    </Link>
                   </div>
-                )}
-              </article>
-            ))}
-          </section>
+                </Card>
+              );
+            })}
+          </div>
 
-          {trials.length > 0 && (
-            <div className="pagination">
+          {trials.length > 0 ? (
+            <div className="browse-pagination">
               <button
-                className="button secondary"
+                className="ui-button ui-button--secondary ui-button--md"
                 onClick={() => {
                   const query = buildQuery({
                     conditionValue: condition,
                     statusValue: status,
                     phaseValue: phase,
+                    countryValue: country,
+                    stateValue: regionState,
+                    cityValue: city,
                     pageValue: Math.max(1, page - 1),
                     pageSizeValue: pageSize,
                   });
-                  void router.push(
-                    { pathname: "/", query },
-                    undefined,
-                    { shallow: true }
-                  );
+                  void router.push({ pathname: "/", query }, undefined, {
+                    shallow: true,
+                  });
                 }}
                 disabled={loading || page <= 1}
               >
                 Previous
               </button>
-              <span>
-                Page {page} of {totalPages}
-              </span>
+              <div className="browse-pagination__meta">
+                Page <strong>{page}</strong> of <strong>{totalPages}</strong>
+              </div>
               <button
-                className="button secondary"
+                className="ui-button ui-button--secondary ui-button--md"
                 onClick={() => {
                   const query = buildQuery({
                     conditionValue: condition,
                     statusValue: status,
                     phaseValue: phase,
+                    countryValue: country,
+                    stateValue: regionState,
+                    cityValue: city,
                     pageValue: Math.min(totalPages, page + 1),
                     pageSizeValue: pageSize,
                   });
-                  void router.push(
-                    { pathname: "/", query },
-                    undefined,
-                    { shallow: true }
-                  );
+                  void router.push({ pathname: "/", query }, undefined, {
+                    shallow: true,
+                  });
                 }}
                 disabled={loading || page >= totalPages}
               >
                 Next
               </button>
             </div>
-          )}
+          ) : null}
         </section>
       </div>
-    </main>
+    </Shell>
   );
 }
