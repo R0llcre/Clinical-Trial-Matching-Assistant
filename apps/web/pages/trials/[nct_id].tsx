@@ -1,6 +1,6 @@
 import Link from "next/link";
-import { useRouter } from "next/router";
-import { useEffect, useState } from "react";
+import type { GetServerSideProps } from "next";
+import { useState } from "react";
 
 type TrialDetail = {
   nct_id: string;
@@ -53,40 +53,41 @@ const formatFetchedDate = (value?: string | null) => {
   return value.length >= 10 ? value.slice(0, 10) : value;
 };
 
-export default function TrialDetailPage() {
-  const router = useRouter();
-  const { nct_id } = router.query;
+type TrialDetailPageProps = {
+  trial: TrialDetail | null;
+  error: string | null;
+};
 
-  const [trial, setTrial] = useState<TrialDetail | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [eligibilityExpanded, setEligibilityExpanded] = useState(false);
+export const getServerSideProps: GetServerSideProps<TrialDetailPageProps> = async (
+  ctx
+) => {
+  const nctId =
+    typeof ctx.params?.nct_id === "string" ? ctx.params.nct_id : null;
+  if (!nctId) {
+    return { props: { trial: null, error: "Missing nct_id" } };
+  }
 
-  useEffect(() => {
-    if (!router.isReady || typeof nct_id !== "string") {
-      return;
+  try {
+    const response = await fetch(`${API_BASE}/api/trials/${encodeURIComponent(nctId)}`);
+    const payload = (await response.json()) as TrialResponse;
+    if (!response.ok || !payload.ok) {
+      return {
+        props: {
+          trial: null,
+          error: payload.error?.message || "Failed to load trial",
+        },
+      };
     }
+    return { props: { trial: payload.data ?? null, error: null } };
+  } catch {
+    return { props: { trial: null, error: "Failed to load trial" } };
+  }
+};
 
-    const fetchDetail = async () => {
-      setLoading(true);
-      setError(null);
-      try {
-        const response = await fetch(`${API_BASE}/api/trials/${nct_id}`);
-        const payload = (await response.json()) as TrialResponse;
-        if (!response.ok || !payload.ok) {
-          throw new Error(payload.error?.message || "Failed to load trial");
-        }
-        setTrial(payload.data ?? null);
-      } catch (err) {
-        setError(err instanceof Error ? err.message : "Unknown error");
-        setTrial(null);
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    fetchDetail();
-  }, [router.isReady, nct_id]);
+export default function TrialDetailPage(props: TrialDetailPageProps) {
+  const trial = props.trial;
+  const error = props.error;
+  const [eligibilityExpanded, setEligibilityExpanded] = useState(false);
 
   const eligibilityText = trial?.eligibility_text ?? "";
   const eligibilityLines = eligibilityText ? eligibilityText.split("\n") : [];
@@ -101,46 +102,20 @@ export default function TrialDetailPage() {
     <main>
       <header className="page-header">
         <span className="kicker">{trial?.nct_id ?? "Trial"}</span>
-        {loading ? (
-          <>
-            <div className="skeleton skeleton-line long" />
-            <div className="skeleton skeleton-line medium" />
-          </>
-        ) : (
-          <>
-            {trial && <h1 className="title">{trial.title}</h1>}
-            {trial && (
-              <div className="pills">
-                {trial.status && <span className="pill">{trial.status}</span>}
-                {trial.phase && <span className="pill warm">{trial.phase}</span>}
-                {trial.fetched_at && (
-                  <span className="pill">
-                    synced {formatFetchedDate(trial.fetched_at)}
-                  </span>
-                )}
-              </div>
+        {trial && <h1 className="title">{trial.title}</h1>}
+        {trial && (
+          <div className="pills">
+            {trial.status && <span className="pill">{trial.status}</span>}
+            {trial.phase && <span className="pill warm">{trial.phase}</span>}
+            {trial.fetched_at && (
+              <span className="pill">
+                synced {formatFetchedDate(trial.fetched_at)}
+              </span>
             )}
-          </>
+          </div>
         )}
         {error && <p className="notice">{error}</p>}
       </header>
-
-      {loading && (
-        <div className="detail-grid">
-          <section className="detail-block">
-            <div className="skeleton skeleton-block" />
-          </section>
-          <section className="detail-block">
-            <div className="skeleton skeleton-block" />
-          </section>
-          <section className="detail-block">
-            <div className="skeleton skeleton-block" />
-          </section>
-          <section className="detail-block">
-            <div className="skeleton skeleton-block" />
-          </section>
-        </div>
-      )}
 
       {trial && (
         <div className="detail-grid">

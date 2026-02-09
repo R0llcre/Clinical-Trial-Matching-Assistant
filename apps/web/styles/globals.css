@@ -73,6 +73,12 @@ body {
   transition: background 0.2s ease, color 0.2s ease, border-color 0.2s ease;
 }
 
+.topnav-link.active {
+  color: var(--ink);
+  background: rgba(15, 107, 122, 0.12);
+  border-color: rgba(15, 107, 122, 0.22);
+}
+
 .topnav-link:hover {
   color: var(--ink);
   background: rgba(255, 255, 255, 0.65);
@@ -93,6 +99,112 @@ main {
   max-width: 1100px;
   margin: 0 auto;
   padding: 32px 24px 64px;
+}
+
+.hero {
+  margin: 20px 0 34px;
+}
+
+.hero-grid {
+  display: grid;
+  grid-template-columns: 1.2fr 0.8fr;
+  gap: 18px;
+  align-items: start;
+}
+
+.hero-copy {
+  padding: 8px 0;
+}
+
+.hero-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-top: 18px;
+}
+
+.hero-stats {
+  position: sticky;
+  top: 92px;
+}
+
+.stats-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  margin: 14px 0 10px;
+}
+
+.stat {
+  padding: 14px 14px 12px;
+  border-radius: 16px;
+  border: 1px solid rgba(15, 23, 42, 0.08);
+  background: rgba(255, 255, 255, 0.78);
+}
+
+.stat-value {
+  font-family: var(--font-display), ui-serif, Georgia, serif;
+  font-size: 22px;
+  letter-spacing: 0.01em;
+}
+
+.stat-label {
+  color: var(--muted);
+  font-size: 12px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  margin-top: 6px;
+}
+
+.site-footer {
+  padding: 28px 24px 52px;
+  border-top: 1px solid rgba(15, 23, 42, 0.08);
+  background: rgba(246, 248, 252, 0.7);
+}
+
+.footer-inner {
+  max-width: 1100px;
+  margin: 0 auto;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+  align-items: flex-start;
+  justify-content: space-between;
+}
+
+.footer-brand {
+  font-family: var(--font-display), ui-serif, Georgia, serif;
+  font-weight: 700;
+}
+
+.footer-note {
+  margin: 10px 0 0;
+  max-width: 560px;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.55;
+}
+
+.footer-links {
+  display: flex;
+  gap: 14px;
+  align-items: center;
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.footer-links a {
+  padding: 6px 10px;
+  border-radius: 999px;
+  border: 1px solid rgba(15, 23, 42, 0.1);
+  background: rgba(255, 255, 255, 0.7);
+  transition: background 0.2s ease, border-color 0.2s ease, color 0.2s ease;
+}
+
+.footer-links a:hover {
+  color: var(--ink);
+  border-color: rgba(15, 107, 122, 0.24);
+  background: rgba(255, 255, 255, 0.95);
 }
 
 h1,
@@ -503,6 +615,15 @@ textarea {
 
   .layout-grid {
     grid-template-columns: 1fr;
+  }
+
+  .hero-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .hero-stats {
+    position: relative;
+    top: 0;
   }
 
   .search-panel {

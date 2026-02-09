@@ -1,5 +1,6 @@
 import type { AppProps } from "next/app";
 import Link from "next/link";
+import { useRouter } from "next/router";
 import { Fraunces, Space_Grotesk } from "next/font/google";
 import "../styles/globals.css";
 
@@ -18,9 +19,14 @@ const bodyFont = Space_Grotesk({
 });
 
 export default function App({ Component, pageProps }: AppProps) {
+  const router = useRouter();
   const apiBase = process.env.NEXT_PUBLIC_API_BASE ?? "http://localhost:8000";
   // Normalize trailing slashes so links are stable across env values.
   const docsHref = `${apiBase.replace(/\/+$/, "")}/docs`;
+
+  const isBrowse = router.pathname === "/";
+  const isMatch =
+    router.pathname === "/match" || router.pathname.startsWith("/matches");
 
   return (
     <div className={`${displayFont.variable} ${bodyFont.variable} app-root`}>
@@ -30,10 +36,13 @@ export default function App({ Component, pageProps }: AppProps) {
             CTMatch
           </Link>
           <nav className="topnav">
-            <Link href="/" className="topnav-link">
+            <Link href="/" className={`topnav-link ${isBrowse ? "active" : ""}`}>
               Browse
             </Link>
-            <Link href="/match" className="topnav-link">
+            <Link
+              href="/match"
+              className={`topnav-link ${isMatch ? "active" : ""}`}
+            >
               Match
             </Link>
             <a
@@ -48,6 +57,26 @@ export default function App({ Component, pageProps }: AppProps) {
         </div>
       </header>
       <Component {...pageProps} />
+      <footer className="site-footer">
+        <div className="footer-inner">
+          <div className="footer-blurb">
+            <span className="footer-brand">CTMatch</span>
+            <p className="footer-note">
+              Preview app for exploring public trial listings. Not medical
+              advice. Always confirm eligibility with your care team and the
+              official study record.
+            </p>
+          </div>
+          <div className="footer-links">
+            <a href={docsHref} target="_blank" rel="noreferrer">
+              API docs
+            </a>
+            <a href="https://clinicaltrials.gov/" target="_blank" rel="noreferrer">
+              ClinicalTrials.gov
+            </a>
+          </div>
+        </div>
+      </footer>
     </div>
   );
 }
