@@ -1,6 +1,6 @@
 import Link from "next/link";
 import type { FormEvent } from "react";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 type TrialSummary = {
   nct_id: string;
@@ -85,6 +85,11 @@ export default function Home() {
     fetchTrials(1);
   };
 
+  useEffect(() => {
+    void fetchTrials(1);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   return (
     <main>
       <header className="page-header">
@@ -102,108 +107,126 @@ export default function Home() {
         </div>
       </header>
 
-      <section className="card">
-        <form className="search-panel" onSubmit={handleSubmit}>
-          <div className="field">
-            <label htmlFor="condition">Condition</label>
-            <input
-              id="condition"
-              name="condition"
-              placeholder="e.g. diabetes, breast cancer"
-              value={condition}
-              onChange={(event) => setCondition(event.target.value)}
-            />
-          </div>
-          <div className="field">
-            <label htmlFor="status">Status</label>
-            <select
-              id="status"
-              value={status}
-              onChange={(event) => setStatus(event.target.value)}
-            >
-              <option value="">Any</option>
-              <option value="RECRUITING">Recruiting</option>
-              <option value="NOT_YET_RECRUITING">Not yet recruiting</option>
-              <option value="ACTIVE_NOT_RECRUITING">
-                Active, not recruiting
-              </option>
-              <option value="COMPLETED">Completed</option>
-            </select>
-          </div>
-          <div className="field">
-            <label htmlFor="phase">Phase</label>
-            <select
-              id="phase"
-              value={phase}
-              onChange={(event) => setPhase(event.target.value)}
-            >
-              <option value="">Any</option>
-              <option value="EARLY_PHASE1">Early Phase 1</option>
-              <option value="PHASE1">Phase 1</option>
-              <option value="PHASE2">Phase 2</option>
-              <option value="PHASE3">Phase 3</option>
-              <option value="PHASE4">Phase 4</option>
-            </select>
-          </div>
-          <button className="button" type="submit" disabled={loading}>
-            {loading ? "Searching..." : "Search trials"}
-          </button>
-        </form>
-      </section>
+      <div className="layout-grid">
+        <aside className="stack">
+          <section className="card">
+            <h2 className="section-title">Search</h2>
+            <form className="search-panel" onSubmit={handleSubmit}>
+              <div className="field">
+                <label htmlFor="condition">Condition</label>
+                <input
+                  id="condition"
+                  name="condition"
+                  placeholder="e.g. diabetes, breast cancer"
+                  value={condition}
+                  onChange={(event) => setCondition(event.target.value)}
+                />
+              </div>
+              <div className="field">
+                <label htmlFor="status">Status</label>
+                <select
+                  id="status"
+                  value={status}
+                  onChange={(event) => setStatus(event.target.value)}
+                >
+                  <option value="">Any</option>
+                  <option value="RECRUITING">Recruiting</option>
+                  <option value="NOT_YET_RECRUITING">Not yet recruiting</option>
+                  <option value="ACTIVE_NOT_RECRUITING">
+                    Active, not recruiting
+                  </option>
+                  <option value="COMPLETED">Completed</option>
+                </select>
+              </div>
+              <div className="field">
+                <label htmlFor="phase">Phase</label>
+                <select
+                  id="phase"
+                  value={phase}
+                  onChange={(event) => setPhase(event.target.value)}
+                >
+                  <option value="">Any</option>
+                  <option value="EARLY_PHASE1">Early Phase 1</option>
+                  <option value="PHASE1">Phase 1</option>
+                  <option value="PHASE2">Phase 2</option>
+                  <option value="PHASE3">Phase 3</option>
+                  <option value="PHASE4">Phase 4</option>
+                </select>
+              </div>
+              <button className="button" type="submit" disabled={loading}>
+                {loading ? "Searching..." : "Search trials"}
+              </button>
+            </form>
+          </section>
 
-      <div className="meta-row">
-        <span>
-          {total > 0
-            ? `${total} trials found`
-            : "Run a search to see matching trials."}
-        </span>
-        {error && <span className="notice">{error}</span>}
+          <section className="card subtle">
+            <h2 className="section-title">How to use</h2>
+            <p className="help-text">
+              Start with a broad condition (for example “breast cancer”) and
+              then narrow by status and phase. Use the trial detail page to
+              review eligibility text before sharing with a clinician.
+            </p>
+          </section>
+        </aside>
+
+        <section className="stack">
+          <div className="meta-row">
+            <span>
+              {total > 0
+                ? `${total} trials found`
+                : "Showing the latest synced trials."}
+            </span>
+            {error && <span className="notice">{error}</span>}
+          </div>
+
+          <section className="trials-grid">
+            {trials.map((trial) => (
+              <article className="card trial-card" key={trial.nct_id}>
+                <div className="pills">
+                  {trial.status && <span className="pill">{trial.status}</span>}
+                  {trial.phase && (
+                    <span className="pill warm">{trial.phase}</span>
+                  )}
+                </div>
+                <Link href={`/trials/${trial.nct_id}`} className="trial-title">
+                  {trial.title}
+                </Link>
+                <div className="location-list">
+                  {trial.locations.length > 0
+                    ? trial.locations.slice(0, 3).join(" · ")
+                    : "Location data pending"}
+                </div>
+                <div className="meta-row">
+                  <span>{trial.conditions.slice(0, 3).join(" · ")}</span>
+                  {trial.fetched_at && <span>Updated {trial.fetched_at}</span>}
+                </div>
+              </article>
+            ))}
+          </section>
+
+          {trials.length > 0 && (
+            <div className="pagination">
+              <button
+                className="button secondary"
+                onClick={() => fetchTrials(Math.max(1, page - 1))}
+                disabled={loading || page <= 1}
+              >
+                Previous
+              </button>
+              <span>
+                Page {page} of {totalPages}
+              </span>
+              <button
+                className="button secondary"
+                onClick={() => fetchTrials(Math.min(totalPages, page + 1))}
+                disabled={loading || page >= totalPages}
+              >
+                Next
+              </button>
+            </div>
+          )}
+        </section>
       </div>
-
-      <section className="trials-grid">
-        {trials.map((trial) => (
-          <article className="card trial-card" key={trial.nct_id}>
-            <div className="pills">
-              {trial.status && <span className="pill">{trial.status}</span>}
-              {trial.phase && <span className="pill warm">{trial.phase}</span>}
-            </div>
-            <Link href={`/trials/${trial.nct_id}`} className="trial-title">
-              {trial.title}
-            </Link>
-            <div className="location-list">
-              {trial.locations.length > 0
-                ? trial.locations.slice(0, 3).join(" · ")
-                : "Location data pending"}
-            </div>
-            <div className="meta-row">
-              <span>{trial.conditions.slice(0, 3).join(" · ")}</span>
-              {trial.fetched_at && <span>Updated {trial.fetched_at}</span>}
-            </div>
-          </article>
-        ))}
-      </section>
-
-      {trials.length > 0 && (
-        <div className="pagination">
-          <button
-            className="button secondary"
-            onClick={() => fetchTrials(Math.max(1, page - 1))}
-            disabled={loading || page <= 1}
-          >
-            Previous
-          </button>
-          <span>
-            Page {page} of {totalPages}
-          </span>
-          <button
-            className="button secondary"
-            onClick={() => fetchTrials(Math.min(totalPages, page + 1))}
-            disabled={loading || page >= totalPages}
-          >
-            Next
-          </button>
-        </div>
-      )}
     </main>
   );
 }

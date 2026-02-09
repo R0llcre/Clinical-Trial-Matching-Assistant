@@ -53,6 +53,7 @@ export default function TrialDetailPage() {
   const [trial, setTrial] = useState<TrialDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [eligibilityExpanded, setEligibilityExpanded] = useState(false);
 
   useEffect(() => {
     if (!router.isReady || typeof nct_id !== "string") {
@@ -80,35 +81,79 @@ export default function TrialDetailPage() {
     fetchDetail();
   }, [router.isReady, nct_id]);
 
+  const eligibilityText = trial?.eligibility_text ?? "";
+  const eligibilityLines = eligibilityText ? eligibilityText.split("\n") : [];
+  const eligibilityPreview = eligibilityLines.slice(0, 18).join("\n");
+  const eligibilityTruncated = eligibilityLines.length > 18;
+  const eligibilityShown =
+    eligibilityTruncated && !eligibilityExpanded
+      ? `${eligibilityPreview}\n\n…`
+      : eligibilityText || "No eligibility text provided.";
+
   return (
     <main>
-      <Link href="/" className="button secondary">
-        Back to search
-      </Link>
+      <header className="page-header">
+        <span className="kicker">{trial?.nct_id ?? "Trial"}</span>
+        {loading ? (
+          <>
+            <div className="skeleton skeleton-line long" />
+            <div className="skeleton skeleton-line medium" />
+          </>
+        ) : (
+          <>
+            {trial && <h1 className="title">{trial.title}</h1>}
+            {trial && (
+              <div className="pills">
+                {trial.status && <span className="pill">{trial.status}</span>}
+                {trial.phase && <span className="pill warm">{trial.phase}</span>}
+                {trial.fetched_at && (
+                  <span className="pill">updated {trial.fetched_at}</span>
+                )}
+              </div>
+            )}
+          </>
+        )}
+        {error && <p className="notice">{error}</p>}
+      </header>
 
-      {loading && <p className="notice">Loading trial details...</p>}
-      {error && <p className="notice">{error}</p>}
-
-      {trial && (
-        <div className="detail-hero">
-          <span className="kicker">{trial.nct_id}</span>
-          <h1 className="title">{trial.title}</h1>
-          <div className="pills">
-            {trial.status && <span className="pill">{trial.status}</span>}
-            {trial.phase && <span className="pill warm">{trial.phase}</span>}
-          </div>
-          <p className="subtitle">
-            {trial.summary ||
-              "Summary unavailable. Review eligibility criteria for details."}
-          </p>
+      {loading && (
+        <div className="detail-grid">
+          <section className="detail-block">
+            <div className="skeleton skeleton-block" />
+          </section>
+          <section className="detail-block">
+            <div className="skeleton skeleton-block" />
+          </section>
+          <section className="detail-block">
+            <div className="skeleton skeleton-block" />
+          </section>
+          <section className="detail-block">
+            <div className="skeleton skeleton-block" />
+          </section>
         </div>
       )}
 
       {trial && (
         <div className="detail-grid">
           <section className="detail-block">
+            <h3>Summary</h3>
+            <pre>
+              {trial.summary ||
+                "Summary unavailable. Review eligibility criteria for details."}
+            </pre>
+          </section>
+          <section className="detail-block">
             <h3>Eligibility</h3>
-            <pre>{trial.eligibility_text || "No eligibility text provided."}</pre>
+            <pre>{eligibilityShown}</pre>
+            {eligibilityTruncated && (
+              <button
+                type="button"
+                className="link-button"
+                onClick={() => setEligibilityExpanded((value) => !value)}
+              >
+                {eligibilityExpanded ? "Collapse" : "Expand"}
+              </button>
+            )}
           </section>
           <section className="detail-block">
             <h3>Parsed Criteria</h3>
@@ -166,6 +211,11 @@ export default function TrialDetailPage() {
                 : "Condition data pending"}
             </div>
           </section>
+          <div className="meta-row">
+            <Link href="/" className="button secondary">
+              Back to browse
+            </Link>
+          </div>
         </div>
       )}
     </main>

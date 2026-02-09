@@ -31,6 +31,7 @@ export default function MatchPage() {
   const [jwtToken, setJwtToken] = useState(
     process.env.NEXT_PUBLIC_DEV_JWT ?? ""
   );
+  const [showAuthAdvanced, setShowAuthAdvanced] = useState(false);
   const [age, setAge] = useState("52");
   const [sex, setSex] = useState("female");
   const [conditions, setConditions] = useState("type 2 diabetes");
@@ -44,6 +45,28 @@ export default function MatchPage() {
     const savedToken = window.localStorage.getItem("ctmatch.jwt");
     if (savedToken && !jwtToken) {
       setJwtToken(savedToken);
+      return;
+    }
+    if (!jwtToken) {
+      void (async () => {
+        try {
+          const response = await fetch(`${API_BASE}/api/auth/preview-token`);
+          if (!response.ok) {
+            return;
+          }
+          const payload = (await response.json()) as {
+            ok: boolean;
+            data?: { token?: string };
+          };
+          const token = payload.data?.token;
+          if (payload.ok && token && token.trim()) {
+            window.localStorage.setItem("ctmatch.jwt", token.trim());
+            setJwtToken(token.trim());
+          }
+        } catch {
+          // ignore; preview token endpoint may be disabled.
+        }
+      })();
     }
   }, [jwtToken]);
 
@@ -65,18 +88,38 @@ export default function MatchPage() {
       return;
     }
     if (!jwtToken.trim()) {
-      setLoading(false);
-      setError(
-        "JWT token is required for /api/patients. Generate one via scripts/gen_dev_jwt.py."
-      );
-      return;
+      try {
+        const response = await fetch(`${API_BASE}/api/auth/preview-token`);
+        if (response.ok) {
+          const payload = (await response.json()) as {
+            ok: boolean;
+            data?: { token?: string };
+          };
+          const token = payload.data?.token;
+          if (payload.ok && token && token.trim()) {
+            window.localStorage.setItem("ctmatch.jwt", token.trim());
+            setJwtToken(token.trim());
+          }
+        }
+      } catch {
+        // ignore
+      }
+      if (!window.localStorage.getItem("ctmatch.jwt") && !jwtToken.trim()) {
+        setLoading(false);
+        setError(
+          "JWT token is required for /api/patients. In preview deployments it can be auto-issued; otherwise generate one via scripts/gen_dev_jwt.py."
+        );
+        return;
+      }
     }
 
     const conditionList = conditions
       .split(",")
       .map((item) => item.trim())
       .filter(Boolean);
-    const bearerToken = jwtToken.trim();
+    const bearerToken = (
+      window.localStorage.getItem("ctmatch.jwt") ?? jwtToken
+    ).trim();
     window.localStorage.setItem("ctmatch.jwt", bearerToken);
 
     try {
@@ -146,15 +189,30 @@ export default function MatchPage() {
 
       <section className="card">
         <form className="search-panel" onSubmit={onSubmit}>
-          <div className="field">
-            <label htmlFor="jwt">JWT Token</label>
-            <input
-              id="jwt"
-              value={jwtToken}
-              onChange={(event) => setJwtToken(event.target.value)}
-              placeholder="Bearer token (required)"
-            />
+          <div className="meta-row">
+            <span>
+              Auth {jwtToken.trim() ? "ready" : "not set"} ·{" "}
+              <button
+                type="button"
+                className="link-button"
+                onClick={() => setShowAuthAdvanced((value) => !value)}
+              >
+                {showAuthAdvanced ? "Hide advanced" : "Advanced"}
+              </button>
+            </span>
           </div>
+
+          {showAuthAdvanced && (
+            <div className="field">
+              <label htmlFor="jwt">JWT Token (advanced)</label>
+              <input
+                id="jwt"
+                value={jwtToken}
+                onChange={(event) => setJwtToken(event.target.value)}
+                placeholder="Paste token if preview auto-auth is disabled"
+              />
+            </div>
+          )}
 
           <div className="field">
             <label htmlFor="age">Age</label>
