@@ -333,9 +333,22 @@ export default function MatchResultsPage() {
     }
 
     try {
-      const response = await fetch(`${API_BASE}/api/matches/${id}`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
+      const doFetch = async (bearer: string) => {
+        return fetch(`${API_BASE}/api/matches/${id}`, {
+          headers: { Authorization: `Bearer ${bearer}` },
+        });
+      };
+
+      let response = await doFetch(token);
+      if (response.status === 401) {
+        window.localStorage.removeItem(SESSION_KEY);
+        const refreshed = await ensureSession();
+        const nextToken = (window.localStorage.getItem(SESSION_KEY) ?? refreshed).trim();
+        if (nextToken && nextToken !== token) {
+          response = await doFetch(nextToken);
+        }
+      }
+
       const payload = (await response.json()) as MatchResponse;
       if (!response.ok || !payload.ok || !payload.data) {
         throw new Error(payload.error?.message || "Failed to load match result");
@@ -919,4 +932,3 @@ export default function MatchResultsPage() {
     </Shell>
   );
 }
-
