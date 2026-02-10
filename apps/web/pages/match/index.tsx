@@ -222,6 +222,42 @@ export default function MatchPage() {
 
   const stepIndex = STEPS.findIndex((item) => item.id === step);
 
+  const postWithSessionRetry = async <T,>(
+    url: string,
+    body: unknown
+  ): Promise<{ response: Response; payload: T | null }> => {
+    const doPost = async (token: string) => {
+      return fetch(url, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify(body),
+      });
+    };
+
+    const initialToken = (window.localStorage.getItem(SESSION_KEY) ?? "").trim();
+    let response = await doPost(initialToken);
+
+    if (response.status === 401) {
+      window.localStorage.removeItem(SESSION_KEY);
+      const refreshed = await ensureSession();
+      const nextToken = (window.localStorage.getItem(SESSION_KEY) ?? refreshed).trim();
+      if (nextToken && nextToken !== initialToken) {
+        response = await doPost(nextToken);
+      }
+    }
+
+    let payload: T | null = null;
+    try {
+      payload = (await response.json()) as T;
+    } catch {
+      payload = null;
+    }
+    return { response, payload };
+  };
+
   const issuePreviewSession = async (): Promise<string | null> => {
     try {
       const response = await fetch(`${API_BASE}/api/auth/preview-token`);
@@ -445,13 +481,8 @@ export default function MatchPage() {
     }
 
     try {
-      const patientResponse = await fetch(`${API_BASE}/api/patients`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${bearerToken}`,
-        },
-        body: JSON.stringify({
+      const { response: patientResponse, payload: patientPayload } =
+        await postWithSessionRetry<CreatePatientResponse>(`${API_BASE}/api/patients`, {
           profile_json: {
             demographics: {
               age: parsedAge,
@@ -460,20 +491,13 @@ export default function MatchPage() {
             conditions: conditionList,
           },
           source: "manual",
-        }),
-      });
-      const patientPayload = (await patientResponse.json()) as CreatePatientResponse;
+        });
       if (!patientResponse.ok || !patientPayload.ok || !patientPayload.data?.id) {
         throw new Error(patientPayload.error?.message || "Failed to create patient");
       }
 
-      const matchResponse = await fetch(`${API_BASE}/api/match`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${bearerToken}`,
-        },
-        body: JSON.stringify({
+      const { response: matchResponse, payload: matchPayload } =
+        await postWithSessionRetry<CreateMatchResponse>(`${API_BASE}/api/match`, {
           patient_profile_id: patientPayload.data.id,
           top_k: parsedTopK,
           filters: {
@@ -481,9 +505,7 @@ export default function MatchPage() {
             status,
             phase,
           },
-        }),
-      });
-      const matchPayload = (await matchResponse.json()) as CreateMatchResponse;
+        });
       if (!matchResponse.ok || !matchPayload.ok || !matchPayload.data?.match_id) {
         throw new Error(matchPayload.error?.message || "Failed to create match");
       }
