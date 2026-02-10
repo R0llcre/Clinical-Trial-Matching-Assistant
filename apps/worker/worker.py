@@ -8,6 +8,10 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 
+def _split_csv(value: str) -> list[str]:
+    return [item.strip() for item in value.split(",") if item.strip()]
+
+
 def _env_int(name: str, default: int) -> int:
     raw = os.getenv(name)
     if raw is None:
@@ -27,7 +31,8 @@ def _env_bool(name: str, default: bool = False) -> bool:
 
 
 def main() -> None:
-    condition = os.getenv("SYNC_CONDITION", "cancer")
+    raw_conditions = os.getenv("SYNC_CONDITION", "cancer")
+    conditions = _split_csv(raw_conditions) or ["cancer"]
     status = os.getenv("SYNC_STATUS")
     page_limit = _env_int("SYNC_PAGE_LIMIT", 1)
     page_size = _env_int("SYNC_PAGE_SIZE", 100)
@@ -37,17 +42,20 @@ def main() -> None:
 
     logger.info(
         (
-            "worker started condition=%s status=%s page_limit=%s page_size=%s "
+            "worker started conditions=%s status=%s page_limit=%s page_size=%s "
             "run_once=%s"
         ),
-        condition,
+        ",".join(conditions),
         status,
         page_limit,
         page_size,
         run_once,
     )
 
+    condition_index = 0
     while True:
+        condition = conditions[condition_index % len(conditions)]
+        condition_index += 1
         try:
             stats = sync_trials(
                 condition=condition,
