@@ -445,10 +445,39 @@ def _contains_term(term: str, trial: Dict[str, Any]) -> bool:
 
 
 def _load_trial_candidates(
-    engine: Engine, recall_limit: int = 500
+    engine: Engine,
+    *,
+    condition_filter: str = "",
+    status_filter: str = "",
+    phase_filter: str = "",
+    recall_limit: int = 500,
 ) -> List[Dict[str, Any]]:
+    filters = []
+    params: Dict[str, Any] = {"limit": recall_limit}
+
+    if condition_filter:
+        like = f"%{condition_filter}%"
+        params["condition_like"] = like
+        # Match /api/trials search semantics so Browse/Match don't diverge.
+        filters.append(
+            "("
+            "t.title ILIKE :condition_like OR "
+            "array_to_string(t.conditions, ',') ILIKE :condition_like"
+            ")"
+        )
+    if status_filter:
+        params["status"] = status_filter
+        filters.append("t.status = :status")
+    if phase_filter:
+        params["phase"] = phase_filter
+        filters.append("t.phase = :phase")
+
+    where_clause = ""
+    if filters:
+        where_clause = "WHERE " + " AND ".join(filters)
+
     stmt = text(
-        """
+        f"""
         SELECT
           t.nct_id,
           t.title,
@@ -466,12 +495,13 @@ def _load_trial_candidates(
           ORDER BY created_at DESC
           LIMIT 1
         ) AS tc ON TRUE
+        {where_clause}
         ORDER BY t.fetched_at DESC
         LIMIT :limit
         """
     )
     with engine.begin() as conn:
-        rows = conn.execute(stmt, {"limit": recall_limit}).mappings().all()
+        rows = conn.execute(stmt, params).mappings().all()
     return [dict(row) for row in rows]
 
 
@@ -487,18 +517,13 @@ def match_trials(
     status_filter = str(filters.get("status") or "").strip()
     phase_filter = str(filters.get("phase") or "").strip()
 
-    candidates = _load_trial_candidates(engine)
-    filtered: List[Dict[str, Any]] = []
-    for trial in candidates:
-        if condition_filter and not _contains_term(condition_filter, trial):
-            continue
-        if status_filter and str(trial.get("status") or "") != status_filter:
-            continue
-        if phase_filter and str(trial.get("phase") or "") != phase_filter:
-            continue
-        filtered.append(trial)
-
-    results = [evaluate_trial(patient_profile, trial) for trial in filtered]
+    candidates = _load_trial_candidates(
+        engine,
+        condition_filter=condition_filter,
+        status_filter=status_filter,
+        phase_filter=phase_filter,
+    )
+    results = [evaluate_trial(patient_profile, trial) for trial in candidates]
     results.sort(
         key=lambda item: (
             item["score"],
