@@ -275,6 +275,25 @@ def rule_signature(rule: Dict[str, Any]) -> Tuple[str, str, str, str, str]:
     return (rule_type, field, operator, value, unit)
 
 
+def _is_unparsed_placeholder_rule(rule: Dict[str, Any]) -> bool:
+    """Return True for v1 placeholder rules that encode 'unparsed ... criteria'.
+
+    These rules are intentionally emitted as UNKNOWN coverage hints for matching UX,
+    but they do not exist in gold datasets and should not be scored as false positives
+    in parsing F1. We treat them as separate coverage signals.
+    """
+    if not isinstance(rule, dict):
+        return False
+    field = _norm_text(str(rule.get("field") or ""))
+    operator = str(rule.get("operator") or "").upper()
+    value = rule.get("value")
+    if field != "other" or operator != "EXISTS":
+        return False
+    if not isinstance(value, str):
+        return False
+    return _norm_text(value).startswith("unparsed")
+
+
 def _load_gold_rules(trials: Sequence[Dict[str, Any]]) -> Dict[str, List[Dict[str, Any]]]:
     out: Dict[str, List[Dict[str, Any]]] = {}
     for trial in trials:
@@ -338,13 +357,20 @@ def compute_parse_metrics(
     true_positive = 0
     false_positive = 0
     false_negative = 0
+    placeholder_predicted = 0
 
     trial_ids = sorted(set(gold_rules_by_trial) | set(predicted_rules_by_trial))
     for trial_id in trial_ids:
         gold_set = {rule_signature(rule) for rule in gold_rules_by_trial.get(trial_id, [])}
+        pred_rules = predicted_rules_by_trial.get(trial_id, [])
+        if pred_rules:
+            placeholder_predicted += sum(
+                1 for rule in pred_rules if _is_unparsed_placeholder_rule(rule)
+            )
         pred_set = {
             rule_signature(rule)
-            for rule in predicted_rules_by_trial.get(trial_id, [])
+            for rule in pred_rules
+            if not _is_unparsed_placeholder_rule(rule)
         }
         true_positive += len(gold_set & pred_set)
         false_positive += len(pred_set - gold_set)
@@ -372,6 +398,7 @@ def compute_parse_metrics(
         "tp": true_positive,
         "fp": false_positive,
         "fn": false_negative,
+        "placeholder_predicted_rules": placeholder_predicted,
     }
 
 
@@ -385,9 +412,13 @@ def compute_hallucination_rate(
     }
     total = 0
     hallucinated = 0
+    placeholder_predicted = 0
     for nct_id, rules in predicted_rules_by_trial.items():
         eligibility = _norm_text(text_by_id.get(nct_id, ""))
         for rule in rules:
+            if _is_unparsed_placeholder_rule(rule):
+                placeholder_predicted += 1
+                continue
             evidence = _norm_text(str(rule.get("evidence_text") or ""))
             total += 1
             if not evidence or evidence not in eligibility:
@@ -397,6 +428,7 @@ def compute_hallucination_rate(
         "hallucination_rate": round(rate, 4),
         "hallucinated_rules": hallucinated,
         "total_predicted_rules": total,
+        "placeholder_predicted_rules": placeholder_predicted,
     }
 
 
