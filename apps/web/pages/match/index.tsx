@@ -74,7 +74,7 @@ const DEMO_PROFILES: DemoProfile[] = [
     sex: "female",
     conditions: "Breast Cancer",
     status: "RECRUITING",
-    phase: "PHASE2",
+    phase: "",
   },
   {
     label: "Advanced melanoma (male, 62)",
@@ -82,14 +82,14 @@ const DEMO_PROFILES: DemoProfile[] = [
     sex: "male",
     conditions: "Melanoma",
     status: "RECRUITING",
-    phase: "PHASE2",
+    phase: "",
   },
   {
     label: "Long COVID (female, 38)",
     age: "38",
     sex: "female",
     conditions: "Long COVID",
-    status: "RECRUITING",
+    status: "",
     phase: "",
   },
   {
@@ -98,7 +98,7 @@ const DEMO_PROFILES: DemoProfile[] = [
     sex: "male",
     conditions: "Heart Failure",
     status: "RECRUITING",
-    phase: "PHASE3",
+    phase: "",
   },
   {
     label: "Asthma (female, 13)",
@@ -106,23 +106,23 @@ const DEMO_PROFILES: DemoProfile[] = [
     sex: "female",
     conditions: "Asthma",
     status: "RECRUITING",
-    phase: "PHASE2",
+    phase: "",
   },
   {
     label: "Rheumatoid arthritis (female, 35)",
     age: "35",
     sex: "female",
     conditions: "Rheumatoid Arthritis",
-    status: "RECRUITING",
-    phase: "PHASE2",
+    status: "",
+    phase: "",
   },
   {
     label: "Type 2 diabetes (male, 55)",
     age: "55",
     sex: "male",
-    conditions: "Type 2 Diabetes Mellitus",
+    conditions: "Type 2 Diabetes",
     status: "RECRUITING",
-    phase: "PHASE2",
+    phase: "",
   },
   {
     label: "Chronic kidney disease (male, 67)",
@@ -130,7 +130,7 @@ const DEMO_PROFILES: DemoProfile[] = [
     sex: "male",
     conditions: "Chronic Kidney Disease",
     status: "RECRUITING",
-    phase: "PHASE4",
+    phase: "",
   },
   {
     label: "Leukemia (female, 29)",
@@ -138,7 +138,7 @@ const DEMO_PROFILES: DemoProfile[] = [
     sex: "female",
     conditions: "Leukemia",
     status: "RECRUITING",
-    phase: "PHASE2",
+    phase: "",
   },
 ];
 
