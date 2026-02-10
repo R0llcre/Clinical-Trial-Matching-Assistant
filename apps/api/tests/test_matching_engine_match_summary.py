@@ -52,6 +52,7 @@ def test_match_summary_eligible_with_sufficient_parsed_rules() -> None:
     patient = {
         "demographics": {"age": 50, "sex": "female"},
         "conditions": ["diabetes"],
+        "medications": ["metformin"],
     }
     trial = {
         "nct_id": "NCT123",
@@ -124,6 +125,14 @@ def test_match_summary_eligible_with_sufficient_parsed_rules() -> None:
                 "value": "pregnancy",
                 "evidence_text": "Not pregnant",
             },
+            {
+                "id": "med-1",
+                "type": "INCLUSION",
+                "field": "medication",
+                "operator": "EXISTS",
+                "value": "metformin",
+                "evidence_text": "On metformin",
+            },
         ],
     }
 
@@ -133,7 +142,7 @@ def test_match_summary_eligible_with_sufficient_parsed_rules() -> None:
     assert summary["fail"] == 0
     assert summary["unknown"] == 0
     assert summary["missing"] == 0
-    assert summary["pass"] == 8
+    assert summary["pass"] == 9
 
 
 def test_match_summary_potential_on_legacy_success_path() -> None:

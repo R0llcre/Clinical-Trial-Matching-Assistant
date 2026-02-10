@@ -11,6 +11,8 @@ PASS_SCORE = 1.0
 UNKNOWN_SCORE = 0.3
 FAIL_SCORE = -2.0
 _MIN_RULES_FOR_STRONG_TIER = 8
+_MIN_NON_DEMOGRAPHIC_RULES_FOR_STRONG_TIER = 4
+_STRONG_EVIDENCE_FIELDS = {"history", "procedure", "medication", "lab"}
 
 _AGE_PATTERN = re.compile(
     r"^\s*(\d+)\s*(year|years|month|months|week|weeks|day|days)\s*$",
@@ -147,6 +149,10 @@ def _evaluate_trial_with_parsed_rules(
     inclusion: List[Dict[str, str]] = []
     exclusion: List[Dict[str, str]] = []
     missing_info: List[str] = []
+    condition_overlap_verdict: Optional[str] = None
+    parsed_condition_inclusion_pass = False
+    non_demographic_pass_count = 0
+    non_demographic_pass_fields: set[str] = set()
     has_parsed_condition = any(
         str(rule.get("type")).upper() == "INCLUSION"
         and str(rule.get("field")).lower() == "condition"
@@ -158,18 +164,27 @@ def _evaluate_trial_with_parsed_rules(
             patient_profile, trial
         )
         inclusion.append(condition_rule)
+        condition_overlap_verdict = condition_rule.get("verdict")
         if missing_field:
             missing_info.append(missing_field)
 
     for parsed_rule in parsed_rules:
+        rule_type = str(parsed_rule.get("type") or "").upper()
+        rule_field = str(parsed_rule.get("field") or "").lower()
         verdict, missing_field = _evaluate_parsed_rule(parsed_rule, patient_profile)
+        if verdict == "PASS":
+            if rule_type == "INCLUSION" and rule_field == "condition":
+                parsed_condition_inclusion_pass = True
+            if rule_field and rule_field not in {"age", "sex"}:
+                non_demographic_pass_count += 1
+                non_demographic_pass_fields.add(rule_field)
         fallback_id = f"rule-{len(inclusion) + len(exclusion)}"
         rule_id = str(parsed_rule.get("id") or fallback_id)
         evidence = str(parsed_rule.get("evidence_text") or "criteria rule")
         checklist_rule = _rule(verdict, rule_id, evidence)
         if missing_field:
             missing_info.append(missing_field)
-        if str(parsed_rule.get("type")).upper() == "EXCLUSION":
+        if rule_type == "EXCLUSION":
             exclusion.append(checklist_rule)
         else:
             inclusion.append(checklist_rule)
@@ -201,6 +216,20 @@ def _evaluate_trial_with_parsed_rules(
         and len(all_rules) < _MIN_RULES_FOR_STRONG_TIER
     ):
         match_summary["tier"] = "POTENTIAL"
+    # Additionally, only label a match as "ELIGIBLE" when we have non-demographic
+    # evidence beyond just demographics/condition overlap.
+    if match_summary.get("tier") == "ELIGIBLE":
+        condition_ok = (
+            parsed_condition_inclusion_pass
+            if has_parsed_condition
+            else condition_overlap_verdict == "PASS"
+        )
+        if not condition_ok:
+            match_summary["tier"] = "POTENTIAL"
+        elif non_demographic_pass_count < _MIN_NON_DEMOGRAPHIC_RULES_FOR_STRONG_TIER:
+            match_summary["tier"] = "POTENTIAL"
+        elif not (non_demographic_pass_fields & _STRONG_EVIDENCE_FIELDS):
+            match_summary["tier"] = "POTENTIAL"
     return {
         "nct_id": trial.get("nct_id"),
         "title": trial.get("title"),

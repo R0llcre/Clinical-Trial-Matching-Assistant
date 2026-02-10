@@ -76,7 +76,7 @@ type MatchTier = "ELIGIBLE" | "POTENTIAL" | "INELIGIBLE";
 type TierFilter = "ALL" | MatchTier;
 
 const tierLabel: Record<MatchTier, string> = {
-  ELIGIBLE: "Strong",
+  ELIGIBLE: "Strong match",
   POTENTIAL: "Potential",
   INELIGIBLE: "Not eligible",
 };
@@ -683,8 +683,8 @@ export default function MatchResultsPage() {
       title={typeof id === "string" ? `Match ${id}` : "Match results"}
       subtitle={
         <>
-          Review trial-by-trial eligibility evidence. Strong and potential matches require
-          clinical confirmation.
+          Review trial-by-trial eligibility evidence. Strong match indicates stronger evidence,
+          but still requires clinical confirmation.
         </>
       }
       actions={
@@ -788,7 +788,7 @@ export default function MatchResultsPage() {
                 </div>
                 <div className="results-stat">
                   <div className="results-stat__value">{resultsSummary.eligible}</div>
-                  <div className="results-stat__label">strong</div>
+                  <div className="results-stat__label">strong match</div>
                 </div>
                 <div className="results-stat">
                   <div className="results-stat__value">{resultsSummary.potential}</div>
@@ -815,7 +815,8 @@ export default function MatchResultsPage() {
                   className={`results-tierTab ${tierFilter === "ELIGIBLE" ? "is-active" : ""}`}
                   onClick={() => setTierFilter("ELIGIBLE")}
                 >
-                  Strong <span className="results-tierTab__count">{resultsSummary.eligible}</span>
+                  Strong match{" "}
+                  <span className="results-tierTab__count">{resultsSummary.eligible}</span>
                 </button>
                 <button
                   type="button"
