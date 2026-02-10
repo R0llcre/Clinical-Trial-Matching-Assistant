@@ -117,6 +117,61 @@ def test_parse_criteria_v1_emits_placeholder_when_inclusion_sentence_unparsed() 
     assert rules[0]["value"] == "unparsed inclusion criteria"
 
 
+def test_parse_criteria_v1_emits_placeholder_when_some_inclusion_sentences_unparsed() -> None:
+    text = """
+    Inclusion Criteria:
+    Participants must be at least 18 years of age.
+    Participant must sign informed consent before enrollment.
+    """
+
+    rules = parse_criteria_v1(text)
+
+    assert any(
+        rule["type"] == "INCLUSION"
+        and rule["field"] == "age"
+        and rule["operator"] == ">="
+        and rule["value"] == 18
+        for rule in rules
+    )
+    assert any(
+        rule["type"] == "INCLUSION"
+        and rule["field"] == "other"
+        and rule["operator"] == "EXISTS"
+        and rule["value"] == "unparsed inclusion criteria"
+        for rule in rules
+    )
+
+
+def test_parse_criteria_v1_emits_placeholder_when_exclusion_sentences_unparsed() -> None:
+    text = """
+    Inclusion Criteria:
+    Participants must be at least 18 years of age.
+    Exclusion Criteria:
+    Participant must have stable housing.
+    """
+
+    rules = parse_criteria_v1(text)
+
+    assert any(rule["field"] == "age" for rule in rules)
+    assert any(
+        rule["type"] == "EXCLUSION"
+        and rule["field"] == "other"
+        and rule["operator"] == "EXISTS"
+        and rule["value"] == "unparsed exclusion criteria"
+        for rule in rules
+    )
+
+
+def test_parse_criteria_v1_does_not_emit_unknown_for_none_only_section() -> None:
+    text = """
+    Exclusion Criteria:
+    None.
+    """
+
+    rules = parse_criteria_v1(text)
+    assert rules == []
+
+
 def test_parse_criteria_v1_deduplicates_overlapping_infection_keywords() -> None:
     text = """
     Exclusion Criteria:
