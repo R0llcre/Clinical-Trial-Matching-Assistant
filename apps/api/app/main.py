@@ -49,13 +49,26 @@ def _load_allowed_origins() -> list[str]:
     return origins
 
 
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=_load_allowed_origins(),
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
+@app.middleware("http")
+async def auth_middleware(request: Request, call_next):
+    if request.method != "OPTIONS" and request.url.path.startswith(_PROTECTED_PREFIXES):
+        try:
+            claims = decode_auth_header(request.headers.get("Authorization"))
+            request.state.auth_claims = claims
+        except AuthError as exc:
+            return JSONResponse(
+                status_code=401,
+                content={
+                    "ok": False,
+                    "data": None,
+                    "error": {
+                        "code": "UNAUTHORIZED",
+                        "message": str(exc),
+                        "details": {},
+                    },
+                },
+            )
+    return await call_next(request)
 
 
 @app.middleware("http")
@@ -89,26 +102,13 @@ async def request_id_middleware(request: Request, call_next):
     return response
 
 
-@app.middleware("http")
-async def auth_middleware(request: Request, call_next):
-    if request.method != "OPTIONS" and request.url.path.startswith(_PROTECTED_PREFIXES):
-        try:
-            claims = decode_auth_header(request.headers.get("Authorization"))
-            request.state.auth_claims = claims
-        except AuthError as exc:
-            return JSONResponse(
-                status_code=401,
-                content={
-                    "ok": False,
-                    "data": None,
-                    "error": {
-                        "code": "UNAUTHORIZED",
-                        "message": str(exc),
-                        "details": {},
-                    },
-                },
-            )
-    return await call_next(request)
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=_load_allowed_origins(),
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 
 app.include_router(health_router)
