@@ -99,6 +99,42 @@ def preprocess_eligibility_text(eligibility_text: Optional[str]) -> Dict[str, Li
     }
 
 
+def _is_noop_sentence(sentence: str) -> bool:
+    """Return True for sentences that indicate an empty criteria section."""
+    normalized = _norm_text(sentence).strip()
+    return normalized in {"none", "none.", "n/a", "na", "not applicable"}
+
+
+def _extract_section_heading_marker(
+    eligibility_text: Optional[str], section: str
+) -> Optional[str]:
+    """Return the exact heading marker substring for the given section if present.
+
+    We prefer returning the in-text heading marker (e.g., 'Inclusion Criteria:')
+    because it is a stable substring for evidence_text.
+    """
+    if not isinstance(eligibility_text, str) or not eligibility_text.strip():
+        return None
+    normalized = eligibility_text.replace("\r\n", "\n").replace("\r", "\n")
+    for raw_line in normalized.splitlines():
+        line = raw_line.strip()
+        if not line:
+            continue
+        heading, _tail = _extract_heading(line)
+        if heading != section:
+            continue
+
+        marker_match = re.match(
+            r"^(inclusion(?: criteria)?|exclusion(?: criteria)?)(\s*[:\-])",
+            line,
+            flags=re.I,
+        )
+        if marker_match:
+            return line[: marker_match.end()].strip()
+        return line
+    return None
+
+
 def parse_criteria_v1(eligibility_text: Optional[str]) -> List[Dict[str, Any]]:
     """Parse eligibility text into structured criteria rules with UNKNOWN fallback."""
     if _curated_override_enabled():
@@ -113,20 +149,28 @@ def parse_criteria_v1(eligibility_text: Optional[str]) -> List[Dict[str, Any]]:
     spans = _build_sentence_spans(eligibility_text or "", all_sentences)
 
     rules: List[Dict[str, Any]] = []
-    inclusion_rule_count = 0
+    unparsed_inclusion_sentences: List[str] = []
+    unparsed_exclusion_sentences: List[str] = []
     for sentence in inclusion_sentences:
         parsed = _parse_sentence(sentence, "INCLUSION", spans.get(sentence))
-        inclusion_rule_count += len(parsed)
-        rules.extend(parsed)
+        if parsed:
+            rules.extend(parsed)
+            continue
+        if not _is_noop_sentence(sentence):
+            unparsed_inclusion_sentences.append(sentence)
     for sentence in exclusion_sentences:
-        rules.extend(_parse_sentence(sentence, "EXCLUSION", spans.get(sentence)))
+        parsed = _parse_sentence(sentence, "EXCLUSION", spans.get(sentence))
+        if parsed:
+            rules.extend(parsed)
+            continue
+        if not _is_noop_sentence(sentence):
+            unparsed_exclusion_sentences.append(sentence)
 
-    if (
-        inclusion_rule_count == 0
-        and inclusion_sentences
-        and isinstance(eligibility_text, str)
-        and _INCLUSION_HEADING_MARKER.search(eligibility_text)
-    ):
+    if unparsed_inclusion_sentences:
+        evidence = (
+            _extract_section_heading_marker(eligibility_text, "inclusion")
+            or unparsed_inclusion_sentences[0]
+        )
         rules.append(
             _build_rule(
                 rule_type="INCLUSION",
@@ -136,8 +180,48 @@ def parse_criteria_v1(eligibility_text: Optional[str]) -> List[Dict[str, Any]]:
                 value="unparsed inclusion criteria",
                 unit=None,
                 certainty="low",
-                evidence_text="Inclusion Criteria:",
-                source_span=None,
+                evidence_text=evidence,
+                source_span=spans.get(evidence),
+            )
+        )
+
+    if unparsed_exclusion_sentences:
+        evidence = (
+            _extract_section_heading_marker(eligibility_text, "exclusion")
+            or unparsed_exclusion_sentences[0]
+        )
+        rules.append(
+            _build_rule(
+                rule_type="EXCLUSION",
+                field="other",
+                operator="EXISTS",
+                value="unparsed exclusion criteria",
+                unit=None,
+                certainty="low",
+                evidence_text=evidence,
+                source_span=spans.get(evidence),
+            )
+        )
+
+    if not rules:
+        non_noop = [sentence for sentence in all_sentences if not _is_noop_sentence(sentence)]
+    else:
+        non_noop = []
+
+    if not rules and non_noop:
+        # Last resort fallback: keep the contract of emitting at least one UNKNOWN
+        # rule when parsing yields no structured output.
+        evidence = non_noop[0]
+        rules.append(
+            _build_rule(
+                rule_type="INCLUSION",
+                field="other",
+                operator="EXISTS",
+                value="unparsed criteria",
+                unit=None,
+                certainty="low",
+                evidence_text=evidence,
+                source_span=spans.get(evidence),
             )
         )
     return rules
