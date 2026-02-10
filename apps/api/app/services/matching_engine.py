@@ -400,6 +400,13 @@ def _evaluate_trial_legacy(
 
     fetched_at = _parse_fetched_at(trial.get("fetched_at"))
 
+    match_summary = _summarize_match(inclusion, exclusion, missing_info)
+    # Legacy matching only evaluates condition overlap + structured age/sex fields.
+    # Even when those pass, we still lack most eligibility criteria coverage, so
+    # we surface it as "POTENTIAL" rather than a definitive "ELIGIBLE".
+    if match_summary.get("tier") == "ELIGIBLE":
+        match_summary["tier"] = "POTENTIAL"
+
     return {
         "nct_id": trial.get("nct_id"),
         "title": trial.get("title"),
@@ -407,7 +414,7 @@ def _evaluate_trial_legacy(
         "phase": trial.get("phase"),
         "score": round(score, 4),
         "certainty": round(certainty, 4),
-        "match_summary": _summarize_match(inclusion, exclusion, missing_info),
+        "match_summary": match_summary,
         "checklist": {
             "inclusion": inclusion,
             "exclusion": exclusion,
