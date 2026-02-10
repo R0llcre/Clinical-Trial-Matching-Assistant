@@ -48,6 +48,34 @@ def test_match_summary_eligible_with_parsed_rules() -> None:
     assert summary["pass"] == 3
 
 
+def test_match_summary_potential_on_legacy_success_path() -> None:
+    patient = {
+        "demographics": {"age": 45, "sex": "female"},
+        "conditions": ["diabetes"],
+    }
+    trial = {
+        "nct_id": "NCT123",
+        "title": "Legacy Trial",
+        "conditions": ["type 2 diabetes mellitus"],
+        "raw_json": {
+            "protocolSection": {
+                "eligibilityModule": {
+                    "minimumAge": "18 Years",
+                    "maximumAge": "65 Years",
+                    "sex": "FEMALE",
+                }
+            }
+        },
+    }
+
+    result = evaluate_trial(patient, trial)
+    summary = result["match_summary"]
+    assert summary["tier"] == "POTENTIAL"
+    assert summary["fail"] == 0
+    assert summary["unknown"] == 0
+    assert summary["missing"] == 0
+
+
 def test_match_summary_potential_when_missing_patient_field() -> None:
     patient = {
         "demographics": {"age": 50, "sex": "female"},
@@ -102,4 +130,3 @@ def test_match_summary_ineligible_when_any_fail() -> None:
     summary = result["match_summary"]
     assert summary["tier"] == "INELIGIBLE"
     assert summary["fail"] == 1
-
