@@ -1,7 +1,7 @@
 from app.services.matching_engine import evaluate_trial
 
 
-def test_match_summary_eligible_with_parsed_rules() -> None:
+def test_match_summary_potential_with_small_parsed_rule_set() -> None:
     patient = {
         "demographics": {"age": 50, "sex": "female"},
         "conditions": ["diabetes"],
@@ -41,11 +41,99 @@ def test_match_summary_eligible_with_parsed_rules() -> None:
 
     result = evaluate_trial(patient, trial)
     summary = result["match_summary"]
-    assert summary["tier"] == "ELIGIBLE"
+    assert summary["tier"] == "POTENTIAL"
     assert summary["fail"] == 0
     assert summary["unknown"] == 0
     assert summary["missing"] == 0
     assert summary["pass"] == 3
+
+
+def test_match_summary_eligible_with_sufficient_parsed_rules() -> None:
+    patient = {
+        "demographics": {"age": 50, "sex": "female"},
+        "conditions": ["diabetes"],
+    }
+    trial = {
+        "nct_id": "NCT123",
+        "title": "Test Trial",
+        "conditions": ["diabetes"],
+        "criteria_json": [
+            {
+                "id": "age-1",
+                "type": "INCLUSION",
+                "field": "age",
+                "operator": ">=",
+                "value": 18,
+                "unit": "years",
+                "evidence_text": "Age >= 18 years",
+            },
+            {
+                "id": "age-2",
+                "type": "INCLUSION",
+                "field": "age",
+                "operator": "<=",
+                "value": 80,
+                "unit": "years",
+                "evidence_text": "Age <= 80 years",
+            },
+            {
+                "id": "sex-1",
+                "type": "INCLUSION",
+                "field": "sex",
+                "operator": "=",
+                "value": "female",
+                "evidence_text": "Female participants",
+            },
+            {
+                "id": "sex-2",
+                "type": "INCLUSION",
+                "field": "sex",
+                "operator": "=",
+                "value": "female",
+                "evidence_text": "Female participants (confirm)",
+            },
+            {
+                "id": "cond-1",
+                "type": "INCLUSION",
+                "field": "condition",
+                "operator": "IN",
+                "value": "diabetes",
+                "evidence_text": "Diagnosis of diabetes",
+            },
+            {
+                "id": "cond-2",
+                "type": "INCLUSION",
+                "field": "condition",
+                "operator": "IN",
+                "value": "diabetes",
+                "evidence_text": "Diabetes is required",
+            },
+            {
+                "id": "excl-1",
+                "type": "EXCLUSION",
+                "field": "condition",
+                "operator": "NOT_IN",
+                "value": "active infection",
+                "evidence_text": "No active infection",
+            },
+            {
+                "id": "excl-2",
+                "type": "EXCLUSION",
+                "field": "condition",
+                "operator": "NOT_IN",
+                "value": "pregnancy",
+                "evidence_text": "Not pregnant",
+            },
+        ],
+    }
+
+    result = evaluate_trial(patient, trial)
+    summary = result["match_summary"]
+    assert summary["tier"] == "ELIGIBLE"
+    assert summary["fail"] == 0
+    assert summary["unknown"] == 0
+    assert summary["missing"] == 0
+    assert summary["pass"] == 8
 
 
 def test_match_summary_potential_on_legacy_success_path() -> None:

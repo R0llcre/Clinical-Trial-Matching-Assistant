@@ -10,6 +10,7 @@ from sqlalchemy.engine import Engine
 PASS_SCORE = 1.0
 UNKNOWN_SCORE = 0.3
 FAIL_SCORE = -2.0
+_MIN_RULES_FOR_STRONG_TIER = 8
 
 _AGE_PATTERN = re.compile(
     r"^\s*(\d+)\s*(year|years|month|months|week|weeks|day|days)\s*$",
@@ -192,6 +193,14 @@ def _evaluate_trial_with_parsed_rules(
         score -= 100.0
 
     fetched_at = _parse_fetched_at(trial.get("fetched_at"))
+    match_summary = _summarize_match(inclusion, exclusion, missing_info)
+    # Even if everything "passes", a tiny evaluated rule set is not enough
+    # evidence to claim a definitive strong match.
+    if (
+        match_summary.get("tier") == "ELIGIBLE"
+        and len(all_rules) < _MIN_RULES_FOR_STRONG_TIER
+    ):
+        match_summary["tier"] = "POTENTIAL"
     return {
         "nct_id": trial.get("nct_id"),
         "title": trial.get("title"),
@@ -199,7 +208,7 @@ def _evaluate_trial_with_parsed_rules(
         "phase": trial.get("phase"),
         "score": round(score, 4),
         "certainty": round(certainty, 4),
-        "match_summary": _summarize_match(inclusion, exclusion, missing_info),
+        "match_summary": match_summary,
         "checklist": {
             "inclusion": inclusion,
             "exclusion": exclusion,
