@@ -130,9 +130,10 @@ def parse_criteria_v1(eligibility_text: Optional[str]) -> List[Dict[str, Any]]:
         rules.append(
             _build_rule(
                 rule_type="INCLUSION",
-                field="condition",
-                operator="IN",
-                value="study specific condition",
+                # UNKNOWN placeholder so matching does not incorrectly fail.
+                field="other",
+                operator="EXISTS",
+                value="unparsed inclusion criteria",
                 unit=None,
                 certainty="low",
                 evidence_text="Inclusion Criteria:",

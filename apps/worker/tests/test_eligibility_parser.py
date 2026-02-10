@@ -112,9 +112,9 @@ def test_parse_criteria_v1_emits_placeholder_when_inclusion_sentence_unparsed() 
 
     assert len(rules) == 1
     assert rules[0]["type"] == "INCLUSION"
-    assert rules[0]["field"] == "condition"
-    assert rules[0]["operator"] == "IN"
-    assert rules[0]["value"] == "study specific condition"
+    assert rules[0]["field"] == "other"
+    assert rules[0]["operator"] == "EXISTS"
+    assert rules[0]["value"] == "unparsed inclusion criteria"
 
 
 def test_parse_criteria_v1_deduplicates_overlapping_infection_keywords() -> None:
@@ -273,7 +273,7 @@ def test_parse_criteria_v1_does_not_emit_sex_all_for_mixed_sex_sentence() -> Non
     assert sex_rules == []
 
 
-def test_parse_criteria_v1_adds_study_specific_condition_when_heading_only() -> None:
+def test_parse_criteria_v1_adds_unknown_placeholder_when_heading_only() -> None:
     text = """
     Inclusion Criteria:
     - Able to provide informed consent.
@@ -286,10 +286,10 @@ def test_parse_criteria_v1_adds_study_specific_condition_when_heading_only() -> 
         rule
         for rule in rules
         if rule["type"] == "INCLUSION"
-        and rule["field"] == "condition"
-        and rule["value"] == "study specific condition"
+        and rule["field"] == "other"
+        and rule["operator"] == "EXISTS"
+        and rule["certainty"] == "low"
     )
-    assert placeholder["operator"] == "IN"
     assert placeholder["evidence_text"] == "Inclusion Criteria:"
 
 
