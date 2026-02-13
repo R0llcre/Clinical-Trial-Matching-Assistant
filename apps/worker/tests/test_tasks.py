@@ -73,6 +73,161 @@ def test_sync_trials_requires_database_url(monkeypatch: pytest.MonkeyPatch) -> N
         sync_trials(condition="cancer")
 
 
+def test_sync_trials_progressive_backfill_uses_existing_cursor(monkeypatch) -> None:
+    monkeypatch.setenv("DATABASE_URL", "postgresql://test:test@localhost:5432/testdb")
+    monkeypatch.setenv("SYNC_PROGRESSIVE_BACKFILL", "1")
+    monkeypatch.setenv("SYNC_REFRESH_PAGES", "1")
+    monkeypatch.setenv("SYNC_TARGET_TRIAL_TOTAL", "0")
+
+    fake_conn = _FakeConn()
+    monkeypatch.setattr(tasks.psycopg, "connect", lambda _: fake_conn)
+    monkeypatch.setattr(tasks, "_ensure_tables", lambda conn: None)
+    monkeypatch.setattr(tasks, "_write_sync_log", lambda *args, **kwargs: None)
+    monkeypatch.setattr(
+        tasks,
+        "_extract_trial",
+        lambda study: {
+            "nct_id": "NCT1",
+            "title": "T",
+            "status": None,
+            "phase": None,
+            "conditions": [],
+            "eligibility_text": None,
+            "locations_json": [],
+            "raw_json": {},
+            "data_timestamp": dt.datetime.utcnow(),
+        },
+    )
+    monkeypatch.setattr(tasks, "_upsert_trial", lambda conn, trial: False)
+    monkeypatch.setattr(tasks, "_trial_total", lambda conn: 0)
+
+    calls = []
+    pages = {
+        None: {"studies": [{"x": 1}], "nextPageToken": "token-p2"},
+        "token-p9": {"studies": [{"x": 2}], "nextPageToken": "token-p10"},
+        "token-p10": {"studies": [{"x": 3}], "nextPageToken": "token-p11"},
+    }
+
+    class _FakeClient:
+        def search_studies(
+            self, *, condition, status=None, page_token=None, page_size=100
+        ):
+            calls.append(page_token)
+            return pages[page_token]
+
+    monkeypatch.setattr(tasks, "CTGovClient", lambda: _FakeClient())
+    monkeypatch.setattr(
+        tasks, "_read_sync_cursor", lambda conn, *, condition, trial_status: "token-p9"
+    )
+    written = {}
+
+    def _fake_write_cursor(conn, *, condition, trial_status, next_page_token) -> None:
+        written["condition"] = condition
+        written["trial_status"] = trial_status
+        written["next_page_token"] = next_page_token
+
+    monkeypatch.setattr(tasks, "_write_sync_cursor", _fake_write_cursor)
+
+    sync_trials(condition="cancer", page_limit=3, page_size=100)
+
+    assert calls == [None, "token-p9", "token-p10"]
+    assert written["condition"] == "cancer"
+    assert written["trial_status"] == ""
+    assert written["next_page_token"] == "token-p11"
+
+
+def test_sync_trials_progressive_backfill_starts_from_refresh_token_when_no_cursor(
+    monkeypatch,
+) -> None:
+    monkeypatch.setenv("DATABASE_URL", "postgresql://test:test@localhost:5432/testdb")
+    monkeypatch.setenv("SYNC_PROGRESSIVE_BACKFILL", "1")
+    monkeypatch.setenv("SYNC_REFRESH_PAGES", "1")
+    monkeypatch.setenv("SYNC_TARGET_TRIAL_TOTAL", "0")
+
+    fake_conn = _FakeConn()
+    monkeypatch.setattr(tasks.psycopg, "connect", lambda _: fake_conn)
+    monkeypatch.setattr(tasks, "_ensure_tables", lambda conn: None)
+    monkeypatch.setattr(tasks, "_write_sync_log", lambda *args, **kwargs: None)
+    monkeypatch.setattr(tasks, "_extract_trial", lambda study: {"nct_id": "NCT1"})
+    monkeypatch.setattr(tasks, "_upsert_trial", lambda conn, trial: False)
+    monkeypatch.setattr(tasks, "_trial_total", lambda conn: 0)
+
+    calls = []
+    pages = {
+        None: {"studies": [{"x": 1}], "nextPageToken": "token-p2"},
+        "token-p2": {"studies": [{"x": 2}], "nextPageToken": "token-p3"},
+        "token-p3": {"studies": [{"x": 3}], "nextPageToken": "token-p4"},
+    }
+
+    class _FakeClient:
+        def search_studies(
+            self, *, condition, status=None, page_token=None, page_size=100
+        ):
+            calls.append(page_token)
+            return pages[page_token]
+
+    monkeypatch.setattr(tasks, "CTGovClient", lambda: _FakeClient())
+    monkeypatch.setattr(tasks, "_read_sync_cursor", lambda *args, **kwargs: None)
+    written = {}
+
+    def _fake_write_cursor(conn, *, condition, trial_status, next_page_token) -> None:
+        written["next_page_token"] = next_page_token
+
+    monkeypatch.setattr(tasks, "_write_sync_cursor", _fake_write_cursor)
+
+    sync_trials(condition="cancer", page_limit=3, page_size=100)
+
+    assert calls == [None, "token-p2", "token-p3"]
+    assert written["next_page_token"] == "token-p4"
+
+
+def test_sync_trials_progressive_backfill_disabled_when_target_cap_reached(
+    monkeypatch,
+) -> None:
+    monkeypatch.setenv("DATABASE_URL", "postgresql://test:test@localhost:5432/testdb")
+    monkeypatch.setenv("SYNC_PROGRESSIVE_BACKFILL", "1")
+    monkeypatch.setenv("SYNC_REFRESH_PAGES", "1")
+    monkeypatch.setenv("SYNC_TARGET_TRIAL_TOTAL", "50000")
+
+    fake_conn = _FakeConn()
+    monkeypatch.setattr(tasks.psycopg, "connect", lambda _: fake_conn)
+    monkeypatch.setattr(tasks, "_ensure_tables", lambda conn: None)
+    monkeypatch.setattr(tasks, "_write_sync_log", lambda *args, **kwargs: None)
+    monkeypatch.setattr(tasks, "_extract_trial", lambda study: {"nct_id": "NCT1"})
+    monkeypatch.setattr(tasks, "_upsert_trial", lambda conn, trial: False)
+    monkeypatch.setattr(tasks, "_trial_total", lambda conn: 50000)
+    monkeypatch.setattr(
+        tasks,
+        "_read_sync_cursor",
+        lambda *args, **kwargs: (_ for _ in ()).throw(
+            AssertionError("_read_sync_cursor should not be called when cap reached")
+        ),
+    )
+    monkeypatch.setattr(
+        tasks,
+        "_write_sync_cursor",
+        lambda *args, **kwargs: (_ for _ in ()).throw(
+            AssertionError("_write_sync_cursor should not be called when cap reached")
+        ),
+    )
+
+    calls = []
+    pages = {None: {"studies": [{"x": 1}], "nextPageToken": "token-p2"}}
+
+    class _FakeClient:
+        def search_studies(
+            self, *, condition, status=None, page_token=None, page_size=100
+        ):
+            calls.append(page_token)
+            return pages[page_token]
+
+    monkeypatch.setattr(tasks, "CTGovClient", lambda: _FakeClient())
+
+    sync_trials(condition="cancer", page_limit=3, page_size=100)
+
+    assert calls == [None]
+
+
 def test_parse_trial_success(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("DATABASE_URL", "postgresql://test:test@localhost:5432/testdb")
 

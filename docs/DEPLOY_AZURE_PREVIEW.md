@@ -45,7 +45,11 @@ export AZ_REDIS_NAME=redis-ctmatch-preview
 export IMAGE_TAG=$(date +%Y%m%d%H%M%S)
 export SYNC_CONDITION=cancer
 export SYNC_PAGE_LIMIT=1
+export SYNC_PAGE_SIZE=200
 export SYNC_INTERVAL_SECONDS=3600
+export SYNC_PROGRESSIVE_BACKFILL=0
+export SYNC_REFRESH_PAGES=1
+export SYNC_TARGET_TRIAL_TOTAL=0
 export SYNC_PARSER_VERSION=llm_v1
 export LLM_PARSER_ENABLED=1
 export OPENAI_MODEL=gpt-4o-mini
@@ -58,6 +62,14 @@ export LLM_DAILY_TOKEN_BUDGET=200000
 - 首次部署后，worker 会按 `SYNC_*` 参数周期拉取试验数据。
 - 启用 LLM 解析时，建议把 `OPENAI_API_KEY` 配成 Container Apps secret，并通过 `secretref:` 注入 worker。
 - 当 LLM 不可用或预算命中时，worker 会自动回退到 `rule_v1`，同步不中断。
+
+数据扩容（可选）
+- 默认同步逻辑会从第一页开始抓取 `SYNC_PAGE_LIMIT` 页，长期可能反复更新同一批 studies，新增插入逐步变少。
+- 如需把 trials 数据量扩容到更大的覆盖面，可启用渐进式回填：
+  - `SYNC_PROGRESSIVE_BACKFILL=1`
+  - `SYNC_REFRESH_PAGES=1`（每轮先刷新首页，保证新试验及时入库）
+  - `SYNC_TARGET_TRIAL_TOTAL=50000`（示例：上限 50k，避免 DB 无上限增长）
+- 达到上限后，worker 会自动只跑 refresh，不再继续 backfill。
 
 上线后验收
 ```bash
