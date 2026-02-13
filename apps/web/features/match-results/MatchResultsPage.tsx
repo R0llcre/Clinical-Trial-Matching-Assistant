@@ -9,6 +9,7 @@ import {
   ListChecks,
   MapPin,
   RefreshCcw,
+  RotateCcw,
   ShieldAlert,
   SlidersHorizontal,
 } from "lucide-react";
@@ -21,7 +22,7 @@ import { Pill } from "../../components/ui/Pill";
 import { Skeleton } from "../../components/ui/Skeleton";
 import { Toast } from "../../components/ui/Toast";
 import { shortId } from "../../lib/format/ids";
-import { API_BASE } from "../../lib/http/client";
+import { API_BASE, fetchOk } from "../../lib/http/client";
 import { narrateRule } from "../../lib/rules/ruleNarrator";
 import {
   friendlyMissingField,
@@ -31,6 +32,7 @@ import {
   clearSessionToken,
   ensureSession as ensureSessionToken,
   getSessionToken,
+  withSessionRetry,
 } from "../../lib/session/session";
 import styles from "./MatchResultsPage.module.css";
 
@@ -103,6 +105,8 @@ type MatchResponse = {
 type PatientData = {
   id: string;
   source?: string;
+  created_at?: string | null;
+  updated_at?: string | null;
   profile_json?: {
     demographics?: {
       age?: number;
@@ -287,6 +291,10 @@ type MatchSummary = {
 type ActiveFilter = {
   key: string;
   value: string;
+};
+
+type CreateMatchData = {
+  match_id: string;
 };
 
 const _MAX_PDF_ROWS = 12;
@@ -575,6 +583,8 @@ export default function MatchResultsPage() {
   const [tierFilter, setTierFilter] = useState<TierFilter>("ALL");
   const [exportingPdf, setExportingPdf] = useState(false);
   const [exportPdfError, setExportPdfError] = useState<string | null>(null);
+  const [rerunning, setRerunning] = useState(false);
+  const [rerunError, setRerunError] = useState<string | null>(null);
 
   const showDebug = useMemo(() => {
     const envEnabled = process.env.NEXT_PUBLIC_SHOW_AUTH_DEBUG === "1";
@@ -1100,6 +1110,65 @@ export default function MatchResultsPage() {
     return [{ tier: tierFilter as MatchTier, items: visibleResults }];
   }, [data, groupedResults, tierFilter, visibleResults]);
 
+  const isStale = useMemo(() => {
+    const updated = patient?.updated_at;
+    const created = data?.created_at;
+    if (!updated || !created) {
+      return false;
+    }
+
+    const updatedDate = new Date(updated);
+    const createdDate = new Date(created);
+    if (Number.isNaN(updatedDate.getTime()) || Number.isNaN(createdDate.getTime())) {
+      return false;
+    }
+    return updatedDate.getTime() > createdDate.getTime();
+  }, [data?.created_at, patient?.updated_at]);
+
+  const handleRerunMatch = async () => {
+    if (!data || rerunning) {
+      return;
+    }
+
+    setRerunError(null);
+    setRerunning(true);
+
+    const patientProfileId = data.patient_profile_id;
+    const topK =
+      typeof data.query_json?.top_k === "number" && Number.isFinite(data.query_json.top_k)
+        ? data.query_json.top_k
+        : 10;
+    const filtersObject = data.query_json?.filters ?? {};
+
+    try {
+      const result = await withSessionRetry(
+        (token) =>
+          fetchOk<CreateMatchData>("/api/match", {
+            method: "POST",
+            headers: { Authorization: `Bearer ${token}` },
+            body: {
+              patient_profile_id: patientProfileId,
+              top_k: topK,
+              filters: filtersObject,
+            },
+          }),
+        {
+          envToken: process.env.NEXT_PUBLIC_DEV_JWT ?? "",
+          allowPreviewIssue: true,
+        }
+      );
+      await router.push(`/matches/${result.match_id}`);
+    } catch (err) {
+      if (err instanceof Error) {
+        setRerunError(err.message);
+      } else {
+        setRerunError("Unable to rerun match");
+      }
+    } finally {
+      setRerunning(false);
+    }
+  };
+
   const handleExportPdf = async () => {
     if (!data) {
       return;
@@ -1190,6 +1259,10 @@ export default function MatchResultsPage() {
         />
       ) : null}
 
+      {rerunError ? (
+        <Toast tone="danger" title="Unable to rerun match" description={rerunError} />
+      ) : null}
+
       {!loading && data ? (
         <>
           <Card tone="subtle" className="results-hero">
@@ -1216,6 +1289,12 @@ export default function MatchResultsPage() {
                 {showDebug ? (
                   <div className={styles.patientDebug}>
                     patient_profile_id={data.patient_profile_id} match_id={data.id}
+                  </div>
+                ) : null}
+                {isStale ? (
+                  <div className={styles.staleHint}>
+                    Patient profile updated since this match. Use “Rerun match” to include the
+                    latest data.
                   </div>
                 ) : null}
                 {data.created_at ? (
@@ -1319,6 +1398,17 @@ export default function MatchResultsPage() {
                     <RefreshCcw size={18} />
                   </span>
                   Refresh
+                </button>
+                <button
+                  type="button"
+                  className="ui-button ui-button--secondary ui-button--sm"
+                  onClick={() => void handleRerunMatch()}
+                  disabled={rerunning}
+                >
+                  <span className="ui-button__icon" aria-hidden="true">
+                    <RotateCcw size={18} />
+                  </span>
+                  {rerunning ? "Rerunning..." : "Rerun match"}
                 </button>
                 <button
                   type="button"

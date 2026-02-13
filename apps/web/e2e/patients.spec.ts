@@ -1,7 +1,7 @@
 import { expect, test } from "@playwright/test";
 
 test.describe("Patients hub flow", () => {
-  test("lists patients, creates a patient, and runs a match from patient detail", async ({
+  test("lists patients, creates a patient, edits it, and reruns a match from history", async ({
     page,
   }) => {
     await page.goto("/patients");
@@ -36,7 +36,16 @@ test.describe("Patients hub flow", () => {
     await expect(page).toHaveURL(/\/patients\/patient-demo-001$/);
     await expect(page.getByText("Age 46")).toBeVisible();
 
-    await page.getByRole("button", { name: "Run match" }).click();
+    const [request] = await Promise.all([
+      page.waitForRequest(
+        (req) => req.url().endsWith("/api/match") && req.method() === "POST"
+      ),
+      page.getByRole("button", { name: "Rerun" }).click(),
+    ]);
+
+    const payload = request.postDataJSON();
+    expect(payload.patient_profile_id).toBe("patient-demo-001");
+
     await expect(page).toHaveURL(/\/matches\/match-demo-001$/);
     await expect(page.getByRole("button", { name: /^Strong match/ })).toBeVisible();
   });
