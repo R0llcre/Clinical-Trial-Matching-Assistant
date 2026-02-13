@@ -25,6 +25,7 @@ export default function App({ Component, pageProps }: AppProps) {
   const docsHref = `${apiBase.replace(/\/+$/, "")}/docs`;
 
   const isBrowse = router.pathname === "/";
+  const isPatients = router.pathname.startsWith("/patients");
   const isMatch =
     router.pathname === "/match" || router.pathname.startsWith("/matches");
   const isAbout = router.pathname === "/about";
@@ -45,6 +46,12 @@ export default function App({ Component, pageProps }: AppProps) {
           <nav className="topnav">
             <Link href="/" className={`topnav-link ${isBrowse ? "active" : ""}`}>
               Browse
+            </Link>
+            <Link
+              href="/patients"
+              className={`topnav-link ${isPatients ? "active" : ""}`}
+            >
+              Patients
             </Link>
             <Link
               href="/match"
@@ -81,6 +88,7 @@ export default function App({ Component, pageProps }: AppProps) {
             </p>
           </div>
           <div className="footer-links">
+            <Link href="/patients">Patients</Link>
             <Link href="/about">About</Link>
             <a href={docsHref} target="_blank" rel="noreferrer">
               API docs

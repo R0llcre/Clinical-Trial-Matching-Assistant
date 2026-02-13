@@ -1,0 +1,14 @@
+{
+  "id": "patient-demo-001",
+  "source": "manual",
+  "profile_json": {
+    "demographics": { "age": 45, "sex": "female" },
+    "conditions": ["Breast Cancer"],
+    "history": ["hypertension"],
+    "medications": ["tamoxifen"],
+    "procedures": ["biopsy"]
+  },
+  "created_at": "2026-02-13T00:00:00Z",
+  "updated_at": "2026-02-13T00:00:00Z"
+}
+

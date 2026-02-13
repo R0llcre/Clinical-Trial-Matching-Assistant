@@ -18,9 +18,16 @@ const previewTokenFixture = loadFixture("preview_token.json");
 const createPatientFixture = loadFixture("create_patient.json");
 const createMatchFixture = loadFixture("create_match.json");
 const matchResultFixture = loadFixture("match_result_match-demo-001.json");
+const patientsListFixture = loadFixture("patients_list.json");
+const patientDetailFixture = loadFixture("patient_detail.json");
+const matchesListFixture = loadFixture("matches_list.json");
 
 const trialDetailsById = {
   [trialDetailFixture.nct_id]: trialDetailFixture,
+};
+
+const patientsById = {
+  [patientDetailFixture.id]: patientDetailFixture,
 };
 
 const status = {
@@ -193,6 +200,22 @@ const server = createServer(async (req, res) => {
     return;
   }
 
+  if (req.method === "GET" && path === "/api/patients") {
+    sendJson(res, 200, status.ok(patientsListFixture));
+    return;
+  }
+
+  if (req.method === "GET" && path.startsWith("/api/patients/")) {
+    const id = decodeURIComponent(path.slice("/api/patients/".length));
+    const patient = patientsById[id];
+    if (!patient) {
+      sendJson(res, 404, status.error("NOT_FOUND", "Patient not found"));
+      return;
+    }
+    sendJson(res, 200, status.ok(patient));
+    return;
+  }
+
   if (req.method === "POST" && path === "/api/match") {
     const body = await readJsonBody(req);
     if (!body || typeof body !== "object") {
@@ -200,6 +223,25 @@ const server = createServer(async (req, res) => {
       return;
     }
     sendJson(res, 200, status.ok(createMatchFixture));
+    return;
+  }
+
+  if (req.method === "GET" && path === "/api/matches") {
+    const requestedPatientId = url.searchParams.get("patient_profile_id") || "";
+    if (requestedPatientId && requestedPatientId !== matchesListFixture.matches?.[0]?.patient_profile_id) {
+      sendJson(
+        res,
+        200,
+        status.ok({
+          matches: [],
+          total: 0,
+          page: 1,
+          page_size: 20,
+        })
+      );
+      return;
+    }
+    sendJson(res, 200, status.ok(matchesListFixture));
     return;
   }
 
