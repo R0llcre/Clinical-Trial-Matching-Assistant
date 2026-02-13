@@ -23,6 +23,7 @@ import { Pill } from "../../components/ui/Pill";
 import type { TabItem } from "../../components/ui/Tabs";
 import { Tabs } from "../../components/ui/Tabs";
 import { Toast } from "../../components/ui/Toast";
+import { narrateRule } from "../../lib/rules/ruleNarrator";
 import styles from "./TrialDetailPage.module.css";
 
 type TrialDetail = {
@@ -144,19 +145,16 @@ const formatFetchedDate = (value?: string | null) => {
   return value.length >= 10 ? value.slice(0, 10) : value;
 };
 
-const formatRuleExpression = (rule: ParsedRule) => {
-  const pieces = [rule.field, rule.operator].filter(Boolean);
-  const value =
-    rule.value === null || rule.value === undefined ? "" : String(rule.value);
-  if (value) {
-    pieces.push(value);
-  }
-  if (rule.unit) {
-    pieces.push(rule.unit);
-  }
-  const base = pieces.join(" ").replace(/\s+/g, " ").trim();
-  return base || "Rule";
-};
+const formatRuleExpression = (rule: ParsedRule) =>
+  narrateRule({
+    type: rule.type,
+    field: rule.field,
+    operator: rule.operator,
+    value: rule.value,
+    unit: rule.unit,
+    time_window: null,
+    certainty: rule.certainty ?? null,
+  });
 
 type TrialDetailPageProps = {
   trial: TrialDetail | null;
@@ -480,6 +478,15 @@ export default function TrialDetailPage(props: TrialDetailPageProps) {
                                   <div className="trial-rule-body__text">
                                     {rule.evidence_text}
                                   </div>
+                                  <div className="trial-rule-body__label">Rule details</div>
+                                  <div className="trial-rule-body__text">
+                                    field: {rule.field} · operator: {rule.operator}
+                                    {rule.value !== null && rule.value !== undefined
+                                      ? ` · value: ${rule.value}`
+                                      : ""}
+                                    {rule.unit ? ` ${rule.unit}` : ""}
+                                    {rule.certainty ? ` · certainty: ${rule.certainty}` : ""}
+                                  </div>
                                 </div>
                               </Accordion>
                             ))
@@ -525,6 +532,15 @@ export default function TrialDetailPage(props: TrialDetailPageProps) {
                                   <div className="trial-rule-body__label">Evidence</div>
                                   <div className="trial-rule-body__text">
                                     {rule.evidence_text}
+                                  </div>
+                                  <div className="trial-rule-body__label">Rule details</div>
+                                  <div className="trial-rule-body__text">
+                                    field: {rule.field} · operator: {rule.operator}
+                                    {rule.value !== null && rule.value !== undefined
+                                      ? ` · value: ${rule.value}`
+                                      : ""}
+                                    {rule.unit ? ` ${rule.unit}` : ""}
+                                    {rule.certainty ? ` · certainty: ${rule.certainty}` : ""}
                                   </div>
                                 </div>
                               </Accordion>

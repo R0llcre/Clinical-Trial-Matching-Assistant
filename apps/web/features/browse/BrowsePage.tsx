@@ -473,6 +473,17 @@ export default function Home(props: HomeProps) {
       city.trim()
   );
 
+  const activeFilters = useMemo(() => {
+    return [
+      condition.trim() ? { key: "Condition", value: condition.trim() } : null,
+      status ? { key: "Status", value: statusLabel(status) ?? status } : null,
+      phase ? { key: "Phase", value: phaseLabel(phase) ?? phase } : null,
+      country.trim() ? { key: "Country", value: country.trim() } : null,
+      regionState.trim() ? { key: "State", value: regionState.trim() } : null,
+      city.trim() ? { key: "City", value: city.trim() } : null,
+    ].filter(Boolean) as Array<{ key: string; value: string }>;
+  }, [condition, status, phase, country, regionState, city]);
+
   const visibleStart = total > 0 ? (page - 1) * pageSize + 1 : 0;
   const visibleEnd = total > 0 ? Math.min(total, page * pageSize) : 0;
 
@@ -922,6 +933,27 @@ export default function Home(props: HomeProps) {
               </button>
             </div>
           </div>
+
+          {activeFilters.length > 0 ? (
+            <div className="browse-results__activeFilters">
+              <div className="browse-results__activeFiltersLabel">Active filters</div>
+              <div className="browse-results__activeFiltersPills">
+                {activeFilters.map((item) => (
+                  <Pill key={`${item.key}-${item.value}`} tone="brand">
+                    {item.key}: {item.value}
+                  </Pill>
+                ))}
+                <button
+                  type="button"
+                  className="ui-button ui-button--ghost ui-button--sm"
+                  onClick={clearFilters}
+                  disabled={loading}
+                >
+                  Clear all
+                </button>
+              </div>
+            </div>
+          ) : null}
 
           {error ? (
             <Toast
