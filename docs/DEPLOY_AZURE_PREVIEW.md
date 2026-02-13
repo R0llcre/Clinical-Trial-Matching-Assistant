@@ -44,12 +44,14 @@ export AZ_PG_PASSWORD='<strong-password>'
 export AZ_REDIS_NAME=redis-ctmatch-preview
 export IMAGE_TAG=$(date +%Y%m%d%H%M%S)
 export SYNC_CONDITION=cancer
+export SYNC_STATUS=
 export SYNC_PAGE_LIMIT=1
 export SYNC_PAGE_SIZE=200
 export SYNC_INTERVAL_SECONDS=3600
 export SYNC_PROGRESSIVE_BACKFILL=0
 export SYNC_REFRESH_PAGES=1
 export SYNC_TARGET_TRIAL_TOTAL=0
+export SYNC_PRUNE_TO_STATUS_FILTER=0
 export SYNC_PARSER_VERSION=rule_v1
 export LLM_PARSER_ENABLED=1
 export OPENAI_MODEL=gpt-4o-mini
@@ -88,6 +90,22 @@ Selective LLM 解析（推荐，省钱）
   - `SYNC_REFRESH_PAGES=1`（每轮先刷新首页，保证新试验及时入库）
   - `SYNC_TARGET_TRIAL_TOTAL=50000`（示例：上限 50k，避免 DB 无上限增长）
 - 达到上限后，worker 会自动只跑 refresh，不再继续 backfill。
+
+开放状态全量同步（Global Open，推荐用于“匹配命中更多”）
+- 若你希望预览库尽可能覆盖“开放状态”试验（而不是只覆盖几个 condition），可以将 worker 设置为全站同步：
+  - `SYNC_CONDITION=__all__`（特殊值：不按 condition 搜索，直接拉全站）
+  - `SYNC_STATUS=RECRUITING,NOT_YET_RECRUITING,ENROLLING_BY_INVITATION`（逗号分隔）
+  - `SYNC_TARGET_TRIAL_TOTAL=100000`（示例：open trials 总量约 96k，建议上限略高一点）
+- 注意：`SYNC_STATUS` 会原样传入 CT.gov 的 `filter.overallStatus`，支持逗号分隔多状态。
+
+清理非开放状态（Prune，谨慎启用）
+- 若你希望数据库只保留“开放状态”数据（提升相关性并释放容量），可开启：
+  - `SYNC_PRUNE_TO_STATUS_FILTER=1`
+- 行为：每轮同步前会删除所有 `status` 不在 `SYNC_STATUS` 集合内的 trials 及其 criteria。
+- 风险：这是数据删除操作；回滚 worker revision 不会恢复已删除数据。如需恢复只能做 PostgreSQL 的 point-in-time restore。
+- 验证（启用后 1 个 interval 内应生效）：
+  - `curl -fsS "https://<api-domain>/api/trials?status=COMPLETED&page=1&page_size=1" | jq .data.total` 应为 `0`
+  - `curl -fsS https://<api-domain>/api/system/dataset-meta | jq .data.trial_total` 可能先下降再回升（回填 open 数据）
 
 上线后验收
 ```bash

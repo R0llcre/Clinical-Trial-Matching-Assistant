@@ -31,6 +31,8 @@ class SyncStats:
     parse_success: int
     parse_failed: int
     parse_success_rate: float
+    pruned_trials: int = 0
+    pruned_criteria: int = 0
     parser_version: str = "rule_v1"
     parser_source_breakdown: Dict[str, int] = dataclass_field(default_factory=dict)
     fallback_reason_breakdown: Dict[str, int] = dataclass_field(default_factory=dict)
@@ -99,10 +101,9 @@ class CTGovClient:
         page_token: Optional[str] = None,
         page_size: int = 100,
     ) -> Dict[str, Any]:
-        params: Dict[str, str] = {
-            "query.term": _build_query_term(condition),
-            "pageSize": str(page_size),
-        }
+        params: Dict[str, str] = {"pageSize": str(page_size)}
+        if not _is_global_condition(condition):
+            params["query.term"] = _build_query_term(condition)
         if status:
             params["filter.overallStatus"] = status
         if page_token:
@@ -139,6 +140,11 @@ def _build_query_term(condition: str) -> str:
     if " " in term:
         term = f'"{term}"'
     return f"AREA[ConditionSearch]{term}"
+
+
+def _is_global_condition(condition: str) -> bool:
+    normalized = condition.strip().lower()
+    return normalized in {"__all__", "all", "*", ""}
 
 
 def _get_value(raw_json: Dict[str, Any], path: Sequence[str]) -> Any:
@@ -453,6 +459,37 @@ def _trial_total(conn: psycopg.Connection) -> int:
     if not row:
         return 0
     return int(row[0] or 0)
+
+
+def _prune_trials_to_status_filter(
+    conn: psycopg.Connection, *, allowed_statuses: list[str]
+) -> tuple[int, int]:
+    allowed_statuses = [status.strip() for status in allowed_statuses if status.strip()]
+    if not allowed_statuses:
+        return 0, 0
+
+    with conn.cursor() as cur:
+        cur.execute(
+            """
+            DELETE FROM trial_criteria AS tc
+            USING trials AS t
+            WHERE tc.trial_id = t.id
+              AND (t.status IS NULL OR NOT (t.status = ANY(%(allowed_statuses)s)))
+            """,
+            {"allowed_statuses": allowed_statuses},
+        )
+        deleted_criteria = int(cur.rowcount or 0)
+
+        cur.execute(
+            """
+            DELETE FROM trials AS t
+            WHERE (t.status IS NULL OR NOT (t.status = ANY(%(allowed_statuses)s)))
+            """,
+            {"allowed_statuses": allowed_statuses},
+        )
+        deleted_trials = int(cur.rowcount or 0)
+
+    return deleted_criteria, deleted_trials
 
 
 def _recent_llm_usage_nct_ids(
@@ -881,6 +918,7 @@ def sync_trials(
     progressive_backfill = _env_bool("SYNC_PROGRESSIVE_BACKFILL", False)
     refresh_pages = max(1, _env_int("SYNC_REFRESH_PAGES", 1))
     target_trial_total = max(0, _env_int("SYNC_TARGET_TRIAL_TOTAL", 0))
+    prune_to_status_filter = _env_bool("SYNC_PRUNE_TO_STATUS_FILTER", False)
 
     selective_llm_enabled = _env_bool("SYNC_LLM_SELECTIVE", False)
     selective_unknown_ratio_threshold = min(
@@ -906,6 +944,8 @@ def sync_trials(
     processed = 0
     inserted = 0
     updated = 0
+    pruned_trials = 0
+    pruned_criteria = 0
     inserted_nct_ids: List[str] = []
     backfill_nct_ids: List[str] = []
     parse_success = 0
@@ -930,6 +970,16 @@ def sync_trials(
         conn.commit()
 
         try:
+            if prune_to_status_filter and status and status.strip():
+                allowed_statuses = [
+                    entry.strip() for entry in status.split(",") if entry.strip()
+                ]
+                if allowed_statuses:
+                    pruned_criteria, pruned_trials = _prune_trials_to_status_filter(
+                        conn,
+                        allowed_statuses=allowed_statuses,
+                    )
+
             if progressive_backfill:
                 # Always refresh the first N pages so newly added/updated studies
                 # get into the DB quickly, then backfill older pages over time.
@@ -1213,6 +1263,8 @@ def sync_trials(
         processed=processed,
         inserted=inserted,
         updated=updated,
+        pruned_trials=pruned_trials,
+        pruned_criteria=pruned_criteria,
         parse_success=parse_success,
         parse_failed=parse_failed,
         parse_success_rate=parse_success_rate,
@@ -1227,7 +1279,8 @@ def sync_trials(
     LOGGER.info(
         (
             "sync_trials completed run_id=%s pages=%s processed=%s inserted=%s "
-            "updated=%s parse_success=%s parse_failed=%s parse_success_rate=%s "
+            "updated=%s pruned_trials=%s pruned_criteria=%s "
+            "parse_success=%s parse_failed=%s parse_success_rate=%s "
             "parser_version=%s parser_source_breakdown=%s "
             "fallback_reason_breakdown=%s llm_budget_exceeded_count=%s "
             "backfill_selected=%s selective_llm_triggered=%s selective_llm_skipped=%s"
@@ -1237,6 +1290,8 @@ def sync_trials(
         processed,
         inserted,
         updated,
+        pruned_trials,
+        pruned_criteria,
         parse_success,
         parse_failed,
         parse_success_rate,

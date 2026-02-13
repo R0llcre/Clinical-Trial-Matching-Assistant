@@ -66,6 +66,7 @@ def main() -> None:
             logger.info(
                 (
                     "sync run completed run_id=%s processed=%s inserted=%s updated=%s "
+                    "pruned_trials=%s pruned_criteria=%s "
                     "parse_success=%s parse_failed=%s parse_success_rate=%s "
                     "parser_version=%s parser_source_breakdown=%s "
                     "fallback_reason_breakdown=%s llm_budget_exceeded_count=%s "
@@ -75,6 +76,8 @@ def main() -> None:
                 stats.processed,
                 stats.inserted,
                 stats.updated,
+                stats.pruned_trials,
+                stats.pruned_criteria,
                 stats.parse_success,
                 stats.parse_failed,
                 stats.parse_success_rate,

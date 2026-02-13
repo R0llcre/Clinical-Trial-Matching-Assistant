@@ -37,6 +37,31 @@ def test_build_query_term_quotes_spaces() -> None:
     assert _build_query_term("diabetes") == "AREA[ConditionSearch]diabetes"
 
 
+def test_ctgov_client_global_condition_omits_query_term(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    captured: dict[str, dict[str, str]] = {}
+
+    def _fake_request_json(self, path: str, params: dict[str, str]):
+        captured["params"] = params
+        return {"studies": [], "nextPageToken": None}
+
+    monkeypatch.setattr(tasks.CTGovClient, "_request_json", _fake_request_json)
+    client = tasks.CTGovClient(base_url="https://example.invalid")
+
+    client.search_studies(
+        condition="__all__",
+        status="RECRUITING,NOT_YET_RECRUITING",
+        page_token=None,
+        page_size=123,
+    )
+
+    params = captured["params"]
+    assert "query.term" not in params
+    assert params["filter.overallStatus"] == "RECRUITING,NOT_YET_RECRUITING"
+    assert params["pageSize"] == "123"
+
+
 def test_extract_trial_maps_fields() -> None:
     study = {
         "protocolSection": {
@@ -226,6 +251,60 @@ def test_sync_trials_progressive_backfill_disabled_when_target_cap_reached(
     sync_trials(condition="cancer", page_limit=3, page_size=100)
 
     assert calls == [None]
+
+
+def test_sync_trials_prune_called_when_enabled(monkeypatch) -> None:
+    monkeypatch.setenv("DATABASE_URL", "postgresql://test:test@localhost:5432/testdb")
+    monkeypatch.setenv("SYNC_PROGRESSIVE_BACKFILL", "1")
+    monkeypatch.setenv("SYNC_REFRESH_PAGES", "1")
+    monkeypatch.setenv("SYNC_TARGET_TRIAL_TOTAL", "50000")
+    monkeypatch.setenv("SYNC_PRUNE_TO_STATUS_FILTER", "1")
+
+    fake_conn = _FakeConn()
+    monkeypatch.setattr(tasks.psycopg, "connect", lambda _: fake_conn)
+    monkeypatch.setattr(tasks, "_ensure_tables", lambda conn: None)
+    monkeypatch.setattr(tasks, "_write_sync_log", lambda *args, **kwargs: None)
+    monkeypatch.setattr(tasks, "_extract_trial", lambda study: {"nct_id": "NCT1"})
+    monkeypatch.setattr(tasks, "_upsert_trial", lambda conn, trial: False)
+
+    order: list[str] = []
+
+    def _fake_prune(conn, *, allowed_statuses):
+        order.append("prune")
+        assert allowed_statuses == [
+            "RECRUITING",
+            "NOT_YET_RECRUITING",
+            "ENROLLING_BY_INVITATION",
+        ]
+        return 0, 0
+
+    def _fake_trial_total(conn):
+        order.append("trial_total")
+        return 0
+
+    monkeypatch.setattr(tasks, "_prune_trials_to_status_filter", _fake_prune)
+    monkeypatch.setattr(tasks, "_trial_total", _fake_trial_total)
+    monkeypatch.setattr(tasks, "_read_sync_cursor", lambda *args, **kwargs: None)
+    monkeypatch.setattr(tasks, "_write_sync_cursor", lambda *args, **kwargs: None)
+
+    pages = {None: {"studies": [{"x": 1}], "nextPageToken": None}}
+
+    class _FakeClient:
+        def search_studies(
+            self, *, condition, status=None, page_token=None, page_size=100
+        ):
+            return pages[page_token]
+
+    monkeypatch.setattr(tasks, "CTGovClient", lambda: _FakeClient())
+
+    sync_trials(
+        condition="cancer",
+        status="RECRUITING,NOT_YET_RECRUITING,ENROLLING_BY_INVITATION",
+        page_limit=1,
+        page_size=100,
+    )
+
+    assert order == ["prune", "trial_total"]
 
 
 def test_parse_trial_success(monkeypatch: pytest.MonkeyPatch) -> None:
