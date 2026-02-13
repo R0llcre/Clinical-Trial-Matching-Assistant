@@ -7,14 +7,16 @@ Matching Logic
 
 **输入**
 - patient_profile
-- filters: condition, status, location, phase
+- filters: condition, status, phase, country, state, city
 - trial_criteria
 
 **匹配步骤**
 1. 候选召回
 根据 condition 与关键词检索 trials
-按 status, phase, location 过滤
-召回上限固定, 例如 500
+按 status, phase, country/state/city 过滤
+召回上限自适应:
+- 无筛选: 500
+- 有筛选: 按 top_k 放大, 最大 5000
 
 2. 规则判定
 对每条规则生成 verdict

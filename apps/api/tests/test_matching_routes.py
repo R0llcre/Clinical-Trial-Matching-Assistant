@@ -76,7 +76,12 @@ def test_create_match_ok(monkeypatch) -> None:
         json={
             "patient_profile_id": "patient-1",
             "top_k": 5,
-            "filters": {"status": "RECRUITING"},
+            "filters": {
+                "status": "RECRUITING",
+                "country": "United States",
+                "state": "New York",
+                "city": "New York",
+            },
         },
         headers=_auth_headers(),
     )
@@ -93,6 +98,9 @@ def test_create_match_ok(monkeypatch) -> None:
     )
     assert captured["top_k"] == 5
     assert captured["filters"]["status"] == "RECRUITING"
+    assert captured["filters"]["country"] == "United States"
+    assert captured["filters"]["state"] == "New York"
+    assert captured["filters"]["city"] == "New York"
     assert captured["age"] == 50
     assert captured["saved_match_id"] == payload["data"]["match_id"]
     assert captured["saved_patient_id"] == "patient-1"
@@ -113,6 +121,24 @@ def test_create_match_validation_error() -> None:
     assert payload["ok"] is False
     assert payload["data"] is None
     assert payload["error"]["code"] == "VALIDATION_ERROR"
+
+
+def test_create_match_validation_error_on_filter_type() -> None:
+    client = TestClient(app)
+    response = client.post(
+        "/api/match",
+        json={
+            "patient_profile_id": "patient-1",
+            "filters": {"country": 1},
+        },
+        headers=_auth_headers(),
+    )
+
+    assert response.status_code == 400
+    payload = response.json()
+    assert payload["ok"] is False
+    assert payload["error"]["code"] == "VALIDATION_ERROR"
+    assert "filters.country" in payload["error"]["message"]
 
 
 def test_create_match_patient_not_found(monkeypatch) -> None:

@@ -18,6 +18,7 @@ from app.services.rate_limiter import get_match_rate_limiter
 router = APIRouter()
 
 _ENGINE: Optional[Engine] = None
+_ALLOWED_FILTER_KEYS = ("condition", "status", "phase", "country", "state", "city")
 
 _CREATE_TRIALS_TABLE_SQL = """
 CREATE TABLE IF NOT EXISTS trials (
@@ -203,6 +204,25 @@ def _save_match_result(
         )
 
 
+def _normalize_filters(raw_filters: Any) -> Dict[str, str]:
+    if raw_filters is None:
+        return {}
+    if not isinstance(raw_filters, dict):
+        raise ValueError("filters must be a JSON object")
+
+    normalized: Dict[str, str] = {}
+    for key in _ALLOWED_FILTER_KEYS:
+        value = raw_filters.get(key)
+        if value is None:
+            continue
+        if isinstance(value, bool) or not isinstance(value, str):
+            raise ValueError(f"filters.{key} must be a string")
+        trimmed = value.strip()
+        if trimmed:
+            normalized[key] = trimmed
+    return normalized
+
+
 def _get_match_by_id(engine: Engine, match_id: str) -> Optional[Dict[str, Any]]:
     stmt = text(
         """
@@ -234,7 +254,7 @@ def create_match(payload: Dict[str, Any], request: Request):
 
     try:
         patient_profile_id = payload.get("patient_profile_id")
-        filters = payload.get("filters") or {}
+        raw_filters = payload.get("filters")
         top_k = payload.get("top_k", 10)
 
         if not isinstance(patient_profile_id, str) or not patient_profile_id.strip():
@@ -258,12 +278,14 @@ def create_match(payload: Dict[str, Any], request: Request):
                 {"top_k": top_k},
             )
 
-        if not isinstance(filters, dict):
+        try:
+            filters = _normalize_filters(raw_filters)
+        except ValueError as exc:
             return _error(
                 "VALIDATION_ERROR",
-                "filters must be a JSON object",
+                str(exc),
                 400,
-                {"filters": filters},
+                {"filters": raw_filters},
             )
 
         limit_per_minute = _env_int("MATCH_RATE_LIMIT_PER_MINUTE", 30)

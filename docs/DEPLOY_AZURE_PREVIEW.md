@@ -59,6 +59,7 @@ curl -fsS https://<api-domain>/health
 curl -fsS https://<api-domain>/readyz
 curl -fsS "https://<api-domain>/api/trials?page=1&page_size=5"
 curl -fsS https://<api-domain>/api/ops/metrics
+curl -fsS https://<api-domain>/api/system/dataset-meta
 ```
 
 手工功能验收
