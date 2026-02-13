@@ -24,9 +24,20 @@ test.describe("Patients hub flow", () => {
     await expect(page).toHaveURL(/\/patients\/patient-demo-001$/);
     await expect(page.getByRole("heading", { name: "Breast Cancer" })).toBeVisible();
 
+    await page.getByRole("link", { name: "Edit patient" }).click();
+    await expect(page).toHaveURL(/\/patients\/patient-demo-001\/edit$/);
+    await expect(page.getByRole("heading", { name: "Edit patient" })).toBeVisible();
+
+    await page.getByLabel("Age").fill("46");
+    await page.getByLabel("Lab name").fill("eosinophils");
+    await page.getByLabel("Value").fill("150");
+    await page.getByRole("button", { name: "Save changes" }).click();
+
+    await expect(page).toHaveURL(/\/patients\/patient-demo-001$/);
+    await expect(page.getByText("Age 46")).toBeVisible();
+
     await page.getByRole("button", { name: "Run match" }).click();
     await expect(page).toHaveURL(/\/matches\/match-demo-001$/);
     await expect(page.getByRole("button", { name: /^Strong match/ })).toBeVisible();
   });
 });
-

@@ -3,12 +3,27 @@ export type PatientDemographics = {
   sex: string;
 };
 
+export type PatientNamedDateEntry = {
+  name: string;
+  date?: string;
+};
+
+export type PatientTimelineEntry = string | PatientNamedDateEntry;
+
+export type PatientLabEntry = {
+  name: string;
+  value: number;
+  date?: string;
+};
+
 export type PatientProfileJson = {
   demographics: PatientDemographics;
   conditions?: string[];
-  history?: string[];
-  medications?: string[];
-  procedures?: string[];
+  history?: PatientTimelineEntry[];
+  medications?: PatientTimelineEntry[];
+  procedures?: PatientTimelineEntry[];
+  labs?: PatientLabEntry[];
+  other?: string[];
   [key: string]: unknown;
 };
 
@@ -51,4 +66,3 @@ export type CreateMatchData = {
   match_id: string;
   results?: unknown[];
 };
-

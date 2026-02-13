@@ -308,9 +308,15 @@ export default function PatientNewPage() {
               <div>
                 <strong>History</strong>
                 <ul className={styles.previewList}>
-                  {previewHistory.slice(0, 4).map((entry) => (
-                    <li key={entry}>{entry}</li>
-                  ))}
+                  {previewHistory.slice(0, 4).map((entry, idx) => {
+                    const label =
+                      typeof entry === "string"
+                        ? entry
+                        : entry && typeof entry === "object" && "name" in entry
+                          ? String((entry as { name?: unknown }).name ?? "")
+                          : "";
+                    return <li key={`${label || "history"}-${idx}`}>{label}</li>;
+                  })}
                 </ul>
               </div>
             ) : null}
@@ -319,9 +325,15 @@ export default function PatientNewPage() {
               <div>
                 <strong>Medications</strong>
                 <ul className={styles.previewList}>
-                  {previewMedications.slice(0, 4).map((entry) => (
-                    <li key={entry}>{entry}</li>
-                  ))}
+                  {previewMedications.slice(0, 4).map((entry, idx) => {
+                    const label =
+                      typeof entry === "string"
+                        ? entry
+                        : entry && typeof entry === "object" && "name" in entry
+                          ? String((entry as { name?: unknown }).name ?? "")
+                          : "";
+                    return <li key={`${label || "medication"}-${idx}`}>{label}</li>;
+                  })}
                 </ul>
               </div>
             ) : null}
@@ -330,9 +342,15 @@ export default function PatientNewPage() {
               <div>
                 <strong>Procedures</strong>
                 <ul className={styles.previewList}>
-                  {previewProcedures.slice(0, 4).map((entry) => (
-                    <li key={entry}>{entry}</li>
-                  ))}
+                  {previewProcedures.slice(0, 4).map((entry, idx) => {
+                    const label =
+                      typeof entry === "string"
+                        ? entry
+                        : entry && typeof entry === "object" && "name" in entry
+                          ? String((entry as { name?: unknown }).name ?? "")
+                          : "";
+                    return <li key={`${label || "procedure"}-${idx}`}>{label}</li>;
+                  })}
                 </ul>
               </div>
             ) : null}
