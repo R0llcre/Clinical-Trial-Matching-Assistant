@@ -85,10 +85,207 @@ def _evaluation_meta(
     *,
     missing_field: Optional[str] = None,
     reason: Optional[str] = None,
+    reason_code: Optional[str] = None,
+    required_action: Optional[str] = None,
 ) -> Optional[Dict[str, Any]]:
-    if not missing_field and not reason:
+    if not missing_field and not reason and not reason_code and not required_action:
         return None
-    return {"missing_field": missing_field, "reason": reason}
+    return {
+        "missing_field": missing_field,
+        "reason": reason,
+        "reason_code": reason_code,
+        "required_action": required_action,
+    }
+
+
+def _required_action_for_context(
+    *,
+    missing_field: Optional[str],
+    rule_field: Optional[str] = None,
+    reason_code: Optional[str] = None,
+) -> Optional[str]:
+    if reason_code == "UNSUPPORTED_OPERATOR":
+        return "REVIEW_RULE_MAPPING"
+    if reason_code == "INVALID_RULE_VALUE":
+        return "REVIEW_RULE_VALUE"
+    if reason_code == "NO_EVIDENCE":
+        if rule_field == "lab":
+            return "ADD_LAB_VALUE"
+        if rule_field in {"history", "procedure", "medication"}:
+            return "ADD_HISTORY_TIMELINE"
+        if rule_field == "other":
+            return "ADD_PROFILE_NOTES"
+        return "COLLECT_ADDITIONAL_PROFILE_DATA"
+
+    field = (missing_field or "").lower()
+    if field.startswith("demographics.age"):
+        return "ADD_DEMOGRAPHIC_AGE"
+    if field.startswith("demographics.sex"):
+        return "ADD_DEMOGRAPHIC_SEX"
+    if field.startswith("conditions"):
+        return "ADD_CONDITION"
+    if field.startswith("labs"):
+        return "ADD_LAB_VALUE"
+    if field.startswith("history"):
+        return "ADD_HISTORY_TIMELINE"
+    if field.startswith("procedures"):
+        return "ADD_PROCEDURE_TIMELINE"
+    if field.startswith("medications"):
+        return "ADD_MEDICATION_TIMELINE"
+    if field.startswith("other"):
+        return "ADD_PROFILE_NOTES"
+    if field:
+        return "COLLECT_ADDITIONAL_PROFILE_DATA"
+    return None
+
+
+def _parse_datetime(value: Any) -> Optional[dt.datetime]:
+    if isinstance(value, dt.datetime):
+        return value if value.tzinfo else value.replace(tzinfo=dt.UTC)
+    if not isinstance(value, str):
+        return None
+    raw = value.strip()
+    if not raw:
+        return None
+    if raw.endswith("Z"):
+        raw = raw[:-1] + "+00:00"
+    try:
+        parsed = dt.datetime.fromisoformat(raw)
+    except ValueError:
+        return None
+    return parsed if parsed.tzinfo else parsed.replace(tzinfo=dt.UTC)
+
+
+def _parse_time_window_days(parsed_rule: Dict[str, Any]) -> Optional[float]:
+    raw_window = parsed_rule.get("time_window")
+    if isinstance(raw_window, str):
+        match = re.search(
+            r"(\d+(?:\.\d+)?)\s*(day|days|week|weeks|month|months|year|years)",
+            raw_window.lower(),
+        )
+        if match:
+            amount = float(match.group(1))
+            unit = match.group(2)
+            if unit.startswith("day"):
+                return amount
+            if unit.startswith("week"):
+                return amount * 7.0
+            if unit.startswith("month"):
+                return amount * 30.0
+            if unit.startswith("year"):
+                return amount * 365.0
+
+    amount = _to_number(parsed_rule.get("value"))
+    unit = str(parsed_rule.get("unit") or "").lower().strip()
+    if amount is None or not unit:
+        return None
+    if unit.startswith("day"):
+        return amount
+    if unit.startswith("week"):
+        return amount * 7.0
+    if unit.startswith("month"):
+        return amount * 30.0
+    if unit.startswith("year"):
+        return amount * 365.0
+    return None
+
+
+def _iter_profile_entries(raw_values: Any) -> List[Dict[str, Any]]:
+    entries: List[Dict[str, Any]] = []
+    if not isinstance(raw_values, list):
+        return entries
+    for raw_item in raw_values:
+        if isinstance(raw_item, str):
+            value = raw_item.strip().lower()
+            if value:
+                entries.append({"text": value, "date": None})
+            continue
+        if not isinstance(raw_item, dict):
+            continue
+        name = (
+            raw_item.get("name")
+            or raw_item.get("item")
+            or raw_item.get("value")
+            or raw_item.get("term")
+        )
+        if isinstance(name, str) and name.strip():
+            text_value = name.strip().lower()
+        else:
+            text_value = ""
+        date_value = (
+            raw_item.get("date")
+            or raw_item.get("occurred_at")
+            or raw_item.get("recorded_at")
+            or raw_item.get("observed_at")
+        )
+        parsed_date = _parse_datetime(date_value)
+        if text_value or parsed_date:
+            entries.append({"text": text_value, "date": parsed_date})
+    return entries
+
+
+def _contains_term_match(value_text: str, term_text: str) -> bool:
+    if not value_text or not term_text:
+        return False
+    return (
+        term_text in value_text
+        or value_text in term_text
+        or bool(_tokenize(term_text) & _tokenize(value_text))
+    )
+
+
+def _extract_lab_readings(raw_labs: Any) -> List[Dict[str, Any]]:
+    readings: List[Dict[str, Any]] = []
+    if isinstance(raw_labs, dict):
+        for key, value in raw_labs.items():
+            name = str(key).strip().lower()
+            if not name:
+                continue
+            if isinstance(value, (int, float)) and not isinstance(value, bool):
+                readings.append({"name": name, "value": float(value), "date": None})
+            elif isinstance(value, dict):
+                number_value = _to_number(value.get("value"))
+                if number_value is None:
+                    continue
+                readings.append(
+                    {
+                        "name": name,
+                        "value": number_value,
+                        "date": _parse_datetime(
+                            value.get("date")
+                            or value.get("observed_at")
+                            or value.get("measured_at")
+                        ),
+                    }
+                )
+        return readings
+
+    if isinstance(raw_labs, list):
+        for raw_item in raw_labs:
+            if not isinstance(raw_item, dict):
+                continue
+            name_raw = (
+                raw_item.get("name")
+                or raw_item.get("test")
+                or raw_item.get("code")
+            )
+            if not isinstance(name_raw, str) or not name_raw.strip():
+                continue
+            number_value = _to_number(raw_item.get("value"))
+            if number_value is None:
+                continue
+            readings.append(
+                {
+                    "name": name_raw.strip().lower(),
+                    "value": number_value,
+                    "date": _parse_datetime(
+                        raw_item.get("date")
+                        or raw_item.get("observed_at")
+                        or raw_item.get("measured_at")
+                    ),
+                }
+            )
+    return readings
 
 
 def _summarize_match(
@@ -172,6 +369,10 @@ def _evaluate_condition_overlap_rule(
                 evaluation_meta=_evaluation_meta(
                     missing_field="conditions",
                     reason="patient conditions are missing",
+                    reason_code="MISSING_FIELD",
+                    required_action=_required_action_for_context(
+                        missing_field="conditions"
+                    ),
                 ),
             ),
             "conditions",
@@ -183,7 +384,15 @@ def _evaluate_condition_overlap_rule(
                 "condition_match",
                 "trial conditions are missing",
                 rule_meta=condition_meta,
-                evaluation_meta=_evaluation_meta(reason="trial conditions are missing"),
+                evaluation_meta=_evaluation_meta(
+                    reason="trial conditions are missing",
+                    reason_code="NO_EVIDENCE",
+                    required_action=_required_action_for_context(
+                        missing_field=None,
+                        rule_field="condition",
+                        reason_code="NO_EVIDENCE",
+                    ),
+                ),
             ),
             None,
         )
@@ -244,7 +453,9 @@ def _evaluate_trial_with_parsed_rules(
     for parsed_rule in parsed_rules:
         rule_type = str(parsed_rule.get("type") or "").upper()
         rule_field = str(parsed_rule.get("field") or "").lower()
-        verdict, missing_field = _evaluate_parsed_rule(parsed_rule, patient_profile)
+        verdict, rule_evaluation_meta = _evaluate_parsed_rule(
+            parsed_rule, patient_profile
+        )
         if verdict == "PASS":
             if rule_type == "INCLUSION" and rule_field == "condition":
                 parsed_condition_inclusion_pass = True
@@ -259,14 +470,14 @@ def _evaluate_trial_with_parsed_rules(
             rule_id,
             evidence,
             rule_meta=_parsed_rule_meta(parsed_rule),
-            evaluation_meta=_evaluation_meta(
-                missing_field=missing_field,
-                reason=(
-                    "missing required patient field" if missing_field else None
-                ),
-            ),
+            evaluation_meta=rule_evaluation_meta,
         )
-        if missing_field:
+        missing_field = (
+            rule_evaluation_meta.get("missing_field")
+            if isinstance(rule_evaluation_meta, dict)
+            else None
+        )
+        if isinstance(missing_field, str) and missing_field:
             missing_info.append(missing_field)
         if rule_type == "EXCLUSION":
             exclusion.append(checklist_rule)
@@ -333,10 +544,31 @@ def _evaluate_trial_with_parsed_rules(
 
 def _evaluate_parsed_rule(
     rule: Dict[str, Any], patient_profile: Dict[str, Any]
-) -> Tuple[str, Optional[str]]:
+) -> Tuple[str, Optional[Dict[str, Any]]]:
     field = str(rule.get("field") or "").lower()
     operator = str(rule.get("operator") or "").upper()
     value = rule.get("value")
+    rule_type = str(rule.get("type") or "").upper()
+
+    def _unknown(
+        *,
+        missing_field: Optional[str] = None,
+        reason: Optional[str] = None,
+        reason_code: Optional[str] = None,
+    ) -> Tuple[str, Optional[Dict[str, Any]]]:
+        return (
+            "UNKNOWN",
+            _evaluation_meta(
+                missing_field=missing_field,
+                reason=reason,
+                reason_code=reason_code,
+                required_action=_required_action_for_context(
+                    missing_field=missing_field,
+                    rule_field=field or None,
+                    reason_code=reason_code,
+                ),
+            ),
+        )
 
     demographics = patient_profile.get("demographics")
     if not isinstance(demographics, dict):
@@ -345,22 +577,36 @@ def _evaluate_parsed_rule(
     if field == "age":
         patient_age = demographics.get("age")
         if isinstance(patient_age, bool) or not isinstance(patient_age, (int, float)):
-            return "UNKNOWN", "demographics.age"
+            return _unknown(
+                missing_field="demographics.age",
+                reason="patient age is missing",
+                reason_code="MISSING_FIELD",
+            )
         target = _to_number(value)
         if target is None:
-            return "UNKNOWN", None
+            return _unknown(
+                reason="age rule has invalid threshold",
+                reason_code="INVALID_RULE_VALUE",
+            )
         if operator == ">=":
             return ("PASS", None) if float(patient_age) >= target else ("FAIL", None)
         if operator == "<=":
             return ("PASS", None) if float(patient_age) <= target else ("FAIL", None)
         if operator == "=":
             return ("PASS", None) if float(patient_age) == target else ("FAIL", None)
-        return "UNKNOWN", None
+        return _unknown(
+            reason=f"unsupported age operator: {operator}",
+            reason_code="UNSUPPORTED_OPERATOR",
+        )
 
     if field == "sex":
         patient_sex = demographics.get("sex")
         if not isinstance(patient_sex, str) or not patient_sex.strip():
-            return "UNKNOWN", "demographics.sex"
+            return _unknown(
+                missing_field="demographics.sex",
+                reason="patient sex is missing",
+                reason_code="MISSING_FIELD",
+            )
         patient_sex_norm = patient_sex.strip().lower()
         target = str(value or "").strip().lower()
         if target in {"all", "any", ""}:
@@ -370,14 +616,21 @@ def _evaluate_parsed_rule(
     if field == "condition":
         patient_conditions = _norm_text_list(patient_profile.get("conditions"))
         if not patient_conditions:
-            return "UNKNOWN", "conditions"
+            return _unknown(
+                missing_field="conditions",
+                reason="patient conditions are missing",
+                reason_code="MISSING_FIELD",
+            )
         if isinstance(value, list):
             terms = _norm_text_list(value)
         else:
             terms = [str(value or "").lower()]
         terms = [term for term in terms if term]
         if not terms:
-            return "UNKNOWN", None
+            return _unknown(
+                reason="condition rule has no comparable value",
+                reason_code="NO_EVIDENCE",
+            )
         hit = any(
             any(
                 (term in condition)
@@ -391,7 +644,10 @@ def _evaluate_parsed_rule(
             return ("PASS", None) if hit else ("FAIL", None)
         if operator == "NOT_IN":
             return ("FAIL", None) if hit else ("PASS", None)
-        return "UNKNOWN", None
+        return _unknown(
+            reason=f"unsupported condition operator: {operator}",
+            reason_code="UNSUPPORTED_OPERATOR",
+        )
 
     if field in {"history", "procedure", "medication"}:
         profile_key = {
@@ -399,24 +655,166 @@ def _evaluate_parsed_rule(
             "procedure": "procedures",
             "medication": "medications",
         }[field]
-        values = _norm_text_list(patient_profile.get(profile_key))
-        if not values:
-            return "UNKNOWN", profile_key
-        value_text = str(value or "").lower()
-        found = any(
-            value_text and (value_text in item or item in value_text)
-            for item in values
-        )
+        entries = _iter_profile_entries(patient_profile.get(profile_key))
+        if not entries:
+            return _unknown(
+                missing_field=profile_key,
+                reason=f"patient {profile_key} is missing",
+                reason_code="MISSING_FIELD",
+            )
+        term_text = str(value or "").strip().lower()
+        matches = [
+            entry
+            for entry in entries
+            if not term_text or _contains_term_match(entry["text"], term_text)
+        ]
+        found = bool(matches)
+
+        if operator == "WITHIN_LAST":
+            window_days = _parse_time_window_days(rule)
+            if window_days is None:
+                return _unknown(
+                    reason="WITHIN_LAST rule requires a valid time window",
+                    reason_code="INVALID_RULE_VALUE",
+                )
+            dated = [
+                entry
+                for entry in matches
+                if isinstance(entry.get("date"), dt.datetime)
+            ]
+            if not dated:
+                return _unknown(
+                    missing_field=f"{profile_key}_timeline",
+                    reason=f"{profile_key} timeline is missing",
+                    reason_code="MISSING_FIELD",
+                )
+            now = dt.datetime.now(dt.UTC)
+            within = any(
+                0.0 <= (now - entry["date"]).total_seconds() / 86400.0 <= window_days
+                for entry in dated
+            )
+            if rule_type == "EXCLUSION":
+                return ("FAIL", None) if within else ("PASS", None)
+            return ("PASS", None) if within else ("FAIL", None)
+
         if operator in {"NO_HISTORY", "NOT_EXISTS"}:
             return ("FAIL", None) if found else ("PASS", None)
         if operator == "EXISTS":
             return ("PASS", None) if found else ("FAIL", None)
-        if operator == "WITHIN_LAST":
-            # Time granularity is unavailable in MVP patient profile fields.
-            return "UNKNOWN", profile_key
-        return "UNKNOWN", None
+        if operator == "IN":
+            return ("PASS", None) if found else ("FAIL", None)
+        if operator == "NOT_IN":
+            return ("FAIL", None) if found else ("PASS", None)
+        return _unknown(
+            reason=f"unsupported {field} operator: {operator}",
+            reason_code="UNSUPPORTED_OPERATOR",
+        )
 
-    return "UNKNOWN", None
+    if field == "lab":
+        lab_readings = _extract_lab_readings(patient_profile.get("labs"))
+        if not lab_readings:
+            return _unknown(
+                missing_field="labs",
+                reason="patient lab values are missing",
+                reason_code="MISSING_FIELD",
+            )
+
+        rule_target = _to_number(value)
+        if rule_target is None:
+            return _unknown(
+                reason="lab rule has no numeric threshold",
+                reason_code="INVALID_RULE_VALUE",
+            )
+
+        comparable_values = [reading["value"] for reading in lab_readings]
+        if not comparable_values:
+            return _unknown(
+                reason="no comparable patient lab values",
+                reason_code="NO_EVIDENCE",
+            )
+
+        if operator == ">=":
+            return (
+                ("PASS", None)
+                if any(v >= rule_target for v in comparable_values)
+                else ("FAIL", None)
+            )
+        if operator == "<=":
+            return (
+                ("PASS", None)
+                if any(v <= rule_target for v in comparable_values)
+                else ("FAIL", None)
+            )
+        if operator == "=":
+            return (
+                ("PASS", None)
+                if any(v == rule_target for v in comparable_values)
+                else ("FAIL", None)
+            )
+        if operator == "WITHIN_LAST":
+            window_days = _parse_time_window_days(rule)
+            if window_days is None:
+                return _unknown(
+                    reason="WITHIN_LAST lab rule requires a valid time window",
+                    reason_code="INVALID_RULE_VALUE",
+                )
+            dated = [
+                reading
+                for reading in lab_readings
+                if isinstance(reading.get("date"), dt.datetime)
+            ]
+            if not dated:
+                return _unknown(
+                    missing_field="labs_timeline",
+                    reason="lab timeline is missing",
+                    reason_code="MISSING_FIELD",
+                )
+            now = dt.datetime.now(dt.UTC)
+            within = any(
+                0.0 <= (now - reading["date"]).total_seconds() / 86400.0 <= window_days
+                for reading in dated
+            )
+            if rule_type == "EXCLUSION":
+                return ("FAIL", None) if within else ("PASS", None)
+            return ("PASS", None) if within else ("FAIL", None)
+        return _unknown(
+            reason=f"unsupported lab operator: {operator}",
+            reason_code="UNSUPPORTED_OPERATOR",
+        )
+
+    if field == "other":
+        if (
+            isinstance(value, str)
+            and value.strip().lower() == "unparsed exclusion criteria"
+        ):
+            return _unknown(
+                reason="criterion cannot be evaluated from structured patient profile",
+                reason_code="NO_EVIDENCE",
+            )
+
+        other_values = _norm_text_list(patient_profile.get("other"))
+        if not other_values:
+            return _unknown(
+                missing_field="other",
+                reason="profile notes are missing",
+                reason_code="MISSING_FIELD",
+            )
+
+        target_text = str(value or "").strip().lower()
+        found = any(_contains_term_match(entry, target_text) for entry in other_values)
+        if operator in {"EXISTS", "IN", "="}:
+            return ("PASS", None) if found else ("FAIL", None)
+        if operator in {"NOT_EXISTS", "NOT_IN"}:
+            return ("FAIL", None) if found else ("PASS", None)
+        return _unknown(
+            reason=f"unsupported other operator: {operator}",
+            reason_code="UNSUPPORTED_OPERATOR",
+        )
+
+    return _unknown(
+        reason=f"unsupported parsed rule field: {field}",
+        reason_code="NO_EVIDENCE",
+    )
 
 
 def _to_number(value: Any) -> Optional[float]:
@@ -493,6 +891,12 @@ def _evaluate_trial_legacy(
                 evaluation_meta=_evaluation_meta(
                     missing_field="demographics.age",
                     reason="patient age is missing",
+                    reason_code="MISSING_FIELD",
+                    required_action=_required_action_for_context(
+                        missing_field="demographics.age",
+                        rule_field="age",
+                        reason_code="MISSING_FIELD",
+                    ),
                 ),
             )
         )
@@ -539,6 +943,12 @@ def _evaluate_trial_legacy(
                 evaluation_meta=_evaluation_meta(
                     missing_field="demographics.sex",
                     reason="patient sex is missing",
+                    reason_code="MISSING_FIELD",
+                    required_action=_required_action_for_context(
+                        missing_field="demographics.sex",
+                        rule_field="sex",
+                        reason_code="MISSING_FIELD",
+                    ),
                 ),
             )
         )

@@ -232,3 +232,40 @@ def test_match_summary_ineligible_when_any_fail() -> None:
     summary = result["match_summary"]
     assert summary["tier"] == "INELIGIBLE"
     assert summary["fail"] == 1
+
+
+def test_match_summary_unknown_includes_reason_code_and_required_action() -> None:
+    patient = {
+        "demographics": {"age": 43, "sex": "female"},
+        "conditions": ["asthma"],
+    }
+    trial = {
+        "nct_id": "NCT-META-1",
+        "title": "Asthma Follow-up Trial",
+        "conditions": ["asthma"],
+        "criteria_json": [
+            {
+                "id": "med-1",
+                "type": "INCLUSION",
+                "field": "medication",
+                "operator": "WITHIN_LAST",
+                "value": "inhaled corticosteroid",
+                "time_window": "90 days",
+                "evidence_text": (
+                    "Must have received inhaled corticosteroid within 90 days"
+                ),
+            }
+        ],
+    }
+
+    result = evaluate_trial(patient, trial)
+    summary = result["match_summary"]
+    inclusion = {item["rule_id"]: item for item in result["checklist"]["inclusion"]}
+    med_rule = inclusion["med-1"]
+
+    assert summary["tier"] == "POTENTIAL"
+    assert summary["unknown"] == 1
+    assert med_rule["verdict"] == "UNKNOWN"
+    assert med_rule["evaluation_meta"]["missing_field"] == "medications"
+    assert med_rule["evaluation_meta"]["reason_code"] == "MISSING_FIELD"
+    assert med_rule["evaluation_meta"]["required_action"] == "ADD_MEDICATION_TIMELINE"
