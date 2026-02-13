@@ -5,9 +5,11 @@ from app.routes import matching as matching_module
 from app.services import rate_limiter as rate_limiter_module
 from app.services.auth import create_access_token
 
+TEST_SUB = "00000000-0000-0000-0000-000000000003"
+
 
 def _auth_headers() -> dict:
-    token = create_access_token(sub="test-user")
+    token = create_access_token(sub=TEST_SUB)
     return {"Authorization": f"Bearer {token}"}
 
 
@@ -26,7 +28,7 @@ def test_create_match_is_rate_limited(monkeypatch) -> None:
     monkeypatch.setattr(
         matching_module,
         "_load_patient_profile",
-        lambda engine, patient_profile_id: {
+        lambda engine, patient_profile_id, user_id: {
             "demographics": {"age": 50, "sex": "female"},
             "conditions": ["diabetes"],
         },

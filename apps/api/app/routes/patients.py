@@ -3,7 +3,7 @@ import os
 import uuid
 from typing import Any, Dict, List, Optional, Tuple
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
 from sqlalchemy import create_engine, func, insert, select
 from sqlalchemy.dialects.postgresql import JSONB, UUID
@@ -128,13 +128,26 @@ def _serialize_patient(row: Dict[str, Any]) -> Dict[str, Any]:
     }
 
 
+def _user_id_from_request(request: Request) -> Optional[str]:
+    claims = getattr(request.state, "auth_claims", None)
+    if not isinstance(claims, dict):
+        return None
+    subject = claims.get("sub")
+    if not isinstance(subject, str) or not subject.strip():
+        return None
+    try:
+        return str(uuid.UUID(subject.strip()))
+    except ValueError:
+        return None
+
+
 def _create_patient(
-    engine: Engine, profile_json: Dict[str, Any], source: str
+    engine: Engine, profile_json: Dict[str, Any], source: str, user_id: str
 ) -> Dict[str, Any]:
     now = dt.datetime.utcnow()
     payload = {
         "id": str(uuid.uuid4()),
-        "user_id": None,
+        "user_id": user_id,
         "profile_json": profile_json,
         "source": source,
         "created_at": now,
@@ -148,10 +161,13 @@ def _create_patient(
     return _serialize_patient(payload)
 
 
-def _get_patient(engine: Engine, patient_id: str) -> Optional[Dict[str, Any]]:
+def _get_patient(
+    engine: Engine, patient_id: str, user_id: str
+) -> Optional[Dict[str, Any]]:
     stmt = (
         select(PATIENT_PROFILES_TABLE)
         .where(PATIENT_PROFILES_TABLE.c.id == patient_id)
+        .where(PATIENT_PROFILES_TABLE.c.user_id == user_id)
         .limit(1)
     )
     with engine.begin() as conn:
@@ -162,15 +178,20 @@ def _get_patient(engine: Engine, patient_id: str) -> Optional[Dict[str, Any]]:
 
 
 def _list_patients(
-    engine: Engine, page: int, page_size: int
+    engine: Engine, page: int, page_size: int, user_id: str
 ) -> Tuple[List[Dict[str, Any]], int]:
     stmt = (
         select(PATIENT_PROFILES_TABLE)
+        .where(PATIENT_PROFILES_TABLE.c.user_id == user_id)
         .order_by(PATIENT_PROFILES_TABLE.c.created_at.desc())
         .limit(page_size)
         .offset((page - 1) * page_size)
     )
-    count_stmt = select(func.count()).select_from(PATIENT_PROFILES_TABLE)
+    count_stmt = (
+        select(func.count())
+        .select_from(PATIENT_PROFILES_TABLE)
+        .where(PATIENT_PROFILES_TABLE.c.user_id == user_id)
+    )
 
     with engine.begin() as conn:
         total = conn.execute(count_stmt).scalar_one()
@@ -181,9 +202,13 @@ def _list_patients(
 
 
 @router.post("/api/patients")
-def create_patient(payload: Dict[str, Any]):
+def create_patient(payload: Dict[str, Any], request: Request):
     profile_json = payload.get("profile_json")
     source = payload.get("source", "manual")
+
+    user_id = _user_id_from_request(request)
+    if not user_id:
+        return _error("UNAUTHORIZED", "invalid auth subject", 401)
 
     try:
         _validate_profile_json(profile_json)
@@ -206,7 +231,7 @@ def create_patient(payload: Dict[str, Any]):
     try:
         engine = _get_engine()
         _ensure_patient_profiles_table(engine)
-        patient = _create_patient(engine, profile_json, source)
+        patient = _create_patient(engine, profile_json, source, user_id)
     except (SQLAlchemyError, RuntimeError) as exc:
         return _error("EXTERNAL_API_ERROR", f"Database unavailable: {exc}", 503)
 
@@ -214,11 +239,15 @@ def create_patient(payload: Dict[str, Any]):
 
 
 @router.get("/api/patients/{patient_id}")
-def get_patient(patient_id: str):
+def get_patient(patient_id: str, request: Request):
+    user_id = _user_id_from_request(request)
+    if not user_id:
+        return _error("UNAUTHORIZED", "invalid auth subject", 401)
+
     try:
         engine = _get_engine()
         _ensure_patient_profiles_table(engine)
-        patient = _get_patient(engine, patient_id)
+        patient = _get_patient(engine, patient_id, user_id)
     except (SQLAlchemyError, RuntimeError) as exc:
         return _error("EXTERNAL_API_ERROR", f"Database unavailable: {exc}", 503)
 
@@ -234,7 +263,13 @@ def get_patient(patient_id: str):
 
 
 @router.get("/api/patients")
-def list_patients(page: Optional[str] = None, page_size: Optional[str] = None):
+def list_patients(
+    request: Request, page: Optional[str] = None, page_size: Optional[str] = None
+):
+    user_id = _user_id_from_request(request)
+    if not user_id:
+        return _error("UNAUTHORIZED", "invalid auth subject", 401)
+
     try:
         page_num, page_size_num = _parse_pagination(page, page_size)
     except (ValueError, TypeError):
@@ -248,7 +283,7 @@ def list_patients(page: Optional[str] = None, page_size: Optional[str] = None):
     try:
         engine = _get_engine()
         _ensure_patient_profiles_table(engine)
-        patients, total = _list_patients(engine, page_num, page_size_num)
+        patients, total = _list_patients(engine, page_num, page_size_num, user_id)
     except (SQLAlchemyError, RuntimeError) as exc:
         return _error("EXTERNAL_API_ERROR", f"Database unavailable: {exc}", 503)
 

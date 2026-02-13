@@ -1,4 +1,5 @@
 import os
+import uuid
 
 from fastapi import APIRouter
 from fastapi.responses import JSONResponse
@@ -41,7 +42,7 @@ def _error(code: str, message: str, status_code: int) -> JSONResponse:
 
 
 @router.get("/api/auth/preview-token")
-def get_preview_token() -> JSONResponse:
+def get_preview_token(sub: str | None = None) -> JSONResponse:
     """Issue a short-lived token for preview/demo environments.
 
     This endpoint is disabled by default and must be explicitly enabled via
@@ -54,8 +55,17 @@ def get_preview_token() -> JSONResponse:
     if expires_seconds < 60 or expires_seconds > 60 * 60 * 24 * 30:
         expires_seconds = 86400
 
+    subject = os.getenv("CTMA_PREVIEW_TOKEN_SUB", "preview-user")
+    sub_value = (sub or "").strip()
+    if sub_value:
+        try:
+            subject = str(uuid.UUID(sub_value))
+        except ValueError:
+            # Keep the default behavior when sub is invalid.
+            subject = os.getenv("CTMA_PREVIEW_TOKEN_SUB", "preview-user")
+
     token = create_access_token(
-        sub=os.getenv("CTMA_PREVIEW_TOKEN_SUB", "preview-user"),
+        sub=subject,
         role=os.getenv("CTMA_PREVIEW_TOKEN_ROLE", "preview"),
         expires_seconds=expires_seconds,
     )
@@ -70,4 +80,3 @@ def get_preview_token() -> JSONResponse:
             "error": None,
         },
     )
-

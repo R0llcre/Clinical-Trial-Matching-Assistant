@@ -4,9 +4,11 @@ from app.main import app
 from app.routes import patients as patients_module
 from app.services.auth import create_access_token
 
+TEST_SUB = "00000000-0000-0000-0000-000000000001"
+
 
 def _auth_headers() -> dict:
-    token = create_access_token(sub="test-user")
+    token = create_access_token(sub=TEST_SUB)
     return {"Authorization": f"Bearer {token}"}
 
 
@@ -17,9 +19,10 @@ def test_create_patient_ok(monkeypatch) -> None:
     def _fake_ensure(engine) -> None:
         schema_checked["ok"] = True
 
-    def _fake_create(engine, profile_json, source):
+    def _fake_create(engine, profile_json, source, user_id):
         captured["profile_json"] = profile_json
         captured["source"] = source
+        captured["user_id"] = user_id
         return {
             "id": "patient-1",
             "source": source,
@@ -51,6 +54,7 @@ def test_create_patient_ok(monkeypatch) -> None:
     assert payload["data"]["id"] == "patient-1"
     assert captured["source"] == "manual"
     assert captured["profile_json"]["demographics"]["age"] == 52
+    assert captured["user_id"] == TEST_SUB
     assert schema_checked["ok"] is True
 
 
@@ -75,7 +79,7 @@ def test_get_patient_ok(monkeypatch) -> None:
     def _fake_ensure(engine) -> None:
         schema_checked["ok"] = True
 
-    def _fake_get(engine, patient_id):
+    def _fake_get(engine, patient_id, user_id):
         return {
             "id": patient_id,
             "source": "manual",
@@ -107,7 +111,7 @@ def test_get_patient_not_found(monkeypatch) -> None:
         patients_module, "_ensure_patient_profiles_table", lambda engine: None
     )
     monkeypatch.setattr(
-        patients_module, "_get_patient", lambda engine, patient_id: None
+        patients_module, "_get_patient", lambda engine, patient_id, user_id: None
     )
 
     client = TestClient(app)
@@ -127,9 +131,10 @@ def test_list_patients_ok(monkeypatch) -> None:
     def _fake_ensure(engine) -> None:
         schema_checked["ok"] = True
 
-    def _fake_list(engine, page, page_size):
+    def _fake_list(engine, page, page_size, user_id):
         captured["page"] = page
         captured["page_size"] = page_size
+        captured["user_id"] = user_id
         return (
             [
                 {
@@ -164,6 +169,7 @@ def test_list_patients_ok(monkeypatch) -> None:
     assert payload["data"]["patients"][0]["id"] == "patient-1"
     assert captured["page"] == 2
     assert captured["page_size"] == 5
+    assert captured["user_id"] == TEST_SUB
     assert schema_checked["ok"] is True
 
 
