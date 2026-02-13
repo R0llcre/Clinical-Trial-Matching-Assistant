@@ -1,0 +1,40 @@
+{
+  "trials": [
+    {
+      "nct_id": "NCT10000001",
+      "title": "Targeted Therapy in HER2+ Breast Cancer",
+      "status": "RECRUITING",
+      "phase": "PHASE3",
+      "conditions": ["Breast Cancer", "HER2 Positive Breast Cancer"],
+      "locations": ["New York, New York, United States", "Boston, Massachusetts, United States"],
+      "fetched_at": "2026-02-10T14:00:00Z"
+    },
+    {
+      "nct_id": "NCT10000002",
+      "title": "Biologic Maintenance Study for Moderate Asthma",
+      "status": "RECRUITING",
+      "phase": "PHASE2",
+      "conditions": ["Asthma"],
+      "locations": ["Chicago, Illinois, United States"],
+      "fetched_at": "2026-02-09T10:30:00Z"
+    },
+    {
+      "nct_id": "NCT10000003",
+      "title": "Real-world Follow-up in Chronic Kidney Disease",
+      "status": "ACTIVE_NOT_RECRUITING",
+      "phase": "PHASE4",
+      "conditions": ["Chronic Kidney Disease"],
+      "locations": ["Seattle, Washington, United States"],
+      "fetched_at": "2026-02-08T08:45:00Z"
+    },
+    {
+      "nct_id": "NCT10000004",
+      "title": "Observational Registry for Long COVID",
+      "status": "COMPLETED",
+      "phase": null,
+      "conditions": ["Long COVID"],
+      "locations": ["San Francisco, California, United States"],
+      "fetched_at": "2026-02-01T12:00:00Z"
+    }
+  ]
+}

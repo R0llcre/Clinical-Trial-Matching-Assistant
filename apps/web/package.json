@@ -3,8 +3,12 @@
   "private": true,
   "scripts": {
     "dev": "next dev -p 3000 -H 0.0.0.0",
+    "dev:test": "next dev -p 3100 -H 127.0.0.1",
     "build": "next build",
-    "start": "next start -p 3000 -H 0.0.0.0"
+    "start": "next start -p 3000 -H 0.0.0.0",
+    "test:e2e": "playwright test",
+    "test:e2e:headed": "playwright test --headed",
+    "test:e2e:debug": "PWDEBUG=1 playwright test --headed"
   },
   "dependencies": {
     "jspdf": "^4.1.0",
@@ -14,6 +18,7 @@
     "react-dom": "^18.2.0"
   },
   "devDependencies": {
+    "@playwright/test": "^1.58.2",
     "@types/node": "25.2.1",
     "@types/react": "19.2.13",
     "typescript": "5.9.3"
