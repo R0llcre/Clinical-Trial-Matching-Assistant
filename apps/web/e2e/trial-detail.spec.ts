@@ -23,11 +23,21 @@ test.describe("Trial detail flow", () => {
     await expect(page.getByText("Additional Notes:")).toBeVisible();
 
     await page.getByRole("tab", { name: /Parsed criteria/i }).click();
+    await expect(page.getByText("Filter by field")).toBeVisible();
     const readableRule = page.getByRole("button", {
       name: /Requires age at least 18 years/i,
     });
     await expect(readableRule).toBeVisible();
 
+    await page.getByRole("button", { name: /^Lab\s+\d+$/ }).click();
+    await expect(
+      page.getByRole("button", { name: /Requires age at least 18 years/i })
+    ).toHaveCount(0);
+    await expect(
+      page.getByRole("button", { name: /Requires lab value/i })
+    ).toBeVisible();
+
+    await page.getByRole("button", { name: /^All\s+\d+$/ }).click();
     await readableRule.click();
     await expect(page.getByText("Evidence")).toBeVisible();
     await expect(page.getByText("field: age · operator: >= · value: 18 years")).toBeVisible();

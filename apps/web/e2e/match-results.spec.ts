@@ -34,7 +34,9 @@ test.describe("Match and results flow", () => {
     await expect(
       page.getByText("Requires lab value at least 150 cells/uL")
     ).toBeVisible();
-    await expect(page.getByText("Missing patient data: eosinophils")).toBeVisible();
+    await expect(page.getByText("What to collect next")).toBeVisible();
+    await expect(page.getByText("Add lab value: eosinophils")).toBeVisible();
+    await expect(page.getByText("Include units and date measured.")).toBeVisible();
 
     await expect(page.getByText("c260529e-3104-47ac-95bd-4b7064be2a1f")).toHaveCount(0);
   });
