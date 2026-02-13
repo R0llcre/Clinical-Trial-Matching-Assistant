@@ -39,6 +39,8 @@ def test_main_logs_parse_success_rate(monkeypatch, caplog) -> None:
         processed=12,
         inserted=4,
         updated=8,
+        pruned_trials=0,
+        pruned_criteria=0,
         parse_success=3,
         parse_failed=1,
         parse_success_rate=0.75,
