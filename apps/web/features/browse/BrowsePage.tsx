@@ -52,6 +52,28 @@ type TrialsResponse = {
 const API_BASE =
   process.env.NEXT_PUBLIC_API_BASE ?? "http://localhost:8000";
 
+const buildQueryKey = (input: {
+  condition: string;
+  status: string;
+  phase: string;
+  country: string;
+  state: string;
+  city: string;
+  page: number;
+  pageSize: number;
+}) => {
+  return [
+    input.condition.trim(),
+    input.status.trim(),
+    input.phase.trim(),
+    input.country.trim(),
+    input.state.trim(),
+    input.city.trim(),
+    String(input.page),
+    String(input.pageSize),
+  ].join("|");
+};
+
 const statusLabel = (value?: string | null) => {
   if (!value) {
     return null;
@@ -251,6 +273,18 @@ export default function Home(props: HomeProps) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const abortRef = useRef<AbortController | null>(null);
+  const lastFetchedQueryKeyRef = useRef(
+    buildQueryKey({
+      condition: props.initialCondition,
+      status: props.initialStatus,
+      phase: props.initialPhase,
+      country: props.initialCountry,
+      state: props.initialState,
+      city: props.initialCity,
+      page: props.initialPage,
+      pageSize: props.initialPageSize,
+    })
+  );
 
   const lastSyncedDate = useMemo(() => {
     let latest: string | null = null;
@@ -364,6 +398,16 @@ export default function Home(props: HomeProps) {
       setTotal(payload.data?.total ?? 0);
       setPage(payload.data?.page ?? input.pageValue);
       setPageSize(payload.data?.page_size ?? input.pageSizeValue);
+      lastFetchedQueryKeyRef.current = buildQueryKey({
+        condition: input.conditionValue,
+        status: input.statusValue,
+        phase: input.phaseValue,
+        country: input.countryValue,
+        state: input.stateValue,
+        city: input.cityValue,
+        page: payload.data?.page ?? input.pageValue,
+        pageSize: payload.data?.page_size ?? input.pageSizeValue,
+      });
     } catch (err) {
       if (err instanceof DOMException && err.name === "AbortError") {
         return;
@@ -511,6 +555,16 @@ export default function Home(props: HomeProps) {
     setTotal(props.initialTotal);
     setPage(props.initialPage);
     setPageSize(props.initialPageSize);
+    lastFetchedQueryKeyRef.current = buildQueryKey({
+      condition: props.initialCondition,
+      status: props.initialStatus,
+      phase: props.initialPhase,
+      country: props.initialCountry,
+      state: props.initialState,
+      city: props.initialCity,
+      page: props.initialPage,
+      pageSize: props.initialPageSize,
+    });
   }, [
     props.initialCondition,
     props.initialStatus,
@@ -556,16 +610,17 @@ export default function Home(props: HomeProps) {
       nextPageSizeRaw <= 50
         ? nextPageSizeRaw
         : 20;
-
-    const shouldFetch =
-      nextCondition !== props.initialCondition ||
-      nextStatus !== props.initialStatus ||
-      nextPhase !== props.initialPhase ||
-      nextCountry !== props.initialCountry ||
-      nextState !== props.initialState ||
-      nextCity !== props.initialCity ||
-      safePage !== props.initialPage ||
-      safePageSize !== props.initialPageSize;
+    const nextQueryKey = buildQueryKey({
+      condition: nextCondition,
+      status: nextStatus,
+      phase: nextPhase,
+      country: nextCountry,
+      state: nextState,
+      city: nextCity,
+      page: safePage,
+      pageSize: safePageSize,
+    });
+    const shouldFetch = nextQueryKey !== lastFetchedQueryKeyRef.current;
 
     setCondition(nextCondition);
     setStatus(nextStatus);
