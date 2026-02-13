@@ -27,6 +27,7 @@ export default function App({ Component, pageProps }: AppProps) {
   const isBrowse = router.pathname === "/";
   const isMatch =
     router.pathname === "/match" || router.pathname.startsWith("/matches");
+  const isAbout = router.pathname === "/about";
 
   return (
     <div className={`${displayFont.variable} ${bodyFont.variable} app-root`}>
@@ -51,6 +52,12 @@ export default function App({ Component, pageProps }: AppProps) {
             >
               Match
             </Link>
+            <Link
+              href="/about"
+              className={`topnav-link ${isAbout ? "active" : ""}`}
+            >
+              About
+            </Link>
             <a
               className="topnav-link"
               href={docsHref}
@@ -74,6 +81,7 @@ export default function App({ Component, pageProps }: AppProps) {
             </p>
           </div>
           <div className="footer-links">
+            <Link href="/about">About</Link>
             <a href={docsHref} target="_blank" rel="noreferrer">
               API docs
             </a>
