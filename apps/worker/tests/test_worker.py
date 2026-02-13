@@ -1,3 +1,7 @@
+import logging
+from types import SimpleNamespace
+
+import worker
 from worker import _env_bool, _env_int, _split_csv
 
 
@@ -25,3 +29,30 @@ def test_split_csv() -> None:
         "asthma",
         "heart failure",
     ]
+
+
+def test_main_logs_parse_success_rate(monkeypatch, caplog) -> None:
+    monkeypatch.setenv("SYNC_RUN_ONCE", "true")
+    monkeypatch.setenv("SYNC_CONDITION", "cancer")
+    stats = SimpleNamespace(
+        run_id="run-1",
+        processed=12,
+        inserted=4,
+        updated=8,
+        parse_success=3,
+        parse_failed=1,
+        parse_success_rate=0.75,
+    )
+    monkeypatch.setattr(
+        worker,
+        "sync_trials",
+        lambda condition, status, page_limit, page_size: stats,
+    )
+
+    with caplog.at_level(logging.INFO):
+        worker.main()
+
+    combined_logs = " | ".join(caplog.messages)
+    assert "parse_success=3" in combined_logs
+    assert "parse_failed=1" in combined_logs
+    assert "parse_success_rate=0.75" in combined_logs

@@ -12,6 +12,7 @@ from fastapi.responses import JSONResponse
 from app.routes.auth import router as auth_router
 from app.routes.health import router as health_router
 from app.routes.matching import router as matching_router
+from app.routes.ops import router as ops_router
 from app.routes.patients import router as patients_router
 from app.routes.trials import router as trials_router
 from app.services.auth import AuthError, decode_auth_header
@@ -114,5 +115,6 @@ app.add_middleware(
 app.include_router(health_router)
 app.include_router(auth_router)
 app.include_router(matching_router)
+app.include_router(ops_router)
 app.include_router(patients_router)
 app.include_router(trials_router)

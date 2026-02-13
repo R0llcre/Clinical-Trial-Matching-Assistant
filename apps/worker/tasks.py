@@ -28,6 +28,9 @@ class SyncStats:
     processed: int
     inserted: int
     updated: int
+    parse_success: int
+    parse_failed: int
+    parse_success_rate: float
 
 
 @dataclass
@@ -568,6 +571,8 @@ def sync_trials(
     inserted = 0
     updated = 0
     inserted_nct_ids: List[str] = []
+    parse_success = 0
+    parse_failed = 0
 
     LOGGER.info(
         "sync_trials started run_id=%s condition=%s status=%s",
@@ -649,12 +654,19 @@ def sync_trials(
     for nct_id in inserted_nct_ids:
         try:
             parse_trial(nct_id=nct_id, parser_version="rule_v1")
+            parse_success += 1
         except Exception:
+            parse_failed += 1
             LOGGER.exception(
                 "auto parse failed run_id=%s nct_id=%s parser_version=rule_v1",
                 run_id,
                 nct_id,
             )
+
+    parse_total = parse_success + parse_failed
+    parse_success_rate = (
+        round(float(parse_success) / float(parse_total), 4) if parse_total else 0.0
+    )
 
     stats = SyncStats(
         run_id=run_id,
@@ -664,14 +676,23 @@ def sync_trials(
         processed=processed,
         inserted=inserted,
         updated=updated,
+        parse_success=parse_success,
+        parse_failed=parse_failed,
+        parse_success_rate=parse_success_rate,
     )
     LOGGER.info(
-        "sync_trials completed run_id=%s pages=%s processed=%s inserted=%s updated=%s",
+        (
+            "sync_trials completed run_id=%s pages=%s processed=%s inserted=%s "
+            "updated=%s parse_success=%s parse_failed=%s parse_success_rate=%s"
+        ),
         run_id,
         pages,
         processed,
         inserted,
         updated,
+        parse_success,
+        parse_failed,
+        parse_success_rate,
     )
     return stats
 

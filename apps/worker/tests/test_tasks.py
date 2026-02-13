@@ -539,6 +539,9 @@ def test_sync_trials_auto_parses_new_trials(monkeypatch: pytest.MonkeyPatch) -> 
     assert stats.processed == 1
     assert stats.inserted == 1
     assert stats.updated == 0
+    assert stats.parse_success == 1
+    assert stats.parse_failed == 0
+    assert stats.parse_success_rate == 1.0
     assert parse_calls == [("NCT123", "rule_v1")]
 
 
@@ -577,4 +580,43 @@ def test_sync_trials_does_not_auto_parse_updated_trials(
     assert stats.processed == 1
     assert stats.inserted == 0
     assert stats.updated == 1
+    assert stats.parse_success == 0
+    assert stats.parse_failed == 0
+    assert stats.parse_success_rate == 0.0
     assert parse_calls == []
+
+
+def test_sync_trials_tracks_auto_parse_failures(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("DATABASE_URL", "postgresql://test:test@localhost:5432/testdb")
+    fake_conn = _FakeConn()
+
+    class _FakeClient:
+        def search_studies(self, condition, status=None, page_token=None, page_size=100):
+            return {"studies": [{"stub": True}], "nextPageToken": None}
+
+    monkeypatch.setattr(tasks.psycopg, "connect", lambda _: fake_conn)
+    monkeypatch.setattr(tasks, "CTGovClient", lambda: _FakeClient())
+    monkeypatch.setattr(tasks, "_ensure_tables", lambda conn: None)
+    monkeypatch.setattr(tasks, "_write_sync_log", lambda *args, **kwargs: None)
+    monkeypatch.setattr(
+        tasks,
+        "_extract_trial",
+        lambda study: {"nct_id": "NCT999", "data_timestamp": None},
+    )
+    monkeypatch.setattr(tasks, "_upsert_trial", lambda conn, trial: True)
+
+    def _boom_parse_trial(nct_id, parser_version="rule_v1"):
+        raise RuntimeError("parse failed")
+
+    monkeypatch.setattr(tasks, "parse_trial", _boom_parse_trial)
+
+    stats = sync_trials(condition="diabetes", status="RECRUITING", page_limit=1)
+
+    assert stats.processed == 1
+    assert stats.inserted == 1
+    assert stats.updated == 0
+    assert stats.parse_success == 0
+    assert stats.parse_failed == 1
+    assert stats.parse_success_rate == 0.0
