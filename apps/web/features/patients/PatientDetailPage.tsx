@@ -8,6 +8,7 @@ import {
   History,
   PencilLine,
   Play,
+  RotateCcw,
   UserRound,
 } from "lucide-react";
 
@@ -89,6 +90,10 @@ export default function PatientDetailPage() {
 
   const [runLoading, setRunLoading] = useState(false);
   const [runError, setRunError] = useState<string | null>(null);
+  const [rerunLoadingById, setRerunLoadingById] = useState<
+    Record<string, boolean>
+  >({});
+  const [rerunError, setRerunError] = useState<string | null>(null);
 
   const historyTotalPages = useMemo(() => {
     if (historyTotal <= 0) {
@@ -289,6 +294,51 @@ export default function PatientDetailPage() {
     }
   };
 
+  const rerunHistoryMatch = async (match: MatchListItem) => {
+    if (!patientId) {
+      return;
+    }
+    if (rerunLoadingById[match.id]) {
+      return;
+    }
+
+    setRerunError(null);
+    setRerunLoadingById((prev) => ({ ...prev, [match.id]: true }));
+
+    const filters = filtersFromMatch(match);
+    const topKValue =
+      typeof match.query_json?.top_k === "number" && Number.isFinite(match.query_json.top_k)
+        ? match.query_json.top_k
+        : 10;
+
+    try {
+      const result = await withSessionRetry(
+        (token) =>
+          createMatch({
+            token,
+            patientProfileId: patientId,
+            topK: topKValue,
+            filters,
+          }),
+        {
+          envToken: process.env.NEXT_PUBLIC_DEV_JWT ?? "",
+          allowPreviewIssue: true,
+        }
+      );
+      await router.push(`/matches/${result.match_id}`);
+    } catch (err) {
+      if (err instanceof ApiError) {
+        setRerunError(err.message);
+      } else if (err instanceof Error) {
+        setRerunError(err.message);
+      } else {
+        setRerunError("Unable to rerun match");
+      }
+    } finally {
+      setRerunLoadingById((prev) => ({ ...prev, [match.id]: false }));
+    }
+  };
+
   const patientKicker = patient ? `Patient ${shortId(patient.id)}` : "Patient";
   const patientTitle = patient ? patient.profile_json?.conditions?.[0] || "Patient profile" : "Patient profile";
 
@@ -343,6 +393,9 @@ export default function PatientDetailPage() {
       ) : null}
       {runError ? (
         <Toast tone="danger" title="Unable to run match" description={runError} />
+      ) : null}
+      {rerunError ? (
+        <Toast tone="danger" title="Unable to rerun match" description={rerunError} />
       ) : null}
 
       <div className={styles.layout}>
@@ -496,6 +549,7 @@ export default function PatientDetailPage() {
                 {history.map((match) => {
                   const filters = filtersFromMatch(match);
                   const created = formatDate(match.created_at);
+                  const isRerunning = Boolean(rerunLoadingById[match.id]);
                   return (
                     <div key={match.id} className={styles.historyRow}>
                       <div>
@@ -521,6 +575,15 @@ export default function PatientDetailPage() {
                         </div>
                       </div>
                       <div style={{ display: "flex", justifyContent: "flex-end", gap: 10 }}>
+                        <Button
+                          tone="secondary"
+                          size="sm"
+                          onClick={() => void rerunHistoryMatch(match)}
+                          disabled={isRerunning || sessionStatus === "unavailable"}
+                          iconLeft={<RotateCcw size={16} aria-hidden="true" />}
+                        >
+                          {isRerunning ? "Rerunning..." : "Rerun"}
+                        </Button>
                         <Link
                           href={`/matches/${match.id}`}
                           className="ui-button ui-button--secondary ui-button--sm"
