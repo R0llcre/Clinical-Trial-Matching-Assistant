@@ -68,7 +68,8 @@ def main() -> None:
                     "sync run completed run_id=%s processed=%s inserted=%s updated=%s "
                     "parse_success=%s parse_failed=%s parse_success_rate=%s "
                     "parser_version=%s parser_source_breakdown=%s "
-                    "fallback_reason_breakdown=%s llm_budget_exceeded_count=%s"
+                    "fallback_reason_breakdown=%s llm_budget_exceeded_count=%s "
+                    "backfill_selected=%s selective_llm_triggered=%s selective_llm_skipped=%s"
                 ),
                 stats.run_id,
                 stats.processed,
@@ -81,6 +82,9 @@ def main() -> None:
                 stats.parser_source_breakdown,
                 stats.fallback_reason_breakdown,
                 stats.llm_budget_exceeded_count,
+                stats.backfill_selected,
+                stats.selective_llm_triggered,
+                stats.selective_llm_skipped_breakdown,
             )
         except Exception:
             logger.exception("sync run failed")

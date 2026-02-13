@@ -35,6 +35,11 @@ class SyncStats:
     parser_source_breakdown: Dict[str, int] = dataclass_field(default_factory=dict)
     fallback_reason_breakdown: Dict[str, int] = dataclass_field(default_factory=dict)
     llm_budget_exceeded_count: int = 0
+    backfill_selected: int = 0
+    selective_llm_triggered: int = 0
+    selective_llm_skipped_breakdown: Dict[str, int] = dataclass_field(
+        default_factory=dict
+    )
 
 
 @dataclass
@@ -450,6 +455,153 @@ def _trial_total(conn: psycopg.Connection) -> int:
     return int(row[0] or 0)
 
 
+def _recent_llm_usage_nct_ids(
+    conn: psycopg.Connection,
+    *,
+    nct_ids: Sequence[str],
+    within_hours: int,
+) -> set[str]:
+    if not nct_ids:
+        return set()
+    within_hours = max(1, int(within_hours))
+    unique = sorted({str(item) for item in nct_ids if str(item).strip()})
+    if not unique:
+        return set()
+    with conn.cursor() as cur:
+        cur.execute(
+            """
+            SELECT DISTINCT nct_id
+            FROM llm_usage_logs
+            WHERE nct_id = ANY(%s)
+              AND created_at >= NOW() - make_interval(hours => %s)
+            """,
+            (unique, within_hours),
+        )
+        rows = cur.fetchall()
+    return {str(row[0]) for row in rows if row and row[0]}
+
+
+def _should_trigger_selective_llm(
+    stats: ParseStats,
+    *,
+    unknown_ratio_threshold: float,
+    unknown_rules_min: int,
+) -> bool:
+    rule_count = max(0, int(getattr(stats, "rule_count", 0)))
+    unknown_count = max(0, int(getattr(stats, "unknown_count", 0)))
+    if rule_count <= 0:
+        return False
+    if rule_count <= 2 and unknown_count >= 1:
+        return True
+    unknown_ratio = float(unknown_count) / float(max(rule_count, 1))
+    return unknown_count >= max(1, int(unknown_rules_min)) and unknown_ratio >= float(
+        unknown_ratio_threshold
+    )
+
+
+def _select_backfill_nct_ids(
+    conn: psycopg.Connection,
+    *,
+    limit: int,
+    coverage_ratio_threshold: float,
+    cooldown_hours: int,
+) -> List[str]:
+    limit = max(0, int(limit))
+    if limit <= 0:
+        return []
+    coverage_ratio_threshold = float(coverage_ratio_threshold)
+    cooldown_hours = max(1, int(cooldown_hours))
+
+    selected: List[str] = []
+    seen: set[str] = set()
+
+    # 1) Trials without any criteria rows.
+    with conn.cursor() as cur:
+        cur.execute(
+            """
+            SELECT t.nct_id
+            FROM trials AS t
+            WHERE t.eligibility_text IS NOT NULL
+              AND btrim(t.eligibility_text) <> ''
+              AND NOT EXISTS (
+                SELECT 1 FROM trial_criteria AS tc
+                WHERE tc.trial_id = t.id
+              )
+              AND NOT EXISTS (
+                SELECT 1 FROM llm_usage_logs AS l
+                WHERE l.nct_id = t.nct_id
+                  AND l.created_at >= NOW() - make_interval(hours => %s)
+              )
+            ORDER BY t.fetched_at DESC
+            LIMIT %s
+            """,
+            (cooldown_hours, limit),
+        )
+        rows = cur.fetchall()
+    for row in rows:
+        nct_id = str(row[0]) if row and row[0] else ""
+        if not nct_id or nct_id in seen:
+            continue
+        selected.append(nct_id)
+        seen.add(nct_id)
+        if len(selected) >= limit:
+            return selected
+
+    remaining = limit - len(selected)
+    if remaining <= 0:
+        return selected
+
+    # 2) Trials with low coverage latest criteria from rule_v1, excluding successful llm.
+    with conn.cursor() as cur:
+        cur.execute(
+            """
+            WITH latest AS (
+              SELECT DISTINCT ON (trial_id)
+                trial_id,
+                parser_version,
+                coverage_stats,
+                created_at
+              FROM trial_criteria
+              ORDER BY trial_id, created_at DESC
+            )
+            SELECT t.nct_id
+            FROM trials AS t
+            JOIN latest AS lc
+              ON lc.trial_id = t.id
+            WHERE t.eligibility_text IS NOT NULL
+              AND btrim(t.eligibility_text) <> ''
+              AND COALESCE(NULLIF(lc.coverage_stats->>'parser_source', ''), lc.parser_version, '') = 'rule_v1'
+              AND COALESCE((lc.coverage_stats->>'coverage_ratio')::float, 1.0) < %s
+              AND NOT EXISTS (
+                SELECT 1
+                FROM trial_criteria AS tc2
+                WHERE tc2.trial_id = t.id
+                  AND tc2.parser_version = 'llm_v1'
+                  AND COALESCE(NULLIF(tc2.coverage_stats->>'parser_source', ''), '') = 'llm_v1'
+              )
+              AND NOT EXISTS (
+                SELECT 1 FROM llm_usage_logs AS l
+                WHERE l.nct_id = t.nct_id
+                  AND l.created_at >= NOW() - make_interval(hours => %s)
+              )
+            ORDER BY t.fetched_at DESC
+            LIMIT %s
+            """,
+            (coverage_ratio_threshold, cooldown_hours, remaining),
+        )
+        rows = cur.fetchall()
+    for row in rows:
+        nct_id = str(row[0]) if row and row[0] else ""
+        if not nct_id or nct_id in seen:
+            continue
+        selected.append(nct_id)
+        seen.add(nct_id)
+        if len(selected) >= limit:
+            break
+
+    return selected
+
+
 def _fetch_trial_for_parse(
     conn: psycopg.Connection, nct_id: str
 ) -> Optional[Dict[str, Any]]:
@@ -560,6 +712,16 @@ def _env_int(name: str, default: int) -> int:
         return default
     try:
         return int(raw)
+    except ValueError:
+        return default
+
+
+def _env_float(name: str, default: float) -> float:
+    raw = os.getenv(name)
+    if raw is None:
+        return default
+    try:
+        return float(raw)
     except ValueError:
         return default
 
@@ -720,6 +882,23 @@ def sync_trials(
     refresh_pages = max(1, _env_int("SYNC_REFRESH_PAGES", 1))
     target_trial_total = max(0, _env_int("SYNC_TARGET_TRIAL_TOTAL", 0))
 
+    selective_llm_enabled = _env_bool("SYNC_LLM_SELECTIVE", False)
+    selective_unknown_ratio_threshold = min(
+        1.0,
+        max(0.0, _env_float("SYNC_LLM_SELECTIVE_UNKNOWN_RATIO_THRESHOLD", 0.4)),
+    )
+    selective_unknown_rules_min = max(
+        1, _env_int("SYNC_LLM_SELECTIVE_UNKNOWN_RULES_MIN", 2)
+    )
+    selective_max_llm_calls = max(
+        0, _env_int("SYNC_LLM_SELECTIVE_MAX_LLM_CALLS_PER_RUN", 10)
+    )
+    selective_cooldown_hours = max(
+        1, _env_int("SYNC_LLM_SELECTIVE_COOLDOWN_HOURS", 168)
+    )
+    backfill_enabled = _env_bool("SYNC_LLM_BACKFILL_ENABLED", False)
+    backfill_limit = max(0, _env_int("SYNC_LLM_BACKFILL_LIMIT", 20))
+
     run_id = str(uuid.uuid4())
     client = CTGovClient()
 
@@ -728,11 +907,15 @@ def sync_trials(
     inserted = 0
     updated = 0
     inserted_nct_ids: List[str] = []
+    backfill_nct_ids: List[str] = []
     parse_success = 0
     parse_failed = 0
     parser_source_breakdown: Dict[str, int] = {}
     fallback_reason_breakdown: Dict[str, int] = {}
     llm_budget_exceeded_count = 0
+    backfill_selected = 0
+    selective_llm_triggered = 0
+    selective_llm_skipped_breakdown: Dict[str, int] = {}
     parser_version = _default_sync_parser_version()
 
     LOGGER.info(
@@ -875,6 +1058,25 @@ def sync_trials(
                     if not next_page_token:
                         break
 
+            if backfill_enabled:
+                coverage_ratio_threshold = max(
+                    0.0, min(1.0, 1.0 - selective_unknown_ratio_threshold)
+                )
+                backfill_nct_ids = _select_backfill_nct_ids(
+                    conn,
+                    limit=backfill_limit,
+                    coverage_ratio_threshold=coverage_ratio_threshold,
+                    cooldown_hours=selective_cooldown_hours,
+                )
+                if inserted_nct_ids and backfill_nct_ids:
+                    inserted_set = {str(nct_id) for nct_id in inserted_nct_ids}
+                    backfill_nct_ids = [
+                        nct_id
+                        for nct_id in backfill_nct_ids
+                        if nct_id not in inserted_set
+                    ]
+                backfill_selected = len(backfill_nct_ids)
+
             _write_sync_log(
                 conn,
                 run_id=run_id,
@@ -912,21 +1114,39 @@ def sync_trials(
             )
             raise
 
-    for nct_id in inserted_nct_ids:
+    selective_llm_ready = bool(
+        selective_llm_enabled
+        and parser_version == "rule_v1"
+        and _env_bool("LLM_PARSER_ENABLED", False)
+        and os.getenv("OPENAI_API_KEY")
+    )
+    recent_llm_usage: set[str] = set()
+    if selective_llm_ready and (inserted_nct_ids or backfill_nct_ids):
+        with psycopg.connect(database_url) as conn:
+            _ensure_tables(conn)
+            conn.commit()
+            recent_llm_usage = _recent_llm_usage_nct_ids(
+                conn,
+                nct_ids=[*inserted_nct_ids, *backfill_nct_ids],
+                within_hours=selective_cooldown_hours,
+            )
+
+    llm_calls_attempted = 0
+
+    def _record_skip(reason: str) -> None:
+        selective_llm_skipped_breakdown[reason] = (
+            selective_llm_skipped_breakdown.get(reason, 0) + 1
+        )
+
+    def _process_nct_id(nct_id: str) -> None:
+        nonlocal parse_success
+        nonlocal parse_failed
+        nonlocal llm_budget_exceeded_count
+        nonlocal selective_llm_triggered
+        nonlocal llm_calls_attempted
+
         try:
-            parsed = parse_trial(nct_id=nct_id, parser_version=parser_version)
-            parse_success += 1
-            if isinstance(parsed, ParseStats):
-                parser_source = parsed.parser_source or parser_version
-                parser_source_breakdown[parser_source] = (
-                    parser_source_breakdown.get(parser_source, 0) + 1
-                )
-                if parsed.fallback_reason:
-                    fallback_reason_breakdown[parsed.fallback_reason] = (
-                        fallback_reason_breakdown.get(parsed.fallback_reason, 0) + 1
-                    )
-                if parsed.llm_budget_exceeded:
-                    llm_budget_exceeded_count += 1
+            rule_stats = parse_trial(nct_id=nct_id, parser_version=parser_version)
         except Exception:
             parse_failed += 1
             LOGGER.exception(
@@ -935,6 +1155,50 @@ def sync_trials(
                 nct_id,
                 parser_version,
             )
+            return
+
+        final_stats = rule_stats
+
+        if selective_llm_ready and _should_trigger_selective_llm(
+            rule_stats,
+            unknown_ratio_threshold=selective_unknown_ratio_threshold,
+            unknown_rules_min=selective_unknown_rules_min,
+        ):
+            if llm_calls_attempted >= selective_max_llm_calls:
+                _record_skip("max per run")
+            elif nct_id in recent_llm_usage:
+                _record_skip("cooldown")
+            else:
+                llm_calls_attempted += 1
+                selective_llm_triggered += 1
+                recent_llm_usage.add(nct_id)
+                try:
+                    final_stats = parse_trial(nct_id=nct_id, parser_version="llm_v1")
+                except Exception:
+                    _record_skip("llm parse error")
+                    LOGGER.exception(
+                        "selective llm parse failed run_id=%s nct_id=%s",
+                        run_id,
+                        nct_id,
+                    )
+
+        parse_success += 1
+        parser_source = final_stats.parser_source or final_stats.parser_version
+        parser_source_breakdown[parser_source] = (
+            parser_source_breakdown.get(parser_source, 0) + 1
+        )
+        if final_stats.fallback_reason:
+            fallback_reason_breakdown[final_stats.fallback_reason] = (
+                fallback_reason_breakdown.get(final_stats.fallback_reason, 0) + 1
+            )
+        if final_stats.llm_budget_exceeded:
+            llm_budget_exceeded_count += 1
+
+    for nct_id in inserted_nct_ids:
+        _process_nct_id(nct_id)
+
+    for nct_id in backfill_nct_ids:
+        _process_nct_id(nct_id)
 
     parse_total = parse_success + parse_failed
     parse_success_rate = (
@@ -956,13 +1220,17 @@ def sync_trials(
         parser_source_breakdown=parser_source_breakdown,
         fallback_reason_breakdown=fallback_reason_breakdown,
         llm_budget_exceeded_count=llm_budget_exceeded_count,
+        backfill_selected=backfill_selected,
+        selective_llm_triggered=selective_llm_triggered,
+        selective_llm_skipped_breakdown=selective_llm_skipped_breakdown,
     )
     LOGGER.info(
         (
             "sync_trials completed run_id=%s pages=%s processed=%s inserted=%s "
             "updated=%s parse_success=%s parse_failed=%s parse_success_rate=%s "
             "parser_version=%s parser_source_breakdown=%s "
-            "fallback_reason_breakdown=%s llm_budget_exceeded_count=%s"
+            "fallback_reason_breakdown=%s llm_budget_exceeded_count=%s "
+            "backfill_selected=%s selective_llm_triggered=%s selective_llm_skipped=%s"
         ),
         run_id,
         pages,
@@ -976,6 +1244,9 @@ def sync_trials(
         parser_source_breakdown,
         fallback_reason_breakdown,
         llm_budget_exceeded_count,
+        backfill_selected,
+        selective_llm_triggered,
+        selective_llm_skipped_breakdown,
     )
     return stats
 
@@ -1101,8 +1372,9 @@ def parse_trial(
                     )
                     llm_usage = parser_metadata.get("llm_usage")
                     if (
-                        parser_metadata.get("parser_source") == "llm_v1"
-                        and isinstance(llm_usage, dict)
+                        isinstance(llm_usage, dict)
+                        and isinstance(llm_usage.get("total_tokens"), int)
+                        and int(llm_usage.get("total_tokens") or 0) > 0
                     ):
                         _write_llm_usage_log(
                             conn,

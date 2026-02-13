@@ -498,6 +498,83 @@ def test_parse_trial_llm_fallback_success(monkeypatch: pytest.MonkeyPatch) -> No
     assert fake_conn.rollbacks == 0
 
 
+def test_parse_trial_llm_records_usage_log_even_when_fallback_to_rule(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("DATABASE_URL", "postgresql://test:test@localhost:5432/testdb")
+
+    fake_conn = _FakeConn()
+    usage_logs = []
+
+    monkeypatch.setattr(tasks.psycopg, "connect", lambda _: fake_conn)
+    monkeypatch.setattr(tasks, "_ensure_tables", lambda conn: None)
+    monkeypatch.setattr(tasks, "_is_llm_budget_exceeded", lambda conn, usage_date: False)
+    monkeypatch.setattr(tasks, "_daily_llm_token_usage", lambda conn, usage_date: 0)
+    monkeypatch.setattr(tasks, "_read_llm_daily_token_budget", lambda: 200)
+    monkeypatch.setattr(
+        tasks,
+        "_fetch_trial_for_parse",
+        lambda conn, nct_id: {
+            "id": "trial-uuid",
+            "nct_id": nct_id,
+            "eligibility_text": "Adults only",
+        },
+    )
+    monkeypatch.setattr(
+        tasks,
+        "parse_criteria_llm_v1_with_fallback",
+        lambda text: (
+            [
+                {
+                    "id": "rule-1",
+                    "type": "INCLUSION",
+                    "field": "age",
+                    "operator": ">=",
+                    "value": 18,
+                    "unit": "years",
+                    "time_window": None,
+                    "certainty": "high",
+                    "evidence_text": "Adults only",
+                    "source_span": {"start": 0, "end": 11},
+                }
+            ],
+            {
+                "parser_source": "rule_v1",
+                "fallback_used": True,
+                "fallback_reason": "quality gate forced fallback",
+                "llm_usage": {
+                    "prompt_tokens": 10,
+                    "completion_tokens": 20,
+                    "total_tokens": 30,
+                },
+            },
+        ),
+    )
+    monkeypatch.setattr(tasks, "_write_parse_log", lambda *args, **kwargs: None)
+    monkeypatch.setattr(tasks, "_upsert_trial_criteria", lambda *args, **kwargs: None)
+    monkeypatch.setattr(
+        tasks,
+        "_write_llm_usage_log",
+        lambda conn, *, run_id, nct_id, parser_version, usage: usage_logs.append(
+            {
+                "run_id": run_id,
+                "nct_id": nct_id,
+                "parser_version": parser_version,
+                "usage": usage,
+            }
+        ),
+    )
+
+    stats = parse_trial("NCT234", parser_version="llm_v1")
+
+    assert stats.status == "SUCCESS"
+    assert stats.parser_version == "llm_v1"
+    assert stats.parser_source == "rule_v1"
+    assert stats.fallback_used is True
+    assert "quality gate" in str(stats.fallback_reason)
+    assert usage_logs and usage_logs[0]["usage"]["total_tokens"] == 30
+
+
 def test_parse_trial_llm_budget_exceeded_skips_llm_parser(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -702,8 +779,20 @@ def test_sync_trials_auto_parses_new_trials(monkeypatch: pytest.MonkeyPatch) -> 
     monkeypatch.setattr(
         tasks,
         "parse_trial",
-        lambda nct_id, parser_version="rule_v1": parse_calls.append(
-            (nct_id, parser_version)
+        lambda nct_id, parser_version="rule_v1": (
+            parse_calls.append((nct_id, parser_version))
+            or ParseStats(
+                run_id="run-1",
+                nct_id=nct_id,
+                parser_version=parser_version,
+                status="SUCCESS",
+                rule_count=1,
+                unknown_count=0,
+                parser_source=parser_version,
+                fallback_used=False,
+                fallback_reason=None,
+                llm_budget_exceeded=False,
+            )
         ),
     )
 
@@ -845,6 +934,181 @@ def test_sync_trials_uses_llm_parser_when_enabled(
     assert stats.parser_source_breakdown == {"llm_v1": 1}
     assert stats.fallback_reason_breakdown == {}
     assert stats.llm_budget_exceeded_count == 0
+
+
+def test_sync_trials_selective_llm_triggers_for_low_coverage_rule_parse(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("DATABASE_URL", "postgresql://test:test@localhost:5432/testdb")
+    monkeypatch.setenv("SYNC_PARSER_VERSION", "rule_v1")
+    monkeypatch.setenv("SYNC_LLM_SELECTIVE", "1")
+    monkeypatch.setenv("SYNC_LLM_SELECTIVE_UNKNOWN_RATIO_THRESHOLD", "0.4")
+    monkeypatch.setenv("SYNC_LLM_SELECTIVE_UNKNOWN_RULES_MIN", "2")
+    monkeypatch.setenv("SYNC_LLM_SELECTIVE_MAX_LLM_CALLS_PER_RUN", "10")
+    monkeypatch.setenv("LLM_PARSER_ENABLED", "1")
+    monkeypatch.setenv("OPENAI_API_KEY", "test-key")
+
+    fake_conn = _FakeConn()
+
+    class _FakeClient:
+        def search_studies(self, condition, status=None, page_token=None, page_size=100):
+            return {"studies": [{"nct_id": "NCT123"}], "nextPageToken": None}
+
+    parse_calls = []
+
+    def _fake_parse_trial(nct_id: str, parser_version: str = "rule_v1") -> ParseStats:
+        parse_calls.append((nct_id, parser_version))
+        if parser_version == "llm_v1":
+            return ParseStats(
+                run_id="run-llm",
+                nct_id=nct_id,
+                parser_version=parser_version,
+                status="SUCCESS",
+                rule_count=10,
+                unknown_count=0,
+                parser_source="llm_v1",
+                fallback_used=False,
+                fallback_reason=None,
+                llm_budget_exceeded=False,
+            )
+        return ParseStats(
+            run_id="run-rule",
+            nct_id=nct_id,
+            parser_version=parser_version,
+            status="SUCCESS",
+            rule_count=10,
+            unknown_count=6,
+            parser_source="rule_v1",
+            fallback_used=False,
+            fallback_reason=None,
+            llm_budget_exceeded=False,
+        )
+
+    monkeypatch.setattr(tasks.psycopg, "connect", lambda _: fake_conn)
+    monkeypatch.setattr(tasks, "CTGovClient", lambda: _FakeClient())
+    monkeypatch.setattr(tasks, "_ensure_tables", lambda conn: None)
+    monkeypatch.setattr(tasks, "_write_sync_log", lambda *args, **kwargs: None)
+    monkeypatch.setattr(tasks, "_extract_trial", lambda study: {"nct_id": study["nct_id"]})
+    monkeypatch.setattr(tasks, "_upsert_trial", lambda conn, trial: True)
+    monkeypatch.setattr(tasks, "_recent_llm_usage_nct_ids", lambda *args, **kwargs: set())
+    monkeypatch.setattr(tasks, "parse_trial", _fake_parse_trial)
+
+    stats = sync_trials(condition="diabetes", status="RECRUITING", page_limit=1)
+
+    assert parse_calls == [("NCT123", "rule_v1"), ("NCT123", "llm_v1")]
+    assert stats.selective_llm_triggered == 1
+    assert stats.parser_source_breakdown == {"llm_v1": 1}
+
+
+def test_sync_trials_selective_llm_respects_max_per_run(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("DATABASE_URL", "postgresql://test:test@localhost:5432/testdb")
+    monkeypatch.setenv("SYNC_PARSER_VERSION", "rule_v1")
+    monkeypatch.setenv("SYNC_LLM_SELECTIVE", "1")
+    monkeypatch.setenv("SYNC_LLM_SELECTIVE_UNKNOWN_RATIO_THRESHOLD", "0.4")
+    monkeypatch.setenv("SYNC_LLM_SELECTIVE_UNKNOWN_RULES_MIN", "2")
+    monkeypatch.setenv("SYNC_LLM_SELECTIVE_MAX_LLM_CALLS_PER_RUN", "2")
+    monkeypatch.setenv("LLM_PARSER_ENABLED", "1")
+    monkeypatch.setenv("OPENAI_API_KEY", "test-key")
+
+    fake_conn = _FakeConn()
+
+    class _FakeClient:
+        def search_studies(self, condition, status=None, page_token=None, page_size=100):
+            return {
+                "studies": [{"nct_id": "NCT1"}, {"nct_id": "NCT2"}, {"nct_id": "NCT3"}],
+                "nextPageToken": None,
+            }
+
+    parse_calls = []
+
+    def _fake_parse_trial(nct_id: str, parser_version: str = "rule_v1") -> ParseStats:
+        parse_calls.append((nct_id, parser_version))
+        if parser_version == "llm_v1":
+            return ParseStats(
+                run_id="run-llm",
+                nct_id=nct_id,
+                parser_version=parser_version,
+                status="SUCCESS",
+                rule_count=10,
+                unknown_count=0,
+                parser_source="llm_v1",
+                fallback_used=False,
+                fallback_reason=None,
+                llm_budget_exceeded=False,
+            )
+        return ParseStats(
+            run_id="run-rule",
+            nct_id=nct_id,
+            parser_version=parser_version,
+            status="SUCCESS",
+            rule_count=10,
+            unknown_count=6,
+            parser_source="rule_v1",
+            fallback_used=False,
+            fallback_reason=None,
+            llm_budget_exceeded=False,
+        )
+
+    monkeypatch.setattr(tasks.psycopg, "connect", lambda _: fake_conn)
+    monkeypatch.setattr(tasks, "CTGovClient", lambda: _FakeClient())
+    monkeypatch.setattr(tasks, "_ensure_tables", lambda conn: None)
+    monkeypatch.setattr(tasks, "_write_sync_log", lambda *args, **kwargs: None)
+    monkeypatch.setattr(tasks, "_extract_trial", lambda study: {"nct_id": study["nct_id"]})
+    monkeypatch.setattr(tasks, "_upsert_trial", lambda conn, trial: True)
+    monkeypatch.setattr(tasks, "_recent_llm_usage_nct_ids", lambda *args, **kwargs: set())
+    monkeypatch.setattr(tasks, "parse_trial", _fake_parse_trial)
+
+    stats = sync_trials(condition="diabetes", status="RECRUITING", page_limit=1)
+
+    llm_calls = [call for call in parse_calls if call[1] == "llm_v1"]
+    assert len(llm_calls) == 2
+    assert stats.selective_llm_triggered == 2
+    assert stats.parser_source_breakdown == {"llm_v1": 2, "rule_v1": 1}
+    assert stats.selective_llm_skipped_breakdown["max per run"] == 1
+
+
+def test_sync_trials_backfill_parses_trials_without_criteria(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("DATABASE_URL", "postgresql://test:test@localhost:5432/testdb")
+    monkeypatch.setenv("SYNC_PARSER_VERSION", "rule_v1")
+    monkeypatch.setenv("SYNC_LLM_BACKFILL_ENABLED", "1")
+    monkeypatch.setenv("SYNC_LLM_BACKFILL_LIMIT", "2")
+
+    fake_conn = _FakeConn()
+
+    class _FakeClient:
+        def search_studies(self, condition, status=None, page_token=None, page_size=100):
+            return {"studies": [], "nextPageToken": None}
+
+    parse_calls = []
+
+    def _fake_parse_trial(nct_id: str, parser_version: str = "rule_v1") -> ParseStats:
+        parse_calls.append((nct_id, parser_version))
+        return ParseStats(
+            run_id="run-rule",
+            nct_id=nct_id,
+            parser_version=parser_version,
+            status="SUCCESS",
+            rule_count=5,
+            unknown_count=1,
+            parser_source="rule_v1",
+            fallback_used=False,
+            fallback_reason=None,
+            llm_budget_exceeded=False,
+        )
+
+    monkeypatch.setattr(tasks.psycopg, "connect", lambda _: fake_conn)
+    monkeypatch.setattr(tasks, "CTGovClient", lambda: _FakeClient())
+    monkeypatch.setattr(tasks, "_ensure_tables", lambda conn: None)
+    monkeypatch.setattr(tasks, "_write_sync_log", lambda *args, **kwargs: None)
+    monkeypatch.setattr(tasks, "_select_backfill_nct_ids", lambda *args, **kwargs: ["NCTB1", "NCTB2"])
+    monkeypatch.setattr(tasks, "parse_trial", _fake_parse_trial)
+
+    stats = sync_trials(condition="diabetes", status="RECRUITING", page_limit=1)
+
+    assert stats.backfill_selected == 2
+    assert parse_calls == [("NCTB1", "rule_v1"), ("NCTB2", "rule_v1")]
 
 
 def test_reparse_recent_trials_summary(monkeypatch: pytest.MonkeyPatch) -> None:

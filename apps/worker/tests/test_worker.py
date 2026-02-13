@@ -46,6 +46,9 @@ def test_main_logs_parse_success_rate(monkeypatch, caplog) -> None:
         parser_source_breakdown={"llm_v1": 2, "rule_v1": 1},
         fallback_reason_breakdown={"llm parser disabled": 1},
         llm_budget_exceeded_count=0,
+        backfill_selected=0,
+        selective_llm_triggered=0,
+        selective_llm_skipped_breakdown={},
     )
     monkeypatch.setattr(
         worker,
