@@ -36,6 +36,8 @@ def test_evaluate_trial_pass_path() -> None:
     }
     assert exclusion["age"] == "PASS"
     assert exclusion["sex"] == "PASS"
+    assert result["checklist"]["inclusion"][0]["rule_meta"]["field"] == "condition"
+    assert result["checklist"]["exclusion"][0]["rule_meta"]["field"] == "age"
 
 
 def test_evaluate_trial_fail_and_unknown_path() -> None:
@@ -64,11 +66,10 @@ def test_evaluate_trial_fail_and_unknown_path() -> None:
     assert "demographics.sex" in result["checklist"]["missing_info"]
     assert result["checklist"]["inclusion"][0]["verdict"] == "UNKNOWN"
 
-    exclusion = {
-        item["rule_id"]: item["verdict"] for item in result["checklist"]["exclusion"]
-    }
-    assert exclusion["age"] == "FAIL"
-    assert exclusion["sex"] == "UNKNOWN"
+    exclusion = {item["rule_id"]: item for item in result["checklist"]["exclusion"]}
+    assert exclusion["age"]["verdict"] == "FAIL"
+    assert exclusion["sex"]["verdict"] == "UNKNOWN"
+    assert exclusion["sex"]["evaluation_meta"]["missing_field"] == "demographics.sex"
 
 
 def test_evaluate_trial_prefers_parsed_criteria_rules() -> None:
@@ -117,15 +118,13 @@ def test_evaluate_trial_prefers_parsed_criteria_rules() -> None:
     assert result["score"] > 0
     assert result["checklist"]["missing_info"] == []
 
-    inclusion = {
-        item["rule_id"]: item["verdict"] for item in result["checklist"]["inclusion"]
-    }
-    exclusion = {
-        item["rule_id"]: item["verdict"] for item in result["checklist"]["exclusion"]
-    }
-    assert inclusion["rule-age"] == "PASS"
-    assert inclusion["rule-sex"] == "PASS"
-    assert exclusion["rule-exclusion"] == "PASS"
+    inclusion = {item["rule_id"]: item for item in result["checklist"]["inclusion"]}
+    exclusion = {item["rule_id"]: item for item in result["checklist"]["exclusion"]}
+    assert inclusion["rule-age"]["verdict"] == "PASS"
+    assert inclusion["rule-sex"]["verdict"] == "PASS"
+    assert exclusion["rule-exclusion"]["verdict"] == "PASS"
+    assert inclusion["rule-age"]["rule_meta"]["operator"] == ">="
+    assert exclusion["rule-exclusion"]["rule_meta"]["type"] == "EXCLUSION"
 
 
 def test_evaluate_trial_with_parsed_rules_keeps_condition_overlap() -> None:

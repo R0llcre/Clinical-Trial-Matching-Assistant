@@ -49,13 +49,51 @@ def _parse_age_to_years(value: Optional[str]) -> Optional[float]:
     return amount / 365.0
 
 
-def _rule(verdict: str, rule_id: str, evidence: str) -> Dict[str, str]:
-    return {"rule_id": rule_id, "verdict": verdict, "evidence": evidence}
+def _rule(
+    verdict: str,
+    rule_id: str,
+    evidence: str,
+    *,
+    rule_meta: Optional[Dict[str, Any]] = None,
+    evaluation_meta: Optional[Dict[str, Any]] = None,
+) -> Dict[str, Any]:
+    rule: Dict[str, Any] = {
+        "rule_id": rule_id,
+        "verdict": verdict,
+        "evidence": evidence,
+    }
+    if rule_meta is not None:
+        rule["rule_meta"] = rule_meta
+    if evaluation_meta is not None:
+        rule["evaluation_meta"] = evaluation_meta
+    return rule
+
+
+def _parsed_rule_meta(parsed_rule: Dict[str, Any]) -> Dict[str, Any]:
+    return {
+        "type": str(parsed_rule.get("type") or "").upper() or None,
+        "field": str(parsed_rule.get("field") or "").lower() or None,
+        "operator": str(parsed_rule.get("operator") or "").upper() or None,
+        "value": parsed_rule.get("value"),
+        "unit": parsed_rule.get("unit"),
+        "time_window": parsed_rule.get("time_window"),
+        "certainty": parsed_rule.get("certainty"),
+    }
+
+
+def _evaluation_meta(
+    *,
+    missing_field: Optional[str] = None,
+    reason: Optional[str] = None,
+) -> Optional[Dict[str, Any]]:
+    if not missing_field and not reason:
+        return None
+    return {"missing_field": missing_field, "reason": reason}
 
 
 def _summarize_match(
-    inclusion: List[Dict[str, str]],
-    exclusion: List[Dict[str, str]],
+    inclusion: List[Dict[str, Any]],
+    exclusion: List[Dict[str, Any]],
     missing_info: List[str],
 ) -> Dict[str, Any]:
     all_rules = inclusion + exclusion
@@ -82,7 +120,7 @@ def _summarize_match(
     }
 
 
-def _score_from_rules(rules: List[Dict[str, str]]) -> float:
+def _score_from_rules(rules: List[Dict[str, Any]]) -> float:
     score = 0.0
     for rule in rules:
         verdict = rule["verdict"]
@@ -111,17 +149,44 @@ def _tokenize(text: str) -> set[str]:
 
 def _evaluate_condition_overlap_rule(
     patient_profile: Dict[str, Any], trial: Dict[str, Any]
-) -> Tuple[Dict[str, str], Optional[str]]:
+) -> Tuple[Dict[str, Any], Optional[str]]:
     patient_conditions = _norm_text_list(patient_profile.get("conditions"))
     trial_conditions = _norm_text_list(trial.get("conditions"))
+    condition_meta = {
+        "type": "INCLUSION",
+        "field": "condition",
+        "operator": "IN",
+        "value": trial.get("conditions"),
+        "unit": None,
+        "time_window": None,
+        "certainty": "medium",
+    }
 
     if not patient_conditions:
         return (
-            _rule("UNKNOWN", "condition_match", "patient conditions are missing"),
+            _rule(
+                "UNKNOWN",
+                "condition_match",
+                "patient conditions are missing",
+                rule_meta=condition_meta,
+                evaluation_meta=_evaluation_meta(
+                    missing_field="conditions",
+                    reason="patient conditions are missing",
+                ),
+            ),
             "conditions",
         )
     if not trial_conditions:
-        return _rule("UNKNOWN", "condition_match", "trial conditions are missing"), None
+        return (
+            _rule(
+                "UNKNOWN",
+                "condition_match",
+                "trial conditions are missing",
+                rule_meta=condition_meta,
+                evaluation_meta=_evaluation_meta(reason="trial conditions are missing"),
+            ),
+            None,
+        )
 
     condition_pass = any(
         (pc in tc) or (tc in pc) or bool(_tokenize(pc) & _tokenize(tc))
@@ -129,7 +194,15 @@ def _evaluate_condition_overlap_rule(
         for tc in trial_conditions
     )
     verdict = "PASS" if condition_pass else "FAIL"
-    return _rule(verdict, "condition_match", "condition overlap check"), None
+    return (
+        _rule(
+            verdict,
+            "condition_match",
+            "condition overlap check",
+            rule_meta=condition_meta,
+        ),
+        None,
+    )
 
 
 def evaluate_trial(
@@ -146,8 +219,8 @@ def _evaluate_trial_with_parsed_rules(
     trial: Dict[str, Any],
     parsed_rules: List[Dict[str, Any]],
 ) -> Dict[str, Any]:
-    inclusion: List[Dict[str, str]] = []
-    exclusion: List[Dict[str, str]] = []
+    inclusion: List[Dict[str, Any]] = []
+    exclusion: List[Dict[str, Any]] = []
     missing_info: List[str] = []
     condition_overlap_verdict: Optional[str] = None
     parsed_condition_inclusion_pass = False
@@ -181,7 +254,18 @@ def _evaluate_trial_with_parsed_rules(
         fallback_id = f"rule-{len(inclusion) + len(exclusion)}"
         rule_id = str(parsed_rule.get("id") or fallback_id)
         evidence = str(parsed_rule.get("evidence_text") or "criteria rule")
-        checklist_rule = _rule(verdict, rule_id, evidence)
+        checklist_rule = _rule(
+            verdict,
+            rule_id,
+            evidence,
+            rule_meta=_parsed_rule_meta(parsed_rule),
+            evaluation_meta=_evaluation_meta(
+                missing_field=missing_field,
+                reason=(
+                    "missing required patient field" if missing_field else None
+                ),
+            ),
+        )
         if missing_field:
             missing_info.append(missing_field)
         if rule_type == "EXCLUSION":
@@ -376,8 +460,8 @@ def _evaluate_trial_legacy(
         patient_sex = None
 
     missing_info: List[str] = []
-    inclusion: List[Dict[str, str]] = []
-    exclusion: List[Dict[str, str]] = []
+    inclusion: List[Dict[str, Any]] = []
+    exclusion: List[Dict[str, Any]] = []
 
     condition_rule, missing_condition = _evaluate_condition_overlap_rule(
         patient_profile, trial
@@ -392,7 +476,26 @@ def _evaluate_trial_legacy(
 
     if patient_age is None:
         missing_info.append("demographics.age")
-        exclusion.append(_rule("UNKNOWN", "age", "patient age is missing"))
+        exclusion.append(
+            _rule(
+                "UNKNOWN",
+                "age",
+                "patient age is missing",
+                rule_meta={
+                    "type": "EXCLUSION",
+                    "field": "age",
+                    "operator": "RANGE",
+                    "value": {"min": minimum_age, "max": maximum_age},
+                    "unit": "years",
+                    "time_window": None,
+                    "certainty": "low",
+                },
+                evaluation_meta=_evaluation_meta(
+                    missing_field="demographics.age",
+                    reason="patient age is missing",
+                ),
+            )
+        )
     else:
         age_fail = (
             (minimum_age is not None and patient_age < minimum_age)
@@ -404,23 +507,90 @@ def _evaluate_trial_legacy(
                 age_verdict,
                 "age",
                 f"patient age {patient_age}, trial range {minimum_age} - {maximum_age}",
+                rule_meta={
+                    "type": "EXCLUSION",
+                    "field": "age",
+                    "operator": "RANGE",
+                    "value": {"min": minimum_age, "max": maximum_age},
+                    "unit": "years",
+                    "time_window": None,
+                    "certainty": "high",
+                },
             )
         )
 
     trial_sex = str(eligibility["sex"]).strip().lower()
     if not patient_sex:
         missing_info.append("demographics.sex")
-        exclusion.append(_rule("UNKNOWN", "sex", "patient sex is missing"))
+        exclusion.append(
+            _rule(
+                "UNKNOWN",
+                "sex",
+                "patient sex is missing",
+                rule_meta={
+                    "type": "EXCLUSION",
+                    "field": "sex",
+                    "operator": "=",
+                    "value": trial_sex,
+                    "unit": None,
+                    "time_window": None,
+                    "certainty": "low",
+                },
+                evaluation_meta=_evaluation_meta(
+                    missing_field="demographics.sex",
+                    reason="patient sex is missing",
+                ),
+            )
+        )
     elif trial_sex in {"all", "none", ""}:
-        exclusion.append(_rule("PASS", "sex", "trial accepts all sexes"))
+        exclusion.append(
+            _rule(
+                "PASS",
+                "sex",
+                "trial accepts all sexes",
+                rule_meta={
+                    "type": "EXCLUSION",
+                    "field": "sex",
+                    "operator": "=",
+                    "value": "all",
+                    "unit": None,
+                    "time_window": None,
+                    "certainty": "high",
+                },
+            )
+        )
     elif patient_sex == trial_sex:
-        exclusion.append(_rule("PASS", "sex", "patient sex matches trial requirement"))
+        exclusion.append(
+            _rule(
+                "PASS",
+                "sex",
+                "patient sex matches trial requirement",
+                rule_meta={
+                    "type": "EXCLUSION",
+                    "field": "sex",
+                    "operator": "=",
+                    "value": trial_sex,
+                    "unit": None,
+                    "time_window": None,
+                    "certainty": "high",
+                },
+            )
+        )
     else:
         exclusion.append(
             _rule(
                 "FAIL",
                 "sex",
                 f"patient sex {patient_sex} does not match trial sex {trial_sex}",
+                rule_meta={
+                    "type": "EXCLUSION",
+                    "field": "sex",
+                    "operator": "=",
+                    "value": trial_sex,
+                    "unit": None,
+                    "time_window": None,
+                    "certainty": "high",
+                },
             )
         )
 

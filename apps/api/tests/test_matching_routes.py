@@ -33,7 +33,26 @@ def test_create_match_ok(monkeypatch) -> None:
                 "score": 1.3,
                 "certainty": 0.66,
                 "checklist": {
-                    "inclusion": [],
+                    "inclusion": [
+                        {
+                            "rule_id": "rule-age",
+                            "verdict": "PASS",
+                            "evidence": "Age >= 18",
+                            "rule_meta": {
+                                "type": "INCLUSION",
+                                "field": "age",
+                                "operator": ">=",
+                                "value": 18,
+                                "unit": "years",
+                                "time_window": None,
+                                "certainty": "high",
+                            },
+                            "evaluation_meta": {
+                                "missing_field": None,
+                                "reason": None,
+                            },
+                        }
+                    ],
                     "exclusion": [],
                     "missing_info": [],
                 },
@@ -68,6 +87,10 @@ def test_create_match_ok(monkeypatch) -> None:
     assert payload["error"] is None
     assert isinstance(payload["data"]["match_id"], str)
     assert payload["data"]["results"][0]["nct_id"] == "NCT123"
+    assert (
+        payload["data"]["results"][0]["checklist"]["inclusion"][0]["rule_meta"]["field"]
+        == "age"
+    )
     assert captured["top_k"] == 5
     assert captured["filters"]["status"] == "RECRUITING"
     assert captured["age"] == 50

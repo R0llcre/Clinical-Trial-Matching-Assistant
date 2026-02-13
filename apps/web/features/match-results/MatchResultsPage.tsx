@@ -1,6 +1,5 @@
 import Link from "next/link";
 import { useRouter } from "next/router";
-import type { ReactNode } from "react";
 import { useEffect, useMemo, useState } from "react";
 import {
   AlertTriangle,
@@ -22,6 +21,7 @@ import { Pill } from "../../components/ui/Pill";
 import { Skeleton } from "../../components/ui/Skeleton";
 import { Toast } from "../../components/ui/Toast";
 import { API_BASE } from "../../lib/http/client";
+import { narrateRule } from "../../lib/rules/ruleNarrator";
 import {
   clearSessionToken,
   ensureSession as ensureSessionToken,
@@ -29,10 +29,27 @@ import {
 } from "../../lib/session/session";
 import styles from "./MatchResultsPage.module.css";
 
+type RuleMeta = {
+  type?: "INCLUSION" | "EXCLUSION" | string | null;
+  field?: string | null;
+  operator?: string | null;
+  value?: string | number | string[] | null | Record<string, unknown>;
+  unit?: string | null;
+  time_window?: string | null;
+  certainty?: "high" | "medium" | "low" | string | null;
+};
+
+type EvaluationMeta = {
+  missing_field?: string | null;
+  reason?: string | null;
+};
+
 type RuleVerdict = {
   rule_id: string;
   verdict: "PASS" | "FAIL" | "UNKNOWN";
   evidence: string;
+  rule_meta?: RuleMeta;
+  evaluation_meta?: EvaluationMeta;
 };
 
 type MatchResultItem = {
@@ -379,11 +396,59 @@ const verdictTone: Record<
   UNKNOWN: "warning",
 };
 
-const ruleBadgeLabel = (rule: RuleVerdict): ReactNode => {
-  if (!rule.rule_id) {
-    return null;
+const summarizeRule = (rule: RuleVerdict) => {
+  if (rule.rule_meta) {
+    return narrateRule({
+      type: rule.rule_meta.type,
+      field: rule.rule_meta.field,
+      operator: rule.rule_meta.operator,
+      value: rule.rule_meta.value as
+        | string
+        | number
+        | string[]
+        | null
+        | undefined,
+      unit: rule.rule_meta.unit,
+      time_window: rule.rule_meta.time_window,
+      certainty: rule.rule_meta.certainty,
+    });
   }
-  return <span className="rule-id">{rule.rule_id}</span>;
+  return rule.evidence || "Eligibility criterion";
+};
+
+const summarizeRuleMeta = (rule: RuleVerdict) => {
+  const meta = rule.rule_meta;
+  if (!meta) {
+    return "";
+  }
+  const details = [
+    meta.field ? `field: ${meta.field}` : null,
+    meta.operator ? `operator: ${meta.operator}` : null,
+    meta.value !== null && meta.value !== undefined
+      ? `value: ${
+          typeof meta.value === "object" ? JSON.stringify(meta.value) : String(meta.value)
+        }`
+      : null,
+    meta.unit ? `unit: ${meta.unit}` : null,
+    meta.time_window ? `window: ${meta.time_window}` : null,
+    meta.certainty ? `certainty: ${meta.certainty}` : null,
+  ].filter(Boolean);
+  return details.join(" · ");
+};
+
+const summarizeUnknownHint = (rule: RuleVerdict, missingInfo: string[]) => {
+  const missingField = rule.evaluation_meta?.missing_field?.trim();
+  if (missingField) {
+    return `Missing patient data: ${missingField}`;
+  }
+  const reason = rule.evaluation_meta?.reason?.trim();
+  if (reason) {
+    return reason;
+  }
+  if (rule.verdict === "UNKNOWN" && missingInfo.length > 0) {
+    return `Missing patient data: ${missingInfo.join(", ")}`;
+  }
+  return "";
 };
 
 export default function MatchResultsPage() {
@@ -551,6 +616,27 @@ export default function MatchResultsPage() {
         [passSectionKey(item.nct_id, "exclusion")]: !showExclusionPass,
       }));
 
+    const renderRuleItem = (rule: RuleVerdict, key: string) => {
+      const metaSummary = summarizeRuleMeta(rule);
+      const unknownHint = summarizeUnknownHint(rule, item.checklist.missing_info);
+      return (
+        <div key={key} className="result-rule">
+          <Pill tone={verdictTone[rule.verdict]}>{rule.verdict}</Pill>
+          <div className="result-rule__body">
+            <div className="result-rule__summary">{summarizeRule(rule)}</div>
+            {metaSummary ? <div className="result-rule__meta">{metaSummary}</div> : null}
+            {unknownHint ? <div className="result-rule__missing">{unknownHint}</div> : null}
+            <details className="result-rule__evidenceBox">
+              <summary>Evidence</summary>
+              <div className="result-rule__evidence">
+                {rule.evidence || "No evidence excerpt provided."}
+              </div>
+            </details>
+          </div>
+        </div>
+      );
+    };
+
     const openTrialHref = `/trials/${encodeURIComponent(item.nct_id)}`;
 
     return (
@@ -627,24 +713,12 @@ export default function MatchResultsPage() {
                   </div>
                 ) : (
                   <div className="result-rule-list">
-                    {inclusion.FAIL.map((rule) => (
-                      <div key={`inc-fail-${item.nct_id}-${rule.rule_id}`} className="result-rule">
-                        <Pill tone={verdictTone[rule.verdict]}>{rule.verdict}</Pill>
-                        <div className="result-rule__body">
-                          <div className="result-rule__evidence">{rule.evidence}</div>
-                          {ruleBadgeLabel(rule)}
-                        </div>
-                      </div>
-                    ))}
-                    {inclusion.UNKNOWN.map((rule) => (
-                      <div key={`inc-unk-${item.nct_id}-${rule.rule_id}`} className="result-rule">
-                        <Pill tone={verdictTone[rule.verdict]}>{rule.verdict}</Pill>
-                        <div className="result-rule__body">
-                          <div className="result-rule__evidence">{rule.evidence}</div>
-                          {ruleBadgeLabel(rule)}
-                        </div>
-                      </div>
-                    ))}
+                    {inclusion.FAIL.map((rule) =>
+                      renderRuleItem(rule, `inc-fail-${item.nct_id}-${rule.rule_id}`)
+                    )}
+                    {inclusion.UNKNOWN.map((rule) =>
+                      renderRuleItem(rule, `inc-unk-${item.nct_id}-${rule.rule_id}`)
+                    )}
                   </div>
                 )}
 
@@ -661,15 +735,9 @@ export default function MatchResultsPage() {
                     <div className="result-panel__empty">No passed inclusion checks.</div>
                   ) : (
                     <div className="result-rule-list">
-                      {inclusion.PASS.map((rule) => (
-                        <div key={`inc-pass-${item.nct_id}-${rule.rule_id}`} className="result-rule">
-                          <Pill tone={verdictTone[rule.verdict]}>{rule.verdict}</Pill>
-                          <div className="result-rule__body">
-                            <div className="result-rule__evidence">{rule.evidence}</div>
-                            {ruleBadgeLabel(rule)}
-                          </div>
-                        </div>
-                      ))}
+                      {inclusion.PASS.map((rule) =>
+                        renderRuleItem(rule, `inc-pass-${item.nct_id}-${rule.rule_id}`)
+                      )}
                     </div>
                   )}
                 </Accordion>
@@ -690,24 +758,12 @@ export default function MatchResultsPage() {
                   </div>
                 ) : (
                   <div className="result-rule-list">
-                    {exclusion.FAIL.map((rule) => (
-                      <div key={`exc-fail-${item.nct_id}-${rule.rule_id}`} className="result-rule">
-                        <Pill tone={verdictTone[rule.verdict]}>{rule.verdict}</Pill>
-                        <div className="result-rule__body">
-                          <div className="result-rule__evidence">{rule.evidence}</div>
-                          {ruleBadgeLabel(rule)}
-                        </div>
-                      </div>
-                    ))}
-                    {exclusion.UNKNOWN.map((rule) => (
-                      <div key={`exc-unk-${item.nct_id}-${rule.rule_id}`} className="result-rule">
-                        <Pill tone={verdictTone[rule.verdict]}>{rule.verdict}</Pill>
-                        <div className="result-rule__body">
-                          <div className="result-rule__evidence">{rule.evidence}</div>
-                          {ruleBadgeLabel(rule)}
-                        </div>
-                      </div>
-                    ))}
+                    {exclusion.FAIL.map((rule) =>
+                      renderRuleItem(rule, `exc-fail-${item.nct_id}-${rule.rule_id}`)
+                    )}
+                    {exclusion.UNKNOWN.map((rule) =>
+                      renderRuleItem(rule, `exc-unk-${item.nct_id}-${rule.rule_id}`)
+                    )}
                   </div>
                 )}
 
@@ -724,15 +780,9 @@ export default function MatchResultsPage() {
                     <div className="result-panel__empty">No passed exclusion checks.</div>
                   ) : (
                     <div className="result-rule-list">
-                      {exclusion.PASS.map((rule) => (
-                        <div key={`exc-pass-${item.nct_id}-${rule.rule_id}`} className="result-rule">
-                          <Pill tone={verdictTone[rule.verdict]}>{rule.verdict}</Pill>
-                          <div className="result-rule__body">
-                            <div className="result-rule__evidence">{rule.evidence}</div>
-                            {ruleBadgeLabel(rule)}
-                          </div>
-                        </div>
-                      ))}
+                      {exclusion.PASS.map((rule) =>
+                        renderRuleItem(rule, `exc-pass-${item.nct_id}-${rule.rule_id}`)
+                      )}
                     </div>
                   )}
                 </Accordion>

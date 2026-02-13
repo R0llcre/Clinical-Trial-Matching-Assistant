@@ -1619,10 +1619,47 @@ textarea {
   gap: 6px;
 }
 
+.result-rule__summary {
+  color: var(--ink);
+  font-size: 14px;
+  line-height: 1.5;
+  font-weight: 700;
+}
+
+.result-rule__meta {
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.result-rule__missing {
+  color: #9a3412;
+  font-size: 12px;
+  line-height: 1.45;
+  font-weight: 700;
+}
+
+.result-rule__evidenceBox {
+  margin-top: 2px;
+}
+
+.result-rule__evidenceBox > summary {
+  cursor: pointer;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+  list-style: none;
+}
+
+.result-rule__evidenceBox > summary::-webkit-details-marker {
+  display: none;
+}
+
 .result-rule__evidence {
   color: rgba(11, 18, 32, 0.84);
-  font-size: 14px;
+  font-size: 13px;
   line-height: 1.55;
+  margin-top: 6px;
 }
 
 .rule-id {
