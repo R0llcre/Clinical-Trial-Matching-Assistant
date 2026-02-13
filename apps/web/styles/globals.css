@@ -949,6 +949,12 @@ textarea {
   display: grid;
   gap: 16px;
   align-self: start;
+  /* Keep the filter rail fully reachable on shorter laptop viewports. */
+  max-height: calc(100vh - 104px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+  padding-right: 4px;
 }
 
 .browse-rail__card {
