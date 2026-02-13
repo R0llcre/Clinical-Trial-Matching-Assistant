@@ -27,7 +27,7 @@ jobs:
 
           echo ""
           echo "Checking for added docs/changes/YYYY-MM-DD_*.md..."
-          if git diff --name-status "${BASE_SHA}" "${HEAD_SHA}" | grep -Eq '^A[[:space:]]+docs/changes/[0-9]{4}-[0-9]{2}-[0-9]{2}_.+\\.md$'; then
+          if git diff --name-status "${BASE_SHA}" "${HEAD_SHA}" | grep -Eq '^A[[:space:]]+docs/changes/[0-9]{4}-[0-9]{2}-[0-9]{2}_.+\.md$'; then
             echo "OK: change note detected."
             exit 0
           fi
