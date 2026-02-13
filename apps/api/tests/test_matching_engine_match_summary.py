@@ -46,6 +46,7 @@ def test_match_summary_potential_with_small_parsed_rule_set() -> None:
     assert summary["unknown"] == 0
     assert summary["missing"] == 0
     assert summary["pass"] == 3
+    assert result["checklist"]["inclusion"][0]["rule_meta"]["field"] == "age"
 
 
 def test_match_summary_eligible_with_sufficient_parsed_rules() -> None:
@@ -199,6 +200,10 @@ def test_match_summary_potential_when_missing_patient_field() -> None:
     assert summary["tier"] == "POTENTIAL"
     assert summary["fail"] == 0
     assert summary["missing"] >= 1
+    assert (
+        result["checklist"]["exclusion"][0]["evaluation_meta"]["missing_field"]
+        == "history"
+    )
 
 
 def test_match_summary_ineligible_when_any_fail() -> None:

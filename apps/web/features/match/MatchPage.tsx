@@ -450,9 +450,19 @@ export default function MatchPage() {
     setLoading(true);
     setError(null);
 
-    if (!validateDemographics() || !validateConditions() || !validatePreferences()) {
+    if (!validateDemographics()) {
       setLoading(false);
       setStep("demographics");
+      return;
+    }
+    if (!validateConditions()) {
+      setLoading(false);
+      setStep("conditions");
+      return;
+    }
+    if (!validatePreferences()) {
+      setLoading(false);
+      setStep("preferences");
       return;
     }
 

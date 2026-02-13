@@ -155,12 +155,54 @@ MatchResultItem
   "score": 0.82,
   "certainty": 0.64,
   "checklist": {
-    "inclusion": [{"rule_id": "rule-1", "verdict": "PASS", "evidence": "..."}],
-    "exclusion": [{"rule_id": "rule-2", "verdict": "UNKNOWN", "evidence": "..."}],
+    "inclusion": [
+      {
+        "rule_id": "rule-1",
+        "verdict": "PASS",
+        "evidence": "...",
+        "rule_meta": {
+          "type": "INCLUSION",
+          "field": "age",
+          "operator": ">=",
+          "value": 18,
+          "unit": "years",
+          "time_window": null,
+          "certainty": "high"
+        },
+        "evaluation_meta": {
+          "missing_field": null,
+          "reason": null
+        }
+      }
+    ],
+    "exclusion": [
+      {
+        "rule_id": "rule-2",
+        "verdict": "UNKNOWN",
+        "evidence": "...",
+        "rule_meta": {
+          "type": "EXCLUSION",
+          "field": "history",
+          "operator": "EXISTS",
+          "value": "stroke",
+          "unit": null,
+          "time_window": null,
+          "certainty": "medium"
+        },
+        "evaluation_meta": {
+          "missing_field": "history",
+          "reason": "missing required patient field"
+        }
+      }
+    ],
     "missing_info": ["HbA1c"]
   }
 }
 ```
+
+Checklist rule object
+- `rule_meta` and `evaluation_meta` are optional and may be absent for older data.
+- Clients should degrade gracefully when these fields are missing.
 
 **示例请求**
 ```bash
