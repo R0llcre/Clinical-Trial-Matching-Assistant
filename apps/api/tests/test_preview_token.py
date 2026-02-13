@@ -3,6 +3,8 @@ from fastapi.testclient import TestClient
 
 from app.main import app
 
+TEST_SUB = "00000000-0000-0000-0000-000000000005"
+
 
 def test_preview_token_disabled_by_default(monkeypatch) -> None:
     monkeypatch.delenv("CTMA_PREVIEW_TOKEN_ENABLED", raising=False)
@@ -29,3 +31,20 @@ def test_preview_token_enabled_issues_jwt(monkeypatch) -> None:
     assert decoded["sub"] == "preview-user"
     assert decoded["role"] == "preview"
     assert "exp" in decoded
+
+
+def test_preview_token_accepts_uuid_sub_override(monkeypatch) -> None:
+    monkeypatch.setenv("CTMA_PREVIEW_TOKEN_ENABLED", "1")
+    monkeypatch.setenv("JWT_SECRET", "test-secret")
+    monkeypatch.setenv("JWT_ALGORITHM", "HS256")
+    monkeypatch.setenv("CTMA_PREVIEW_TOKEN_EXPIRES_SECONDS", "3600")
+    monkeypatch.setenv("CTMA_PREVIEW_TOKEN_SUB", "preview-user")
+
+    client = TestClient(app)
+    response = client.get(f"/api/auth/preview-token?sub={TEST_SUB}")
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["ok"] is True
+    token = payload["data"]["token"]
+    decoded = jwt.decode(token, "test-secret", algorithms=["HS256"])
+    assert decoded["sub"] == TEST_SUB

@@ -11,6 +11,10 @@ Base URL: /api
 时间字段: ISO 8601
 分页参数: page, page_size
 
+资源隔离:
+- `/api/patients*` 与 `/api/matches*` 数据按 token 的 `sub` 隔离
+- 不同 `sub` 无法互相读取对方数据（表现为 404）
+
 **通用错误码**
 VALIDATION_ERROR 输入校验失败
 UNAUTHORIZED 未登录或 token 无效
@@ -22,6 +26,16 @@ PARSER_FAILED 解析失败
 TRIAL_NOT_FOUND 试验不存在
 PATIENT_NOT_FOUND 患者画像不存在
 MATCH_NOT_FOUND 匹配结果不存在
+
+**Auth**
+GET /api/auth/preview-token
+目的: 预览环境签发短期 token（仅 demo/preview 使用）
+开关: CTMA_PREVIEW_TOKEN_ENABLED=1
+输入（query）
+- sub 可选，UUID 字符串；若提供且合法则用于 token 的 sub（用于同一浏览器稳定身份）
+输出
+- token
+- expires_seconds
 
 **Trials**
 GET /api/trials
@@ -104,6 +118,18 @@ GET /api/matches/{id}
 目的: 获取匹配详情
 认证: 必填
 错误: MATCH_NOT_FOUND
+
+GET /api/matches
+目的: 匹配历史列表（不返回 results_json）
+认证: 必填
+输入（query）
+- patient_profile_id 可选（UUID）
+- page, page_size
+输出
+- matches: [{id, patient_profile_id, query_json, created_at}]
+- total, page, page_size
+错误
+- VALIDATION_ERROR
 
 **System**
 GET /api/system/dataset-meta

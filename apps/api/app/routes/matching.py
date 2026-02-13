@@ -116,6 +116,19 @@ def _rate_limit_key(request: Request) -> str:
     return f"ratelimit:match:{client_id}"
 
 
+def _user_id_from_request(request: Request) -> Optional[str]:
+    claims = getattr(request.state, "auth_claims", None)
+    if not isinstance(claims, dict):
+        return None
+    subject = claims.get("sub")
+    if not isinstance(subject, str) or not subject.strip():
+        return None
+    try:
+        return str(uuid.UUID(subject.strip()))
+    except ValueError:
+        return None
+
+
 def _ensure_match_tables(engine: Engine) -> None:
     with engine.begin() as conn:
         conn.exec_driver_sql(_CREATE_TRIALS_TABLE_SQL)
@@ -125,18 +138,20 @@ def _ensure_match_tables(engine: Engine) -> None:
 
 
 def _load_patient_profile(
-    engine: Engine, patient_profile_id: str
+    engine: Engine, patient_profile_id: str, user_id: str
 ) -> Optional[Dict[str, Any]]:
     stmt = text(
         """
         SELECT profile_json
         FROM patient_profiles
-        WHERE id = :id
+        WHERE id = :id AND user_id = :user_id
         LIMIT 1
         """
     )
     with engine.begin() as conn:
-        row = conn.execute(stmt, {"id": patient_profile_id}).mappings().first()
+        row = conn.execute(
+            stmt, {"id": patient_profile_id, "user_id": user_id}
+        ).mappings().first()
     if not row:
         return None
     profile_json = row.get("profile_json")
@@ -177,6 +192,7 @@ def _save_match_result(
     *,
     match_id: str,
     patient_profile_id: str,
+    user_id: str,
     filters: Dict[str, Any],
     top_k: int,
     results: list[Dict[str, Any]],
@@ -195,7 +211,7 @@ def _save_match_result(
             stmt,
             {
                 "id": match_id,
-                "user_id": None,
+                "user_id": user_id,
                 "patient_profile_id": patient_profile_id,
                 "query_json": Json({"filters": filters, "top_k": top_k}),
                 "results_json": Json(results),
@@ -223,17 +239,33 @@ def _normalize_filters(raw_filters: Any) -> Dict[str, str]:
     return normalized
 
 
-def _get_match_by_id(engine: Engine, match_id: str) -> Optional[Dict[str, Any]]:
+def _parse_pagination(
+    page_raw: Optional[str], page_size_raw: Optional[str]
+) -> tuple[int, int]:
+    page = int(page_raw) if page_raw is not None else 1
+    page_size = int(page_size_raw) if page_size_raw is not None else 20
+    if page < 1 or page_size < 1 or page_size > 100:
+        raise ValueError("page or page_size out of range")
+    return page, page_size
+
+
+def _get_match_by_id(
+    engine: Engine, match_id: str, user_id: str
+) -> Optional[Dict[str, Any]]:
     stmt = text(
         """
         SELECT id, patient_profile_id, query_json, results_json, created_at
         FROM matches
-        WHERE id = :id
+        WHERE id = :id AND user_id = :user_id
         LIMIT 1
         """
     )
     with engine.begin() as conn:
-        row = conn.execute(stmt, {"id": match_id}).mappings().first()
+        row = (
+            conn.execute(stmt, {"id": match_id, "user_id": user_id})
+            .mappings()
+            .first()
+        )
     if not row:
         return None
     return {
@@ -247,12 +279,122 @@ def _get_match_by_id(engine: Engine, match_id: str) -> Optional[Dict[str, Any]]:
     }
 
 
+def _list_matches(
+    engine: Engine,
+    *,
+    user_id: str,
+    patient_profile_id: Optional[str],
+    page: int,
+    page_size: int,
+) -> tuple[list[Dict[str, Any]], int]:
+    where = "user_id = :user_id"
+    base_params: Dict[str, Any] = {"user_id": user_id}
+    if patient_profile_id:
+        where += " AND patient_profile_id = :patient_profile_id"
+        base_params["patient_profile_id"] = patient_profile_id
+
+    stmt_params: Dict[str, Any] = {
+        **base_params,
+        "limit": page_size,
+        "offset": (page - 1) * page_size,
+    }
+
+    stmt = text(
+        f"""
+        SELECT id, patient_profile_id, query_json, created_at
+        FROM matches
+        WHERE {where}
+        ORDER BY created_at DESC
+        LIMIT :limit OFFSET :offset
+        """
+    )
+    count_stmt = text(f"SELECT count(*) AS total FROM matches WHERE {where}")
+
+    with engine.begin() as conn:
+        total = conn.execute(count_stmt, base_params).mappings().first()
+        rows = conn.execute(stmt, stmt_params).mappings().all()
+
+    total_value = int(total["total"]) if total and total.get("total") is not None else 0
+    matches = [
+        {
+            "id": str(row["id"]),
+            "patient_profile_id": str(row["patient_profile_id"]),
+            "query_json": row["query_json"],
+            "created_at": row["created_at"].isoformat() if row["created_at"] else None,
+        }
+        for row in rows
+    ]
+    return matches, total_value
+
+
+@router.get("/api/matches")
+def list_matches(
+    request: Request,
+    patient_profile_id: Optional[str] = None,
+    page: Optional[str] = None,
+    page_size: Optional[str] = None,
+):
+    user_id = _user_id_from_request(request)
+    if not user_id:
+        return _error("UNAUTHORIZED", "invalid auth subject", 401)
+
+    try:
+        page_num, page_size_num = _parse_pagination(page, page_size)
+    except (ValueError, TypeError):
+        return _error(
+            "VALIDATION_ERROR",
+            "page and page_size must be valid integers between 1 and 100",
+            400,
+            {"page": page, "page_size": page_size},
+        )
+
+    normalized_patient_id: Optional[str] = None
+    if patient_profile_id is not None:
+        raw = patient_profile_id.strip()
+        if raw:
+            try:
+                normalized_patient_id = str(uuid.UUID(raw))
+            except ValueError:
+                return _error(
+                    "VALIDATION_ERROR",
+                    "patient_profile_id must be a valid UUID",
+                    400,
+                    {"patient_profile_id": patient_profile_id},
+                )
+
+    try:
+        engine = _get_engine()
+        _ensure_match_tables(engine)
+        matches, total = _list_matches(
+            engine,
+            user_id=user_id,
+            patient_profile_id=normalized_patient_id,
+            page=page_num,
+            page_size=page_size_num,
+        )
+    except (SQLAlchemyError, RuntimeError) as exc:
+        return _error("EXTERNAL_API_ERROR", f"Database unavailable: {exc}", 503)
+
+    return _ok(
+        {
+            "matches": matches,
+            "total": total,
+            "page": page_num,
+            "page_size": page_size_num,
+        }
+    )
+
+
 @router.post("/api/match")
 def create_match(payload: Dict[str, Any], request: Request):
     start = time.perf_counter()
     success = False
 
     try:
+        user_id = _user_id_from_request(request)
+        if not user_id:
+            return _error("UNAUTHORIZED", "invalid auth subject", 401)
+
         patient_profile_id = payload.get("patient_profile_id")
         raw_filters = payload.get("filters")
         top_k = payload.get("top_k", 10)
@@ -315,7 +457,9 @@ def create_match(payload: Dict[str, Any], request: Request):
 
         engine = _get_engine()
         _ensure_match_tables(engine)
-        patient_profile = _load_patient_profile(engine, patient_profile_id.strip())
+        patient_profile = _load_patient_profile(
+            engine, patient_profile_id.strip(), user_id
+        )
         if not patient_profile:
             return _error(
                 "PATIENT_NOT_FOUND",
@@ -335,6 +479,7 @@ def create_match(payload: Dict[str, Any], request: Request):
             engine,
             match_id=match_id,
             patient_profile_id=patient_profile_id.strip(),
+            user_id=user_id,
             filters=filters,
             top_k=top_k,
             results=results,
@@ -350,11 +495,15 @@ def create_match(payload: Dict[str, Any], request: Request):
 
 
 @router.get("/api/matches/{match_id}")
-def get_match(match_id: str):
+def get_match(match_id: str, request: Request):
+    user_id = _user_id_from_request(request)
+    if not user_id:
+        return _error("UNAUTHORIZED", "invalid auth subject", 401)
+
     try:
         engine = _get_engine()
         _ensure_match_tables(engine)
-        match = _get_match_by_id(engine, match_id)
+        match = _get_match_by_id(engine, match_id, user_id)
     except (SQLAlchemyError, RuntimeError) as exc:
         return _error("EXTERNAL_API_ERROR", f"Database unavailable: {exc}", 503)
 

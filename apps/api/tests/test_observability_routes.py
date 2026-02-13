@@ -5,9 +5,11 @@ from app.routes import matching as matching_module
 from app.services.auth import create_access_token
 from app.services.observability import reset_ops_metrics
 
+TEST_SUB = "00000000-0000-0000-0000-000000000004"
+
 
 def _auth_headers() -> dict:
-    token = create_access_token(sub="observability-test-user")
+    token = create_access_token(sub=TEST_SUB)
     return {"Authorization": f"Bearer {token}"}
 
 
@@ -34,17 +36,23 @@ def test_ops_metrics_track_match_success_and_failure(monkeypatch) -> None:
     monkeypatch.setattr(
         matching_module,
         "_load_patient_profile",
-        lambda engine, patient_profile_id: {"demographics": {"age": 40}},
+        lambda engine, patient_profile_id, user_id: {"demographics": {"age": 40}},
     )
     monkeypatch.setattr(
         matching_module,
         "match_trials",
         lambda engine, patient_profile, filters, top_k: [],
     )
+
+    def _fake_save(
+        engine, match_id, patient_profile_id, user_id, filters, top_k, results
+    ):
+        return None
+
     monkeypatch.setattr(
         matching_module,
         "_save_match_result",
-        lambda engine, match_id, patient_profile_id, filters, top_k, results: None,
+        _fake_save,
     )
 
     client = TestClient(app)
