@@ -1,0 +1,37 @@
+name: change-notes
+
+on:
+  pull_request:
+
+jobs:
+  require_change_note:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Require docs/changes note
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          BASE_SHA="${{ github.event.pull_request.base.sha }}"
+          HEAD_SHA="${{ github.event.pull_request.head.sha }}"
+
+          echo "Base: ${BASE_SHA}"
+          echo "Head: ${HEAD_SHA}"
+          echo ""
+          echo "Changed files:"
+          git diff --name-status "${BASE_SHA}" "${HEAD_SHA}"
+
+          echo ""
+          echo "Checking for added docs/changes/YYYY-MM-DD_*.md..."
+          if git diff --name-status "${BASE_SHA}" "${HEAD_SHA}" | grep -Eq '^A[[:space:]]+docs/changes/[0-9]{4}-[0-9]{2}-[0-9]{2}_.+\.md$'; then
+            echo "OK: change note detected."
+            exit 0
+          fi
+
+          echo "ERROR: missing change note."
+          echo "Add a file like: docs/changes/YYYY-MM-DD_<slug>.md"
+          exit 1
