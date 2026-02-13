@@ -191,7 +191,9 @@ MatchResultItem
         },
         "evaluation_meta": {
           "missing_field": null,
-          "reason": null
+          "reason": null,
+          "reason_code": null,
+          "required_action": null
         }
       }
     ],
@@ -211,7 +213,9 @@ MatchResultItem
         },
         "evaluation_meta": {
           "missing_field": "history",
-          "reason": "missing required patient field"
+          "reason": "missing required patient field",
+          "reason_code": "MISSING_FIELD",
+          "required_action": "ADD_HISTORY_TIMELINE"
         }
       }
     ],
@@ -223,6 +227,8 @@ MatchResultItem
 Checklist rule object
 - `rule_meta` and `evaluation_meta` are optional and may be absent for older data.
 - Clients should degrade gracefully when these fields are missing.
+- `evaluation_meta.reason_code` (optional): machine-readable reason, e.g. `MISSING_FIELD`, `UNSUPPORTED_OPERATOR`, `NO_EVIDENCE`, `INVALID_RULE_VALUE`.
+- `evaluation_meta.required_action` (optional): suggested next data collection step, e.g. `ADD_LAB_VALUE`, `ADD_HISTORY_TIMELINE`, `ADD_PROFILE_NOTES`.
 
 DatasetMeta
 ```json

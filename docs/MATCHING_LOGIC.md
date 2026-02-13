@@ -24,6 +24,12 @@ PASS: patient_profile 满足规则
 FAIL: patient_profile 明确不满足
 UNKNOWN: 信息不足或无法判断
 
+已支持的 parsed-rule 字段与算子（核心）:
+- `age`, `sex`, `condition`
+- `history`, `procedure`, `medication` (`EXISTS`, `NOT_EXISTS`, `IN`, `NOT_IN`, `NO_HISTORY`, `WITHIN_LAST`)
+- `lab` (`>=`, `<=`, `=`, `WITHIN_LAST`)
+- `other` (`EXISTS`, `NOT_EXISTS`, `IN`, `NOT_IN`)
+
 3. 硬规则过滤
 年龄、性别、明确排除项 FAIL -> 试验判定为 FAIL
 硬规则失败的试验仍可展示, 但排序降到末尾
@@ -46,6 +52,12 @@ certainty 次优先
 **缺失信息判定**
 - rule.field 在 profile 中缺失或为空
 - lab, medication, history 不存在时加入 missing_info
+- `evaluation_meta.reason_code` 会标注 UNKNOWN 原因：
+  - `MISSING_FIELD`
+  - `NO_EVIDENCE`
+  - `UNSUPPORTED_OPERATOR`
+  - `INVALID_RULE_VALUE`
+- `evaluation_meta.required_action` 给出建议补充动作（如 `ADD_LAB_VALUE`）
 
 **输出结构**
 ```json

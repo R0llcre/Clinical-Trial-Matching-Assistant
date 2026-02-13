@@ -50,6 +50,8 @@ def test_create_match_ok(monkeypatch) -> None:
                             "evaluation_meta": {
                                 "missing_field": None,
                                 "reason": None,
+                                "reason_code": None,
+                                "required_action": None,
                             },
                         }
                     ],
@@ -95,6 +97,12 @@ def test_create_match_ok(monkeypatch) -> None:
     assert (
         payload["data"]["results"][0]["checklist"]["inclusion"][0]["rule_meta"]["field"]
         == "age"
+    )
+    assert (
+        payload["data"]["results"][0]["checklist"]["inclusion"][0]["evaluation_meta"][
+            "reason_code"
+        ]
+        is None
     )
     assert captured["top_k"] == 5
     assert captured["filters"]["status"] == "RECRUITING"
