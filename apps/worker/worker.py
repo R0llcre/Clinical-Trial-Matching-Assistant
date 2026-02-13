@@ -66,7 +66,9 @@ def main() -> None:
             logger.info(
                 (
                     "sync run completed run_id=%s processed=%s inserted=%s updated=%s "
-                    "parse_success=%s parse_failed=%s parse_success_rate=%s"
+                    "parse_success=%s parse_failed=%s parse_success_rate=%s "
+                    "parser_version=%s parser_source_breakdown=%s "
+                    "fallback_reason_breakdown=%s llm_budget_exceeded_count=%s"
                 ),
                 stats.run_id,
                 stats.processed,
@@ -75,6 +77,10 @@ def main() -> None:
                 stats.parse_success,
                 stats.parse_failed,
                 stats.parse_success_rate,
+                stats.parser_version,
+                stats.parser_source_breakdown,
+                stats.fallback_reason_breakdown,
+                stats.llm_budget_exceeded_count,
             )
         except Exception:
             logger.exception("sync run failed")

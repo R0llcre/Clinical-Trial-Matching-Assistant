@@ -46,12 +46,18 @@ export IMAGE_TAG=$(date +%Y%m%d%H%M%S)
 export SYNC_CONDITION=cancer
 export SYNC_PAGE_LIMIT=1
 export SYNC_INTERVAL_SECONDS=3600
+export SYNC_PARSER_VERSION=llm_v1
+export LLM_PARSER_ENABLED=1
+export OPENAI_MODEL=gpt-4o-mini
+export LLM_DAILY_TOKEN_BUDGET=200000
 ```
 
 说明
 - `AZ_ACR_NAME` 需要全局唯一。若默认名称冲突，请改成带前缀后缀的唯一值。
 - 脚本会为 API 设置 `ALLOWED_ORIGINS=https://<web-domain>`，并在构建 Web 镜像时注入 `NEXT_PUBLIC_API_BASE=https://<api-domain>`。
 - 首次部署后，worker 会按 `SYNC_*` 参数周期拉取试验数据。
+- 启用 LLM 解析时，建议把 `OPENAI_API_KEY` 配成 Container Apps secret，并通过 `secretref:` 注入 worker。
+- 当 LLM 不可用或预算命中时，worker 会自动回退到 `rule_v1`，同步不中断。
 
 上线后验收
 ```bash
@@ -96,5 +102,10 @@ curl -fsS https://<api-domain>/api/ops/metrics | jq
   - `updated_at`
 - Worker 同步与解析统计日志（示例）：
 ```text
-sync run completed run_id=<id> processed=120 inserted=30 updated=90 parse_success=28 parse_failed=2 parse_success_rate=0.9333
+sync run completed run_id=<id> processed=120 inserted=30 updated=90 parse_success=28 parse_failed=2 parse_success_rate=0.9333 parser_version=llm_v1 parser_source_breakdown={'llm_v1': 20, 'rule_v1': 8} fallback_reason_breakdown={'OPENAI_API_KEY not set': 8} llm_budget_exceeded_count=0
+```
+
+- 按时间窗触发重解析（示例）：
+```bash
+python3 scripts/ops/reparse_recent_trials.py --parser-version llm_v1 --limit 200 --lookback-hours 72 --condition "heart failure"
 ```

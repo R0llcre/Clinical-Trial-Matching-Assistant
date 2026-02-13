@@ -4,10 +4,12 @@ import pytest
 
 import tasks
 from tasks import (
+    ParseStats,
     _build_query_term,
     _compute_coverage_stats,
     _extract_trial,
     parse_trial,
+    reparse_recent_trials,
     sync_trials,
 )
 
@@ -137,6 +139,10 @@ def test_parse_trial_success(monkeypatch: pytest.MonkeyPatch) -> None:
     assert stats.status == "SUCCESS"
     assert stats.rule_count == 1
     assert stats.unknown_count == 0
+    assert stats.parser_source == "rule_v1"
+    assert stats.fallback_used is False
+    assert stats.fallback_reason is None
+    assert stats.llm_budget_exceeded is False
     assert captured["trial_id"] == "trial-uuid"
     assert captured["coverage_stats"]["total_rules"] == 1
     assert captured["coverage_stats"]["failed_rules"] == 0
@@ -240,6 +246,10 @@ def test_parse_trial_llm_success(monkeypatch: pytest.MonkeyPatch) -> None:
     assert stats.status == "SUCCESS"
     assert stats.rule_count == 1
     assert stats.unknown_count == 0
+    assert stats.parser_source == "llm_v1"
+    assert stats.fallback_used is False
+    assert stats.fallback_reason is None
+    assert stats.llm_budget_exceeded is False
     assert captured["trial_id"] == "trial-uuid"
     assert captured["parser_version"] == "llm_v1"
     assert captured["coverage_stats"]["parser_source"] == "llm_v1"
@@ -320,6 +330,10 @@ def test_parse_trial_llm_fallback_success(monkeypatch: pytest.MonkeyPatch) -> No
     assert stats.status == "SUCCESS"
     assert stats.parser_version == "llm_v1"
     assert stats.rule_count == 1
+    assert stats.parser_source == "rule_v1"
+    assert stats.fallback_used is True
+    assert "disabled" in str(stats.fallback_reason)
+    assert stats.llm_budget_exceeded is False
     assert captured["parser_version"] == "llm_v1"
     assert captured["coverage_stats"]["parser_source"] == "rule_v1"
     assert captured["coverage_stats"]["fallback_used"] is True
@@ -392,6 +406,10 @@ def test_parse_trial_llm_budget_exceeded_skips_llm_parser(
     stats = parse_trial("NCT777", parser_version="llm_v1")
 
     assert stats.status == "SUCCESS"
+    assert stats.parser_source == "rule_v1"
+    assert stats.fallback_used is True
+    assert "budget exceeded" in str(stats.fallback_reason)
+    assert stats.llm_budget_exceeded is True
     assert captured["parser_version"] == "llm_v1"
     assert captured["coverage_stats"]["parser_source"] == "rule_v1"
     assert captured["coverage_stats"]["fallback_used"] is True
@@ -620,3 +638,101 @@ def test_sync_trials_tracks_auto_parse_failures(
     assert stats.parse_success == 0
     assert stats.parse_failed == 1
     assert stats.parse_success_rate == 0.0
+
+
+def test_sync_trials_uses_llm_parser_when_enabled(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("DATABASE_URL", "postgresql://test:test@localhost:5432/testdb")
+    monkeypatch.setenv("LLM_PARSER_ENABLED", "1")
+    fake_conn = _FakeConn()
+
+    class _FakeClient:
+        def search_studies(self, condition, status=None, page_token=None, page_size=100):
+            return {"studies": [{"stub": True}], "nextPageToken": None}
+
+    parse_calls = []
+
+    monkeypatch.setattr(tasks.psycopg, "connect", lambda _: fake_conn)
+    monkeypatch.setattr(tasks, "CTGovClient", lambda: _FakeClient())
+    monkeypatch.setattr(tasks, "_ensure_tables", lambda conn: None)
+    monkeypatch.setattr(tasks, "_write_sync_log", lambda *args, **kwargs: None)
+    monkeypatch.setattr(
+        tasks,
+        "_extract_trial",
+        lambda study: {"nct_id": "NCTLLM", "data_timestamp": None},
+    )
+    monkeypatch.setattr(tasks, "_upsert_trial", lambda conn, trial: True)
+    monkeypatch.setattr(
+        tasks,
+        "parse_trial",
+        lambda nct_id, parser_version="rule_v1": (
+            parse_calls.append((nct_id, parser_version))
+            or ParseStats(
+                run_id="run-llm",
+                nct_id=nct_id,
+                parser_version=parser_version,
+                status="SUCCESS",
+                rule_count=1,
+                unknown_count=0,
+                parser_source="llm_v1",
+                fallback_used=False,
+                fallback_reason=None,
+                llm_budget_exceeded=False,
+            )
+        ),
+    )
+
+    stats = sync_trials(condition="diabetes", status="RECRUITING", page_limit=1)
+
+    assert parse_calls == [("NCTLLM", "llm_v1")]
+    assert stats.parser_version == "llm_v1"
+    assert stats.parser_source_breakdown == {"llm_v1": 1}
+    assert stats.fallback_reason_breakdown == {}
+    assert stats.llm_budget_exceeded_count == 0
+
+
+def test_reparse_recent_trials_summary(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("DATABASE_URL", "postgresql://test:test@localhost:5432/testdb")
+    fake_conn = _FakeConn()
+
+    monkeypatch.setattr(tasks.psycopg, "connect", lambda _: fake_conn)
+    monkeypatch.setattr(tasks, "_ensure_tables", lambda conn: None)
+    monkeypatch.setattr(
+        tasks,
+        "_select_recent_trial_nct_ids",
+        lambda conn, lookback_hours, limit, condition, status: ["NCT1", "NCT2"],
+    )
+
+    def _fake_parse_trial(nct_id: str, parser_version: str = "llm_v1") -> ParseStats:
+        if nct_id == "NCT2":
+            raise RuntimeError("parse failed")
+        return ParseStats(
+            run_id="run-1",
+            nct_id=nct_id,
+            parser_version=parser_version,
+            status="SUCCESS",
+            rule_count=3,
+            unknown_count=1,
+            parser_source="rule_v1",
+            fallback_used=True,
+            fallback_reason="llm parser disabled",
+            llm_budget_exceeded=False,
+        )
+
+    monkeypatch.setattr(tasks, "parse_trial", _fake_parse_trial)
+
+    summary = reparse_recent_trials(
+        parser_version="llm_v1",
+        limit=20,
+        lookback_hours=48,
+        condition="asthma",
+        status="RECRUITING",
+    )
+
+    assert summary["selected"] == 2
+    assert summary["parsed_success"] == 1
+    assert summary["parsed_failed"] == 1
+    assert summary["parser_source_breakdown"] == {"rule_v1": 1}
+    assert summary["fallback_reason_breakdown"] == {"llm parser disabled": 1}
+    assert summary["llm_budget_exceeded_count"] == 0
