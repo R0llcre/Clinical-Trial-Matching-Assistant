@@ -12,6 +12,11 @@ AZ_API_APP="${AZ_API_APP:-ca-api-preview}"
 AZ_WEB_APP="${AZ_WEB_APP:-ca-web-preview}"
 AZ_WORKER_APP="${AZ_WORKER_APP:-ca-worker-preview}"
 
+AZ_WEB_MIN_REPLICAS="${AZ_WEB_MIN_REPLICAS:-1}"
+AZ_API_MIN_REPLICAS="${AZ_API_MIN_REPLICAS:-1}"
+AZ_WEB_MAX_REPLICAS="${AZ_WEB_MAX_REPLICAS:-1}"
+AZ_API_MAX_REPLICAS="${AZ_API_MAX_REPLICAS:-1}"
+
 AZ_PG_SERVER="${AZ_PG_SERVER:-pg-ctmatch-preview}"
 AZ_PG_DB="${AZ_PG_DB:-ctmatch}"
 AZ_PG_USER="${AZ_PG_USER:-ctmatchadmin}"
@@ -52,6 +57,10 @@ echo "  AZ_CONTAINERAPPS_ENV=${AZ_CONTAINERAPPS_ENV}"
 echo "  AZ_API_APP=${AZ_API_APP}"
 echo "  AZ_WEB_APP=${AZ_WEB_APP}"
 echo "  AZ_WORKER_APP=${AZ_WORKER_APP}"
+echo "  AZ_API_MIN_REPLICAS=${AZ_API_MIN_REPLICAS}"
+echo "  AZ_API_MAX_REPLICAS=${AZ_API_MAX_REPLICAS}"
+echo "  AZ_WEB_MIN_REPLICAS=${AZ_WEB_MIN_REPLICAS}"
+echo "  AZ_WEB_MAX_REPLICAS=${AZ_WEB_MAX_REPLICAS}"
 echo "  AZ_PG_SERVER=${AZ_PG_SERVER}"
 echo "  AZ_PG_DB=${AZ_PG_DB}"
 echo "  AZ_PG_USER=${AZ_PG_USER}"
@@ -166,6 +175,14 @@ az containerapp up \
     CTMA_PREVIEW_TOKEN_ENABLED="1" \
     ALLOWED_ORIGINS="https://placeholder.invalid"
 
+echo "Setting API scale (min=${AZ_API_MIN_REPLICAS}, max=${AZ_API_MAX_REPLICAS})..."
+az containerapp update \
+  --name "${AZ_API_APP}" \
+  --resource-group "${AZ_RESOURCE_GROUP}" \
+  --min-replicas "${AZ_API_MIN_REPLICAS}" \
+  --max-replicas "${AZ_API_MAX_REPLICAS}" \
+  --output none
+
 API_FQDN="$(az containerapp show --name "${AZ_API_APP}" --resource-group "${AZ_RESOURCE_GROUP}" --query properties.configuration.ingress.fqdn -o tsv)"
 API_BASE_URL="https://${API_FQDN}"
 
@@ -191,6 +208,14 @@ az containerapp up \
   --registry-server "${ACR_LOGIN_SERVER}" \
   --registry-username "${ACR_USERNAME}" \
   --registry-password "${ACR_PASSWORD}"
+
+echo "Setting Web scale (min=${AZ_WEB_MIN_REPLICAS}, max=${AZ_WEB_MAX_REPLICAS})..."
+az containerapp update \
+  --name "${AZ_WEB_APP}" \
+  --resource-group "${AZ_RESOURCE_GROUP}" \
+  --min-replicas "${AZ_WEB_MIN_REPLICAS}" \
+  --max-replicas "${AZ_WEB_MAX_REPLICAS}" \
+  --output none
 
 WEB_FQDN="$(az containerapp show --name "${AZ_WEB_APP}" --resource-group "${AZ_RESOURCE_GROUP}" --query properties.configuration.ingress.fqdn -o tsv)"
 WEB_ORIGIN="https://${WEB_FQDN}"
