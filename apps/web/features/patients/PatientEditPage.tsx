@@ -221,6 +221,7 @@ export default function PatientEditPage() {
 
   const focusSection = useMemo(() => sectionFromFocus(focusParam), [focusParam]);
   const [highlightSection, setHighlightSection] = useState<FocusSection>("");
+  const smartFocusAppliedRef = useRef(false);
 
   const demographicsRef = useRef<HTMLDivElement | null>(null);
   const conditionsRef = useRef<HTMLDivElement | null>(null);
@@ -334,9 +335,75 @@ export default function PatientEditPage() {
 
     setHighlightSection(focusSection);
     targetRef.current.scrollIntoView({ behavior: "smooth", block: "start" });
+
+    if (!smartFocusAppliedRef.current) {
+      smartFocusAppliedRef.current = true;
+
+      const focusKey = focusParam.trim();
+      const normalized = focusKey.toLowerCase();
+      const focusLater = (id: string) => {
+        window.setTimeout(() => {
+          const el = document.getElementById(id);
+          if (el && "focus" in el) {
+            (el as HTMLElement).focus();
+          }
+        }, 250);
+      };
+
+      const reserved = new Set([
+        "demographics.age",
+        "demographics.sex",
+        "age",
+        "sex",
+        "conditions",
+        "history",
+        "medications",
+        "procedures",
+        "labs",
+        "other",
+        "history_timeline",
+        "medications_timeline",
+        "procedures_timeline",
+        "labs_timeline",
+      ]);
+
+      if (normalized === "demographics.age" || normalized === "age") {
+        focusLater("patient-age");
+      } else if (normalized === "demographics.sex" || normalized === "sex") {
+        focusLater("patient-sex");
+      } else if (normalized === "conditions") {
+        focusLater("patient-conditions");
+      } else if (normalized === "labs_timeline") {
+        focusLater("lab-date-0");
+      } else if (normalized === "history_timeline") {
+        focusLater("history-date-0");
+      } else if (normalized === "medications_timeline") {
+        focusLater("medications-date-0");
+      } else if (normalized === "procedures_timeline") {
+        focusLater("procedures-date-0");
+      } else if (focusSection === "labs" && normalized && !reserved.has(normalized)) {
+        // Treat unknown focus values as a specific lab name (common for missing lab rules).
+        const labName = focusKey.trim();
+        if (labName) {
+          setLabRows((prev) => {
+            const current = prev.length > 0 ? [...prev] : [{ name: "", value: "", date: "" }];
+            const first = current[0];
+            const isFirstEmpty =
+              !first?.name?.trim() && !first?.value?.trim() && !first?.date?.trim();
+            if (isFirstEmpty) {
+              current[0] = { ...first, name: labName };
+              return current;
+            }
+            return [{ name: labName, value: "", date: "" }, ...current];
+          });
+          focusLater("lab-value-0");
+        }
+      }
+    }
+
     const timer = window.setTimeout(() => setHighlightSection(""), 3500);
     return () => window.clearTimeout(timer);
-  }, [focusSection, patientLoading, router.isReady]);
+  }, [focusParam, focusSection, patientLoading, router.isReady]);
 
   const validate = (): boolean => {
     const next: Record<string, string> = {};
@@ -484,15 +551,22 @@ export default function PatientEditPage() {
   const renderTimelineRows = (
     rows: TimelineRow[],
     setRows: (rows: TimelineRow[]) => void,
-    { nameLabel, dateLabel }: { nameLabel: string; dateLabel: string }
+    {
+      idPrefix,
+      nameLabel,
+      dateLabel,
+    }: { idPrefix: string; nameLabel: string; dateLabel: string }
   ) => {
     return (
       <div className={styles.rows}>
         {rows.map((row, idx) => (
           <div key={idx} className={styles.row}>
-            <Field label={idx === 0 ? nameLabel : ""} htmlFor={`${nameLabel}-${idx}`}>
+            <Field
+              label={idx === 0 ? nameLabel : ""}
+              htmlFor={`${idPrefix}-name-${idx}`}
+            >
               <Input
-                id={`${nameLabel}-${idx}`}
+                id={`${idPrefix}-name-${idx}`}
                 value={row.name}
                 onChange={(event) => {
                   const next = [...rows];
@@ -502,9 +576,12 @@ export default function PatientEditPage() {
                 placeholder="name"
               />
             </Field>
-            <Field label={idx === 0 ? dateLabel : ""} htmlFor={`${nameLabel}-date-${idx}`}>
+            <Field
+              label={idx === 0 ? dateLabel : ""}
+              htmlFor={`${idPrefix}-date-${idx}`}
+            >
               <Input
-                id={`${nameLabel}-date-${idx}`}
+                id={`${idPrefix}-date-${idx}`}
                 type="date"
                 value={row.date}
                 onChange={(event) => {
@@ -761,6 +838,7 @@ export default function PatientEditPage() {
               </div>
             </div>
             {renderTimelineRows(historyRows, setHistoryRows, {
+              idPrefix: "history",
               nameLabel: "History item",
               dateLabel: "Date",
             })}
@@ -781,6 +859,7 @@ export default function PatientEditPage() {
               </div>
             </div>
             {renderTimelineRows(medicationRows, setMedicationRows, {
+              idPrefix: "medications",
               nameLabel: "Medication",
               dateLabel: "Date",
             })}
@@ -798,6 +877,7 @@ export default function PatientEditPage() {
               </div>
             </div>
             {renderTimelineRows(procedureRows, setProcedureRows, {
+              idPrefix: "procedures",
               nameLabel: "Procedure",
               dateLabel: "Date",
             })}
