@@ -240,6 +240,17 @@ def _ensure_tables(conn: psycopg.Connection) -> None:
         )
         cur.execute(
             """
+            CREATE TABLE IF NOT EXISTS sync_cursors (
+              condition TEXT NOT NULL,
+              trial_status TEXT NOT NULL,
+              next_page_token TEXT,
+              updated_at TIMESTAMP NOT NULL,
+              PRIMARY KEY (condition, trial_status)
+            )
+            """
+        )
+        cur.execute(
+            """
             CREATE TABLE IF NOT EXISTS trial_criteria (
               id UUID PRIMARY KEY,
               trial_id UUID NOT NULL REFERENCES trials(id),
@@ -376,6 +387,69 @@ def _write_sync_log(
         )
 
 
+def _cursor_key_status(status: Optional[str]) -> str:
+    return (status or "").strip()
+
+
+def _read_sync_cursor(
+    conn: psycopg.Connection, *, condition: str, trial_status: str
+) -> Optional[str]:
+    condition = condition.strip()
+    trial_status = trial_status.strip()
+    with conn.cursor() as cur:
+        cur.execute(
+            """
+            SELECT next_page_token
+            FROM sync_cursors
+            WHERE condition = %s AND trial_status = %s
+            """,
+            (condition, trial_status),
+        )
+        row = cur.fetchone()
+    if not row or not row[0]:
+        return None
+    return str(row[0])
+
+
+def _write_sync_cursor(
+    conn: psycopg.Connection,
+    *,
+    condition: str,
+    trial_status: str,
+    next_page_token: Optional[str],
+) -> None:
+    condition = condition.strip()
+    trial_status = trial_status.strip()
+    with conn.cursor() as cur:
+        cur.execute(
+            """
+            INSERT INTO sync_cursors (
+              condition, trial_status, next_page_token, updated_at
+            ) VALUES (
+              %(condition)s, %(trial_status)s, %(next_page_token)s, %(updated_at)s
+            )
+            ON CONFLICT (condition, trial_status) DO UPDATE SET
+              next_page_token = EXCLUDED.next_page_token,
+              updated_at = EXCLUDED.updated_at
+            """,
+            {
+                "condition": condition,
+                "trial_status": trial_status,
+                "next_page_token": next_page_token,
+                "updated_at": dt.datetime.utcnow(),
+            },
+        )
+
+
+def _trial_total(conn: psycopg.Connection) -> int:
+    with conn.cursor() as cur:
+        cur.execute("SELECT COUNT(*) FROM trials")
+        row = cur.fetchone()
+    if not row:
+        return 0
+    return int(row[0] or 0)
+
+
 def _fetch_trial_for_parse(
     conn: psycopg.Connection, nct_id: str
 ) -> Optional[Dict[str, Any]]:
@@ -478,6 +552,16 @@ def _env_bool(name: str, default: bool = False) -> bool:
     if raw is None:
         return default
     return raw.strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _env_int(name: str, default: int) -> int:
+    raw = os.getenv(name)
+    if raw is None:
+        return default
+    try:
+        return int(raw)
+    except ValueError:
+        return default
 
 
 def _default_sync_parser_version() -> str:
@@ -632,6 +716,10 @@ def sync_trials(
     if not database_url:
         raise RuntimeError("DATABASE_URL not set")
 
+    progressive_backfill = _env_bool("SYNC_PROGRESSIVE_BACKFILL", False)
+    refresh_pages = max(1, _env_int("SYNC_REFRESH_PAGES", 1))
+    target_trial_total = max(0, _env_int("SYNC_TARGET_TRIAL_TOTAL", 0))
+
     run_id = str(uuid.uuid4())
     client = CTGovClient()
 
@@ -659,33 +747,133 @@ def sync_trials(
         conn.commit()
 
         try:
-            next_page_token: Optional[str] = None
-            while pages < page_limit:
-                page = client.search_studies(
-                    condition=condition,
-                    status=status,
-                    page_token=next_page_token,
-                    page_size=page_size,
-                )
-                pages += 1
+            if progressive_backfill:
+                # Always refresh the first N pages so newly added/updated studies
+                # get into the DB quickly, then backfill older pages over time.
+                refresh_pages = min(page_limit, refresh_pages)
+                backfill_pages = max(0, page_limit - refresh_pages)
 
-                studies = page.get("studies") or []
-                if not studies:
-                    break
+                cap_reached = False
+                if target_trial_total > 0 and _trial_total(conn) >= target_trial_total:
+                    cap_reached = True
+                    backfill_pages = 0
 
-                for study in studies:
-                    trial = _extract_trial(study)
-                    is_insert = _upsert_trial(conn, trial)
-                    processed += 1
-                    if is_insert:
-                        inserted += 1
-                        inserted_nct_ids.append(str(trial["nct_id"]))
-                    else:
-                        updated += 1
+                next_page_token: Optional[str] = None
+                refresh_next_page_token: Optional[str] = None
+                for _ in range(refresh_pages):
+                    page = client.search_studies(
+                        condition=condition,
+                        status=status,
+                        page_token=next_page_token,
+                        page_size=page_size,
+                    )
+                    pages += 1
 
-                next_page_token = page.get("nextPageToken")
-                if not next_page_token:
-                    break
+                    studies = page.get("studies") or []
+                    if not studies:
+                        break
+
+                    for study in studies:
+                        trial = _extract_trial(study)
+                        is_insert = _upsert_trial(conn, trial)
+                        processed += 1
+                        if is_insert:
+                            inserted += 1
+                            inserted_nct_ids.append(str(trial["nct_id"]))
+                        else:
+                            updated += 1
+
+                    next_page_token = page.get("nextPageToken")
+                    refresh_next_page_token = next_page_token
+                    if not next_page_token:
+                        break
+
+                cursor_written = False
+                if not cap_reached and backfill_pages > 0:
+                    status_key = _cursor_key_status(status)
+                    cursor = _read_sync_cursor(
+                        conn,
+                        condition=condition,
+                        trial_status=status_key,
+                    )
+                    backfill_token = cursor or refresh_next_page_token
+                    if backfill_token:
+                        next_page_token = backfill_token
+                        for _ in range(backfill_pages):
+                            page = client.search_studies(
+                                condition=condition,
+                                status=status,
+                                page_token=next_page_token,
+                                page_size=page_size,
+                            )
+                            pages += 1
+
+                            studies = page.get("studies") or []
+                            if not studies:
+                                next_page_token = None
+                                break
+
+                            for study in studies:
+                                trial = _extract_trial(study)
+                                is_insert = _upsert_trial(conn, trial)
+                                processed += 1
+                                if is_insert:
+                                    inserted += 1
+                                    inserted_nct_ids.append(str(trial["nct_id"]))
+                                else:
+                                    updated += 1
+
+                            next_page_token = page.get("nextPageToken")
+                            if not next_page_token:
+                                break
+
+                        _write_sync_cursor(
+                            conn,
+                            condition=condition,
+                            trial_status=status_key,
+                            next_page_token=next_page_token,
+                        )
+                        cursor_written = True
+
+                if cap_reached:
+                    LOGGER.info(
+                        "sync_trials progressive mode: cap reached target=%s; refresh only",
+                        target_trial_total,
+                    )
+                elif cursor_written:
+                    LOGGER.info(
+                        "sync_trials progressive mode: cursor updated condition=%s status=%s",
+                        condition,
+                        status,
+                    )
+            else:
+                next_page_token = None
+                while pages < page_limit:
+                    page = client.search_studies(
+                        condition=condition,
+                        status=status,
+                        page_token=next_page_token,
+                        page_size=page_size,
+                    )
+                    pages += 1
+
+                    studies = page.get("studies") or []
+                    if not studies:
+                        break
+
+                    for study in studies:
+                        trial = _extract_trial(study)
+                        is_insert = _upsert_trial(conn, trial)
+                        processed += 1
+                        if is_insert:
+                            inserted += 1
+                            inserted_nct_ids.append(str(trial["nct_id"]))
+                        else:
+                            updated += 1
+
+                    next_page_token = page.get("nextPageToken")
+                    if not next_page_token:
+                        break
 
             _write_sync_log(
                 conn,
