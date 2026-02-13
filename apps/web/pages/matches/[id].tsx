@@ -225,6 +225,127 @@ const downloadJson = (filename: string, data: unknown) => {
   URL.revokeObjectURL(url);
 };
 
+type MatchSummary = {
+  total: number;
+  eligible: number;
+  potential: number;
+  ineligible: number;
+};
+
+type ActiveFilter = {
+  key: string;
+  value: string;
+};
+
+const _MAX_PDF_ROWS = 12;
+
+const _formatDateTime = (value?: string | null) => {
+  if (!value) {
+    return "N/A";
+  }
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    return value;
+  }
+  return date.toLocaleString();
+};
+
+const exportMatchPdf = async ({
+  match,
+  filters,
+  summary,
+}: {
+  match: MatchData;
+  filters: ActiveFilter[];
+  summary: MatchSummary;
+}) => {
+  const { jsPDF } = await import("jspdf");
+  const doc = new jsPDF({ unit: "pt", format: "a4" });
+
+  const pageWidth = doc.internal.pageSize.getWidth();
+  const pageHeight = doc.internal.pageSize.getHeight();
+  const margin = 40;
+  const contentWidth = pageWidth - margin * 2;
+  let y = margin;
+
+  const ensureSpace = (neededHeight: number) => {
+    if (y + neededHeight <= pageHeight - margin) {
+      return;
+    }
+    doc.addPage();
+    y = margin;
+  };
+
+  const writeText = (
+    text: string,
+    {
+      size = 11,
+      weight = "normal" as "normal" | "bold",
+      spacingAfter = 12,
+    } = {}
+  ) => {
+    const lines = doc.splitTextToSize(text, contentWidth) as string[];
+    const lineHeight = size + 4;
+    ensureSpace(lines.length * lineHeight + spacingAfter);
+    doc.setFont("helvetica", weight);
+    doc.setFontSize(size);
+    for (const line of lines) {
+      doc.text(line, margin, y);
+      y += lineHeight;
+    }
+    y += spacingAfter;
+  };
+
+  writeText("Clinical Trial Matching Summary", {
+    size: 18,
+    weight: "bold",
+    spacingAfter: 8,
+  });
+  writeText(`Match ID: ${match.id}`, { size: 10, spacingAfter: 6 });
+  writeText(`Created: ${_formatDateTime(match.created_at)}`, {
+    size: 10,
+    spacingAfter: 16,
+  });
+
+  writeText("Patient & filters", { size: 13, weight: "bold", spacingAfter: 6 });
+  writeText(`Patient profile ID: ${match.patient_profile_id}`, { spacingAfter: 6 });
+  if (filters.length === 0) {
+    writeText("Filters: none", { spacingAfter: 14 });
+  } else {
+    writeText(
+      `Filters: ${filters.map((entry) => `${entry.key}=${entry.value}`).join(" | ")}`,
+      { spacingAfter: 14 }
+    );
+  }
+
+  writeText("Tier summary", { size: 13, weight: "bold", spacingAfter: 6 });
+  writeText(
+    `Strong match: ${summary.eligible} | Potential: ${summary.potential} | Not eligible: ${summary.ineligible} | Total: ${summary.total}`,
+    { spacingAfter: 14 }
+  );
+
+  writeText(`Top trials (first ${Math.min(match.results.length, _MAX_PDF_ROWS)})`, {
+    size: 13,
+    weight: "bold",
+    spacingAfter: 8,
+  });
+
+  const rows = match.results.slice(0, _MAX_PDF_ROWS);
+  if (rows.length === 0) {
+    writeText("No results in this match.", { spacingAfter: 0 });
+  } else {
+    rows.forEach((item, index) => {
+      const tier = tierLabel[tierFromItem(item)];
+      writeText(
+        `${index + 1}. ${item.nct_id} | ${tier} | score ${item.score.toFixed(2)}`
+      );
+      writeText(item.title || "(no title)", { size: 10, spacingAfter: 10 });
+    });
+  }
+
+  doc.save(`match-${match.id}.pdf`);
+};
+
 const pickFilters = (filters?: Record<string, string>) => {
   const entries = Object.entries(filters ?? {}).filter(([_, v]) => String(v).trim());
   return entries.map(([k, v]) => ({ key: k, value: String(v) }));
@@ -275,6 +396,8 @@ export default function MatchResultsPage() {
     {}
   );
   const [tierFilter, setTierFilter] = useState<TierFilter>("ALL");
+  const [exportingPdf, setExportingPdf] = useState(false);
+  const [exportPdfError, setExportPdfError] = useState<string | null>(null);
 
   const ensureSession = async () => {
     const saved = window.localStorage.getItem(SESSION_KEY)?.trim() ?? "";
@@ -677,6 +800,27 @@ export default function MatchResultsPage() {
     return [{ tier: tierFilter as MatchTier, items: visibleResults }];
   }, [data, groupedResults, tierFilter, visibleResults]);
 
+  const handleExportPdf = async () => {
+    if (!data) {
+      return;
+    }
+    setExportingPdf(true);
+    setExportPdfError(null);
+    try {
+      await exportMatchPdf({
+        match: data,
+        filters,
+        summary: resultsSummary,
+      });
+    } catch {
+      setExportPdfError(
+        "Unable to export PDF right now. Please retry or use Export JSON."
+      );
+    } finally {
+      setExportingPdf(false);
+    }
+  };
+
   return (
     <Shell
       kicker="Match results"
@@ -733,6 +877,14 @@ export default function MatchResultsPage() {
           tone="danger"
           title="Unable to load match"
           description={error}
+        />
+      ) : null}
+
+      {exportPdfError ? (
+        <Toast
+          tone="warning"
+          title="PDF export failed"
+          description={exportPdfError}
         />
       ) : null}
 
@@ -846,6 +998,17 @@ export default function MatchResultsPage() {
                     <RefreshCcw size={18} />
                   </span>
                   Refresh
+                </button>
+                <button
+                  type="button"
+                  className="ui-button ui-button--secondary ui-button--sm"
+                  onClick={() => void handleExportPdf()}
+                  disabled={exportingPdf}
+                >
+                  <span className="ui-button__icon" aria-hidden="true">
+                    <Download size={18} />
+                  </span>
+                  {exportingPdf ? "Exporting PDF..." : "Export PDF"}
                 </button>
                 <button
                   type="button"
