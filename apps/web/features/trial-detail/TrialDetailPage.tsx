@@ -195,6 +195,7 @@ export default function TrialDetailPage(props: TrialDetailPageProps) {
   );
   const [eligibilityExpanded, setEligibilityExpanded] = useState(false);
   const [openRules, setOpenRules] = useState<Record<string, boolean>>({});
+  const [criteriaFieldFilter, setCriteriaFieldFilter] = useState("all");
 
   const eligibilityText = trial?.eligibility_text ?? "";
   const eligibilityLines = eligibilityText ? eligibilityText.split("\n") : [];
@@ -209,6 +210,67 @@ export default function TrialDetailPage(props: TrialDetailPageProps) {
     trial?.criteria?.filter((rule) => rule.type === "INCLUSION") ?? [];
   const exclusionRules =
     trial?.criteria?.filter((rule) => rule.type === "EXCLUSION") ?? [];
+  const availableFieldCounts = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const rule of trial?.criteria ?? []) {
+      const key = String(rule.field ?? "").trim().toLowerCase();
+      if (!key) {
+        continue;
+      }
+      counts.set(key, (counts.get(key) ?? 0) + 1);
+    }
+    const items = Array.from(counts.entries()).map(([field, count]) => ({
+      field,
+      count,
+    }));
+    items.sort((a, b) => b.count - a.count || a.field.localeCompare(b.field));
+    return items;
+  }, [trial?.criteria]);
+
+  const filteredInclusionRules =
+    criteriaFieldFilter === "all"
+      ? inclusionRules
+      : inclusionRules.filter(
+          (rule) => String(rule.field).toLowerCase() === criteriaFieldFilter
+        );
+  const filteredExclusionRules =
+    criteriaFieldFilter === "all"
+      ? exclusionRules
+      : exclusionRules.filter(
+          (rule) => String(rule.field).toLowerCase() === criteriaFieldFilter
+        );
+
+  const fieldChipLabel = (raw: string) => {
+    const key = raw.trim().toLowerCase();
+    if (!key) {
+      return "Other";
+    }
+    if (key === "lab") {
+      return "Lab";
+    }
+    if (key === "sex") {
+      return "Sex";
+    }
+    if (key === "age") {
+      return "Age";
+    }
+    if (key === "condition") {
+      return "Condition";
+    }
+    if (key === "history") {
+      return "History";
+    }
+    if (key === "procedure") {
+      return "Procedure";
+    }
+    if (key === "medication") {
+      return "Medication";
+    }
+    if (key === "other") {
+      return "Other";
+    }
+    return key.replace(/\b\w/g, (match) => match.toUpperCase());
+  };
 
   const clinicalTrialsHref = trial?.nct_id
     ? `https://clinicaltrials.gov/study/${encodeURIComponent(trial.nct_id)}`
@@ -438,20 +500,61 @@ export default function TrialDetailPage(props: TrialDetailPageProps) {
                   </div>
 
                   {trial.criteria && trial.criteria.length > 0 ? (
-                    <div className="trial-rules">
+                    <>
+                      <div className={styles.fieldFilters}>
+                        <div className={styles.fieldFiltersLabel}>
+                          Filter by field
+                        </div>
+                        <div className={styles.fieldFiltersChips}>
+                          <button
+                            type="button"
+                            className={`${styles.fieldChip} ${
+                              criteriaFieldFilter === "all"
+                                ? styles.fieldChipActive
+                                : ""
+                            }`}
+                            aria-pressed={criteriaFieldFilter === "all"}
+                            onClick={() => setCriteriaFieldFilter("all")}
+                          >
+                            All <span className={styles.fieldChipCount}>{trial.criteria.length}</span>
+                          </button>
+                          {availableFieldCounts.map(({ field, count }) => (
+                            <button
+                              key={field}
+                              type="button"
+                              className={`${styles.fieldChip} ${
+                                criteriaFieldFilter === field
+                                  ? styles.fieldChipActive
+                                  : ""
+                              }`}
+                              aria-pressed={criteriaFieldFilter === field}
+                              onClick={() => setCriteriaFieldFilter(field)}
+                            >
+                              {fieldChipLabel(field)}{" "}
+                              <span className={styles.fieldChipCount}>{count}</span>
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+
+                      <div className="trial-rules">
                       <div className="trial-rules__section">
                         <div className="trial-rules__heading">
                           <div className="trial-rules__title">Inclusion</div>
-                          <div className="trial-rules__count">{inclusionRules.length}</div>
+                          <div className="trial-rules__count">
+                            {filteredInclusionRules.length}
+                          </div>
                         </div>
                         <div className="trial-rules__list">
-                          {inclusionRules.length === 0 ? (
+                          {filteredInclusionRules.length === 0 ? (
                             <div className="trial-rules__empty">
                               <XCircle size={18} aria-hidden="true" />
-                              No inclusion rules extracted.
+                              {criteriaFieldFilter === "all"
+                                ? "No inclusion rules extracted."
+                                : "No inclusion rules for this field."}
                             </div>
                           ) : (
-                            inclusionRules.map((rule) => (
+                            filteredInclusionRules.map((rule) => (
                               <Accordion
                                 key={rule.id}
                                 open={Boolean(openRules[rule.id])}
@@ -497,16 +600,20 @@ export default function TrialDetailPage(props: TrialDetailPageProps) {
                       <div className="trial-rules__section">
                         <div className="trial-rules__heading">
                           <div className="trial-rules__title">Exclusion</div>
-                          <div className="trial-rules__count">{exclusionRules.length}</div>
+                          <div className="trial-rules__count">
+                            {filteredExclusionRules.length}
+                          </div>
                         </div>
                         <div className="trial-rules__list">
-                          {exclusionRules.length === 0 ? (
+                          {filteredExclusionRules.length === 0 ? (
                             <div className="trial-rules__empty">
                               <CheckCircle2 size={18} aria-hidden="true" />
-                              No exclusion rules extracted.
+                              {criteriaFieldFilter === "all"
+                                ? "No exclusion rules extracted."
+                                : "No exclusion rules for this field."}
                             </div>
                           ) : (
-                            exclusionRules.map((rule) => (
+                            filteredExclusionRules.map((rule) => (
                               <Accordion
                                 key={rule.id}
                                 open={Boolean(openRules[rule.id])}
@@ -549,6 +656,7 @@ export default function TrialDetailPage(props: TrialDetailPageProps) {
                         </div>
                       </div>
                     </div>
+                    </>
                   ) : (
                     <EmptyState
                       title="No parsed criteria available"

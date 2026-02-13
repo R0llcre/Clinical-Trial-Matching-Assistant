@@ -2,6 +2,65 @@
   animation: detailFadeIn 220ms ease-out;
 }
 
+.fieldFilters {
+  margin-top: 14px;
+  display: grid;
+  gap: 10px;
+}
+
+.fieldFiltersLabel {
+  font-size: 12px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.fieldFiltersChips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.fieldChip {
+  appearance: none;
+  border: 1px solid var(--border);
+  background: var(--card);
+  color: var(--ink);
+  border-radius: 999px;
+  padding: 7px 12px;
+  font-size: 13px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  transition: transform 120ms ease, border-color 160ms ease,
+    background-color 160ms ease;
+}
+
+.fieldChip:hover {
+  border-color: var(--border-strong);
+  transform: translateY(-1px);
+}
+
+.fieldChip:focus-visible {
+  outline: none;
+  border-color: var(--focus-border);
+  box-shadow: var(--focus-ring);
+}
+
+.fieldChipActive {
+  border-color: rgba(11, 114, 133, 0.42);
+  background: rgba(11, 114, 133, 0.1);
+}
+
+.fieldChipCount {
+  font-size: 12px;
+  color: var(--muted);
+  background: rgba(15, 23, 42, 0.06);
+  padding: 1px 8px;
+  border-radius: 999px;
+}
+
 @keyframes detailFadeIn {
   from {
     opacity: 0;

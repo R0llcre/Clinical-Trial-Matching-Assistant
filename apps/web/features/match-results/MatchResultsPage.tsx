@@ -23,6 +23,10 @@ import { Toast } from "../../components/ui/Toast";
 import { API_BASE } from "../../lib/http/client";
 import { narrateRule } from "../../lib/rules/ruleNarrator";
 import {
+  friendlyMissingField,
+  narrateRequiredAction,
+} from "../../lib/rules/requiredActionNarrator";
+import {
   clearSessionToken,
   ensureSession as ensureSessionToken,
   getSessionToken,
@@ -42,6 +46,8 @@ type RuleMeta = {
 type EvaluationMeta = {
   missing_field?: string | null;
   reason?: string | null;
+  reason_code?: string | null;
+  required_action?: string | null;
 };
 
 type RuleVerdict = {
@@ -436,19 +442,24 @@ const summarizeRuleMeta = (rule: RuleVerdict) => {
   return details.join(" · ");
 };
 
-const summarizeUnknownHint = (rule: RuleVerdict, missingInfo: string[]) => {
-  const missingField = rule.evaluation_meta?.missing_field?.trim();
-  if (missingField) {
-    return `Missing patient data: ${missingField}`;
+const whyFromReasonCode = (reasonCode?: string | null) => {
+  const code = (reasonCode ?? "").trim().toUpperCase();
+  if (!code) {
+    return "";
   }
-  const reason = rule.evaluation_meta?.reason?.trim();
-  if (reason) {
-    return reason;
+  if (code === "MISSING_FIELD") {
+    return "Missing required patient data.";
   }
-  if (rule.verdict === "UNKNOWN" && missingInfo.length > 0) {
-    return `Missing patient data: ${missingInfo.join(", ")}`;
+  if (code === "NO_EVIDENCE") {
+    return "Not enough structured information to evaluate this criterion.";
   }
-  return "";
+  if (code === "UNSUPPORTED_OPERATOR") {
+    return "This criterion uses an operator not yet supported.";
+  }
+  if (code === "INVALID_RULE_VALUE") {
+    return "This criterion has an invalid or incomplete value.";
+  }
+  return "Unable to evaluate this criterion.";
 };
 
 export default function MatchResultsPage() {
@@ -470,6 +481,16 @@ export default function MatchResultsPage() {
   const [tierFilter, setTierFilter] = useState<TierFilter>("ALL");
   const [exportingPdf, setExportingPdf] = useState(false);
   const [exportPdfError, setExportPdfError] = useState<string | null>(null);
+
+  const showDebug = useMemo(() => {
+    const envEnabled = process.env.NEXT_PUBLIC_SHOW_AUTH_DEBUG === "1";
+    if (!router.isReady) {
+      return envEnabled;
+    }
+    const debugParam =
+      typeof router.query.debug === "string" ? router.query.debug : "";
+    return envEnabled || debugParam === "1";
+  }, [router.isReady, router.query.debug]);
 
   const ensureSession = async () => {
     const { token } = await ensureSessionToken({
@@ -618,14 +639,72 @@ export default function MatchResultsPage() {
 
     const renderRuleItem = (rule: RuleVerdict, key: string) => {
       const metaSummary = summarizeRuleMeta(rule);
-      const unknownHint = summarizeUnknownHint(rule, item.checklist.missing_info);
+      const reasonText = rule.evaluation_meta?.reason?.trim() || "";
+      const missingFieldRaw = rule.evaluation_meta?.missing_field?.trim() || "";
+      const missingFallback =
+        rule.verdict === "UNKNOWN" && item.checklist.missing_info.length > 0
+          ? item.checklist.missing_info.join(", ")
+          : "";
+      const missingText =
+        friendlyMissingField(missingFieldRaw) ||
+        friendlyMissingField(missingFallback) ||
+        missingFallback;
+      const whyText =
+        reasonText || whyFromReasonCode(rule.evaluation_meta?.reason_code);
+      const requiredAction = narrateRequiredAction({
+        requiredAction: rule.evaluation_meta?.required_action,
+        missingField: missingFieldRaw || missingFallback,
+        ruleMeta: rule.rule_meta,
+      });
+      const debugLine = [
+        rule.evaluation_meta?.reason_code
+          ? `reason_code=${rule.evaluation_meta.reason_code}`
+          : null,
+        rule.evaluation_meta?.required_action
+          ? `required_action=${rule.evaluation_meta.required_action}`
+          : null,
+        missingFieldRaw ? `missing_field=${missingFieldRaw}` : null,
+      ]
+        .filter(Boolean)
+        .join(" ");
       return (
         <div key={key} className="result-rule">
           <Pill tone={verdictTone[rule.verdict]}>{rule.verdict}</Pill>
           <div className="result-rule__body">
             <div className="result-rule__summary">{summarizeRule(rule)}</div>
             {metaSummary ? <div className="result-rule__meta">{metaSummary}</div> : null}
-            {unknownHint ? <div className="result-rule__missing">{unknownHint}</div> : null}
+            {rule.verdict === "UNKNOWN" ? (
+              <div className={styles.unknownCallout}>
+                {missingText ? (
+                  <div className={styles.unknownRow}>
+                    <div className={styles.unknownLabel}>Missing</div>
+                    <div className={styles.unknownValue}>{missingText}</div>
+                  </div>
+                ) : null}
+                {whyText ? (
+                  <div className={styles.unknownRow}>
+                    <div className={styles.unknownLabel}>Why</div>
+                    <div className={styles.unknownValue}>{whyText}</div>
+                  </div>
+                ) : null}
+                {requiredAction ? (
+                  <div className={styles.unknownRow}>
+                    <div className={styles.unknownLabel}>What to collect next</div>
+                    <div className={styles.unknownValue}>
+                      <div>{requiredAction.title}</div>
+                      {requiredAction.detail ? (
+                        <div className={styles.unknownDetail}>{requiredAction.detail}</div>
+                      ) : null}
+                    </div>
+                  </div>
+                ) : null}
+                {showDebug && debugLine ? (
+                  <div className={styles.unknownDebug}>{debugLine}</div>
+                ) : null}
+              </div>
+            ) : reasonText ? (
+              <div className="result-rule__missing">{reasonText}</div>
+            ) : null}
             <details className="result-rule__evidenceBox">
               <summary>Evidence</summary>
               <div className="result-rule__evidence">

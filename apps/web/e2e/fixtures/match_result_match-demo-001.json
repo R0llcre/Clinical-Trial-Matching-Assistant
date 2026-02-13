@@ -148,7 +148,9 @@
             },
             "evaluation_meta": {
               "missing_field": "eosinophils",
-              "reason": "No eosinophil lab value in profile"
+              "reason": "No eosinophil lab value in profile",
+              "reason_code": "MISSING_FIELD",
+              "required_action": "ADD_LAB_VALUE"
             }
           }
         ],
