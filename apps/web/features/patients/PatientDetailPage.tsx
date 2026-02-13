@@ -23,6 +23,7 @@ import { Select } from "../../components/ui/Select";
 import { Skeleton } from "../../components/ui/Skeleton";
 import { Toast } from "../../components/ui/Toast";
 import { ApiError } from "../../lib/http/client";
+import { isHiddenText } from "../../lib/profile/hidden";
 import { ensureSession, withSessionRetry } from "../../lib/session/session";
 
 import { createMatch, getPatient, listMatches } from "./api";
@@ -346,7 +347,9 @@ export default function PatientDetailPage() {
   const ageValue = typeof demo?.age === "number" ? Math.trunc(demo.age) : null;
   const sexValue = normalizeText(demo?.sex);
   const conditionsList = Array.isArray(patient?.profile_json?.conditions)
-    ? patient?.profile_json?.conditions.filter((entry) => normalizeText(entry))
+    ? patient.profile_json?.conditions
+        .map((entry) => normalizeText(entry))
+        .filter((entry) => entry && !isHiddenText(entry))
     : [];
 
   return (

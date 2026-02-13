@@ -14,6 +14,7 @@ import { Select } from "../../components/ui/Select";
 import { Skeleton } from "../../components/ui/Skeleton";
 import { Toast } from "../../components/ui/Toast";
 import { ApiError } from "../../lib/http/client";
+import { isHiddenText } from "../../lib/profile/hidden";
 import { ensureSession, withSessionRetry } from "../../lib/session/session";
 
 import { getPatient, updatePatient } from "./api";
@@ -276,7 +277,9 @@ export default function PatientEditPage() {
         setSex(normalizeText(demo?.sex) || "female");
 
         const conditionsList = Array.isArray(loaded.profile_json?.conditions)
-          ? loaded.profile_json.conditions.filter((entry) => normalizeText(entry))
+          ? loaded.profile_json.conditions
+              .map((entry) => normalizeText(entry))
+              .filter((entry) => entry && !isHiddenText(entry))
           : [];
         setConditionsText(conditionsList.join("\n"));
 
@@ -286,7 +289,9 @@ export default function PatientEditPage() {
         setLabRows(labRowsFromProfile(loaded.profile_json?.labs));
 
         const otherList = Array.isArray(loaded.profile_json?.other)
-          ? loaded.profile_json.other.filter((entry) => normalizeText(entry))
+          ? loaded.profile_json.other
+              .map((entry) => normalizeText(entry))
+              .filter((entry) => entry && !isHiddenText(entry))
           : [];
         setOtherText(otherList.join("\n"));
       } catch (err) {
