@@ -11,6 +11,7 @@ import { Select } from "../../components/ui/Select";
 import { Skeleton } from "../../components/ui/Skeleton";
 import { Toast } from "../../components/ui/Toast";
 import { ApiError } from "../../lib/http/client";
+import { isHiddenText } from "../../lib/profile/hidden";
 import { ensureSession, withSessionRetry } from "../../lib/session/session";
 
 import { listPatients } from "./api";
@@ -29,7 +30,8 @@ const patientPrimaryCondition = (patient: Patient): string => {
   if (!Array.isArray(conditions) || conditions.length === 0) {
     return "Patient profile";
   }
-  return conditions[0] || "Patient profile";
+  const primary = conditions.find((entry) => typeof entry === "string" && !isHiddenText(entry));
+  return primary || conditions[0] || "Patient profile";
 };
 
 const patientSummary = (patient: Patient): string => {
@@ -227,7 +229,12 @@ export default function PatientsListPage() {
                   const summary = patientSummary(patient);
                   const created = formatDate(patient.created_at);
                   const conditionCount = Array.isArray(patient.profile_json?.conditions)
-                    ? patient.profile_json.conditions.length
+                    ? patient.profile_json.conditions.filter(
+                        (entry) =>
+                          typeof entry === "string" &&
+                          entry.trim() &&
+                          !isHiddenText(entry)
+                      ).length
                     : 0;
                   return (
                     <div key={patient.id} className={styles.patientRow}>

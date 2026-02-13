@@ -22,6 +22,7 @@ import { Pill } from "../../components/ui/Pill";
 import { Select } from "../../components/ui/Select";
 import { Toast } from "../../components/ui/Toast";
 import { API_BASE, fetchJson } from "../../lib/http/client";
+import { asHiddenText } from "../../lib/profile/hidden";
 import {
   clearSessionToken,
   ensureSession as ensureSessionToken,
@@ -65,10 +66,83 @@ type DemoProfile = {
   history?: string[];
   medications?: string[];
   procedures?: string[];
+  hiddenConditions?: string[];
+  hiddenOther?: string[];
+  hiddenHistory?: string[];
+  hiddenLabs?: Array<{
+    name: string;
+    value: number;
+    date?: string;
+  }>;
+  filterConditionOverride?: string;
   topK?: string;
 };
 
 const DEMO_PROFILES: DemoProfile[] = [
+  {
+    label: "Perfect match example: Pediatric asthma (female, 10)",
+    age: "10",
+    sex: "female",
+    conditions: "Asthma",
+    status: "RECRUITING",
+    phase: "",
+    hiddenConditions: [
+      "an established effect on renal function",
+      "documented",
+      "or without treatment",
+      "short acting theophylline preparations within two weeks",
+      "study evaluation or optimal participation in the",
+      "study treatment or",
+      "the patient",
+      "the preferred and usual lifestyle of the",
+    ],
+    hiddenOther: ["unparsed inclusion criteria"],
+    hiddenLabs: [{ name: "value", value: 12.0, date: "2000-01-01" }],
+    topK: "10",
+  },
+  {
+    label: "Perfect match example: AML trial (female, 45)",
+    age: "45",
+    sex: "female",
+    conditions: "Acute Myeloid Leukemia (AML)",
+    status: "RECRUITING",
+    phase: "",
+    filterConditionOverride: "Acute Myeloid Leukemia",
+    hiddenConditions: [
+      "any aspect of study conduct or interpretation",
+      "histologically documented",
+      "immuno or chemotherapy within the previous 12",
+      "specific genetic abnormalities",
+      "the",
+      "the ability of the participant to complete",
+      "the investigator or follow the protocol for",
+      "the medical monitor and bio path holdings",
+      "venetoclax until b cell recovery occurs",
+    ],
+    hiddenOther: ["unparsed inclusion criteria"],
+    hiddenLabs: [
+      { name: "value", value: 20.0, date: "2000-01-01" },
+      { name: "value", value: 141.0, date: "2000-01-01" },
+    ],
+    topK: "10",
+  },
+  {
+    label: "Perfect match example: Gastric cancer microbiota (female, 45)",
+    age: "45",
+    sex: "female",
+    conditions: "Gastric Cancer",
+    status: "RECRUITING",
+    phase: "",
+    filterConditionOverride: "mucosal brushing",
+    hiddenConditions: [
+      "Cancer",
+      "pathological",
+      "pathological diagnosis of high grade dysplasia or",
+    ],
+    hiddenOther: ["unparsed inclusion criteria"],
+    hiddenHistory: ["2", "4"],
+    topK: "10",
+  },
   {
     label: "Breast cancer (female, 45)",
     age: "45",
@@ -224,6 +298,13 @@ export default function MatchPage() {
   const [demoHistory, setDemoHistory] = useState<string[]>([]);
   const [demoMedications, setDemoMedications] = useState<string[]>([]);
   const [demoProcedures, setDemoProcedures] = useState<string[]>([]);
+  const [hiddenConditions, setHiddenConditions] = useState<string[]>([]);
+  const [hiddenOther, setHiddenOther] = useState<string[]>([]);
+  const [hiddenHistory, setHiddenHistory] = useState<string[]>([]);
+  const [hiddenLabs, setHiddenLabs] = useState<
+    Array<{ name: string; value: number; date?: string }>
+  >([]);
+  const [filterConditionOverride, setFilterConditionOverride] = useState("");
   const [status, setStatus] = useState("");
   const [phase, setPhase] = useState("");
   const [topK, setTopK] = useState("10");
@@ -359,6 +440,11 @@ export default function MatchPage() {
       setDemoHistory([]);
       setDemoMedications([]);
       setDemoProcedures([]);
+      setHiddenConditions([]);
+      setHiddenOther([]);
+      setHiddenHistory([]);
+      setHiddenLabs([]);
+      setFilterConditionOverride("");
       return;
     }
     setAge(selected.age);
@@ -367,6 +453,11 @@ export default function MatchPage() {
     setDemoHistory(selected.history ?? []);
     setDemoMedications(selected.medications ?? []);
     setDemoProcedures(selected.procedures ?? []);
+    setHiddenConditions((selected.hiddenConditions ?? []).map(asHiddenText));
+    setHiddenOther((selected.hiddenOther ?? []).map(asHiddenText));
+    setHiddenHistory((selected.hiddenHistory ?? []).map(asHiddenText));
+    setHiddenLabs(selected.hiddenLabs ?? []);
+    setFilterConditionOverride(selected.filterConditionOverride ?? "");
     setStatus(selected.status);
     setPhase(selected.phase);
     if (selected.topK) {
@@ -469,6 +560,8 @@ export default function MatchPage() {
     const parsedAge = Number(age);
     const parsedTopK = Number(topK);
     const conditionList = parseConditionList(conditions);
+    const requestCondition =
+      filterConditionOverride.trim() || conditionList[0] || "";
 
     const token = getSessionToken();
     if (!token) {
@@ -493,21 +586,35 @@ export default function MatchPage() {
     }
 
     try {
+      const mergedConditions = Array.from(
+        new Set(
+          [...conditionList, ...hiddenConditions]
+            .map((value) => value.trim())
+            .filter(Boolean)
+        )
+      );
+      const mergedHistory = [...demoHistory, ...hiddenHistory].filter(Boolean);
       const profileJson: Record<string, unknown> = {
         demographics: {
           age: parsedAge,
           sex,
         },
-        conditions: conditionList,
+        conditions: mergedConditions,
       };
-      if (demoHistory.length > 0) {
-        profileJson.history = demoHistory;
+      if (mergedHistory.length > 0) {
+        profileJson.history = mergedHistory;
       }
       if (demoMedications.length > 0) {
         profileJson.medications = demoMedications;
       }
       if (demoProcedures.length > 0) {
         profileJson.procedures = demoProcedures;
+      }
+      if (hiddenOther.length > 0) {
+        profileJson.other = hiddenOther;
+      }
+      if (hiddenLabs.length > 0) {
+        profileJson.labs = hiddenLabs;
       }
 
       const { response: patientResponse, payload: patientPayload } =
@@ -524,7 +631,7 @@ export default function MatchPage() {
           patient_profile_id: patientPayload.data.id,
           top_k: parsedTopK,
           filters: {
-            condition: conditionList[0] || "",
+            condition: requestCondition,
             status,
             phase,
           },
