@@ -58,6 +58,7 @@ export SYNC_INTERVAL_SECONDS=3600
 curl -fsS https://<api-domain>/health
 curl -fsS https://<api-domain>/readyz
 curl -fsS "https://<api-domain>/api/trials?page=1&page_size=5"
+curl -fsS https://<api-domain>/api/ops/metrics
 ```
 
 手工功能验收
@@ -80,3 +81,19 @@ python3 scripts/gen_dev_jwt.py
 - 限制 PostgreSQL/Redis 访问网络策略
 - JWT 密钥轮换
 - ACR 凭证与容器密钥改用 Managed Identity
+
+可观测性（预览最小闭环）
+- API 匹配指标：
+```bash
+curl -fsS https://<api-domain>/api/ops/metrics | jq
+```
+- 关键字段：
+  - `match.requests_total`
+  - `match.success_total`
+  - `match.failure_total`
+  - `match.avg_duration_ms`
+  - `updated_at`
+- Worker 同步与解析统计日志（示例）：
+```text
+sync run completed run_id=<id> processed=120 inserted=30 updated=90 parse_success=28 parse_failed=2 parse_success_rate=0.9333
+```

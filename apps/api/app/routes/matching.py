@@ -1,5 +1,6 @@
 import datetime as dt
 import os
+import time
 import uuid
 from typing import Any, Dict, Optional
 
@@ -11,6 +12,7 @@ from sqlalchemy.engine import Engine, create_engine
 from sqlalchemy.exc import SQLAlchemyError
 
 from app.services.matching_engine import match_trials
+from app.services.observability import record_match_request
 from app.services.rate_limiter import get_match_rate_limiter
 
 router = APIRouter()
@@ -227,60 +229,68 @@ def _get_match_by_id(engine: Engine, match_id: str) -> Optional[Dict[str, Any]]:
 
 @router.post("/api/match")
 def create_match(payload: Dict[str, Any], request: Request):
-    patient_profile_id = payload.get("patient_profile_id")
-    filters = payload.get("filters") or {}
-    top_k = payload.get("top_k", 10)
-
-    if not isinstance(patient_profile_id, str) or not patient_profile_id.strip():
-        return _error(
-            "VALIDATION_ERROR",
-            "patient_profile_id is required",
-            400,
-            {"patient_profile_id": patient_profile_id},
-        )
-
-    if isinstance(top_k, bool) or not isinstance(top_k, int) or top_k < 1 or top_k > 50:
-        return _error(
-            "VALIDATION_ERROR",
-            "top_k must be an integer between 1 and 50",
-            400,
-            {"top_k": top_k},
-        )
-
-    if not isinstance(filters, dict):
-        return _error(
-            "VALIDATION_ERROR",
-            "filters must be a JSON object",
-            400,
-            {"filters": filters},
-        )
-
-    limit_per_minute = _env_int("MATCH_RATE_LIMIT_PER_MINUTE", 30)
-    if limit_per_minute > 0:
-        decision = get_match_rate_limiter().allow(
-            key=_rate_limit_key(request),
-            limit=limit_per_minute,
-            window_seconds=60,
-        )
-        if not decision.allowed:
-            response = _error(
-                "RATE_LIMITED",
-                "too many match requests; please retry later",
-                429,
-                {
-                    "limit": decision.limit,
-                    "remaining": decision.remaining,
-                    "reset_seconds": decision.reset_seconds,
-                    "backend": decision.backend,
-                },
-            )
-            response.headers["Retry-After"] = str(decision.retry_after_seconds)
-            response.headers["X-RateLimit-Limit"] = str(decision.limit)
-            response.headers["X-RateLimit-Remaining"] = str(decision.remaining)
-            response.headers["X-RateLimit-Reset"] = str(decision.reset_seconds)
-            return response
+    start = time.perf_counter()
+    success = False
 
     try:
+        patient_profile_id = payload.get("patient_profile_id")
+        filters = payload.get("filters") or {}
+        top_k = payload.get("top_k", 10)
+
+        if not isinstance(patient_profile_id, str) or not patient_profile_id.strip():
+            return _error(
+                "VALIDATION_ERROR",
+                "patient_profile_id is required",
+                400,
+                {"patient_profile_id": patient_profile_id},
+            )
+
+        if (
+            isinstance(top_k, bool)
+            or not isinstance(top_k, int)
+            or top_k < 1
+            or top_k > 50
+        ):
+            return _error(
+                "VALIDATION_ERROR",
+                "top_k must be an integer between 1 and 50",
+                400,
+                {"top_k": top_k},
+            )
+
+        if not isinstance(filters, dict):
+            return _error(
+                "VALIDATION_ERROR",
+                "filters must be a JSON object",
+                400,
+                {"filters": filters},
+            )
+
+        limit_per_minute = _env_int("MATCH_RATE_LIMIT_PER_MINUTE", 30)
+        if limit_per_minute > 0:
+            decision = get_match_rate_limiter().allow(
+                key=_rate_limit_key(request),
+                limit=limit_per_minute,
+                window_seconds=60,
+            )
+            if not decision.allowed:
+                response = _error(
+                    "RATE_LIMITED",
+                    "too many match requests; please retry later",
+                    429,
+                    {
+                        "limit": decision.limit,
+                        "remaining": decision.remaining,
+                        "reset_seconds": decision.reset_seconds,
+                        "backend": decision.backend,
+                    },
+                )
+                response.headers["Retry-After"] = str(decision.retry_after_seconds)
+                response.headers["X-RateLimit-Limit"] = str(decision.limit)
+                response.headers["X-RateLimit-Remaining"] = str(decision.remaining)
+                response.headers["X-RateLimit-Reset"] = str(decision.reset_seconds)
+                return response
+
         engine = _get_engine()
         _ensure_match_tables(engine)
         patient_profile = _load_patient_profile(engine, patient_profile_id.strip())
@@ -307,10 +317,14 @@ def create_match(payload: Dict[str, Any], request: Request):
             top_k=top_k,
             results=results,
         )
+        success = True
+        return _ok({"match_id": match_id, "results": results})
     except (SQLAlchemyError, RuntimeError) as exc:
         return _error("EXTERNAL_API_ERROR", f"Database unavailable: {exc}", 503)
 
-    return _ok({"match_id": match_id, "results": results})
+    finally:
+        duration_ms = (time.perf_counter() - start) * 1000.0
+        record_match_request(success=success, duration_ms=duration_ms)
 
 
 @router.get("/api/matches/{match_id}")
