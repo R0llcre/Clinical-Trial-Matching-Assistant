@@ -1,0 +1,17 @@
+{
+  "matches": [
+    {
+      "id": "match-demo-001",
+      "patient_profile_id": "patient-demo-001",
+      "query_json": {
+        "filters": { "condition": "Breast Cancer", "status": "RECRUITING" },
+        "top_k": 10
+      },
+      "created_at": "2026-02-13T01:00:00Z"
+    }
+  ],
+  "total": 1,
+  "page": 1,
+  "page_size": 20
+}
+
