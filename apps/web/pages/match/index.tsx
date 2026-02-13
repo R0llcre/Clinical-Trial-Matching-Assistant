@@ -64,6 +64,9 @@ type DemoProfile = {
   conditions: string;
   status: string;
   phase: string;
+  history?: string[];
+  medications?: string[];
+  procedures?: string[];
   topK?: string;
 };
 
@@ -75,6 +78,9 @@ const DEMO_PROFILES: DemoProfile[] = [
     conditions: "Breast Cancer",
     status: "RECRUITING",
     phase: "",
+    history: ["hypertension"],
+    medications: ["tamoxifen"],
+    procedures: ["biopsy"],
   },
   {
     label: "Advanced melanoma (male, 62)",
@@ -83,6 +89,9 @@ const DEMO_PROFILES: DemoProfile[] = [
     conditions: "Melanoma",
     status: "RECRUITING",
     phase: "",
+    history: ["sun exposure"],
+    medications: ["pembrolizumab"],
+    procedures: ["imaging"],
   },
   {
     label: "Long COVID (female, 38)",
@@ -91,6 +100,9 @@ const DEMO_PROFILES: DemoProfile[] = [
     conditions: "Long COVID",
     status: "",
     phase: "",
+    history: ["fatigue"],
+    medications: ["albuterol"],
+    procedures: ["pulmonary rehab"],
   },
   {
     label: "Heart failure (male, 58)",
@@ -99,6 +111,9 @@ const DEMO_PROFILES: DemoProfile[] = [
     conditions: "Heart Failure",
     status: "RECRUITING",
     phase: "",
+    history: ["hypertension"],
+    medications: ["beta blocker"],
+    procedures: ["echocardiogram"],
   },
   {
     label: "Asthma (female, 13)",
@@ -107,6 +122,9 @@ const DEMO_PROFILES: DemoProfile[] = [
     conditions: "Asthma",
     status: "RECRUITING",
     phase: "",
+    history: ["allergic rhinitis"],
+    medications: ["inhaled corticosteroid"],
+    procedures: ["spirometry"],
   },
   {
     label: "Rheumatoid arthritis (female, 35)",
@@ -115,6 +133,9 @@ const DEMO_PROFILES: DemoProfile[] = [
     conditions: "Rheumatoid Arthritis",
     status: "",
     phase: "",
+    history: ["joint pain"],
+    medications: ["methotrexate"],
+    procedures: ["physical therapy"],
   },
   {
     label: "Type 2 diabetes (male, 55)",
@@ -123,6 +144,9 @@ const DEMO_PROFILES: DemoProfile[] = [
     conditions: "Type 2 Diabetes",
     status: "RECRUITING",
     phase: "",
+    history: ["obesity"],
+    medications: ["metformin"],
+    procedures: ["diet counseling"],
   },
   {
     label: "Chronic kidney disease (male, 67)",
@@ -131,6 +155,9 @@ const DEMO_PROFILES: DemoProfile[] = [
     conditions: "Chronic Kidney Disease",
     status: "RECRUITING",
     phase: "",
+    history: ["hypertension"],
+    medications: ["ace inhibitor"],
+    procedures: ["renal ultrasound"],
   },
   {
     label: "Leukemia (female, 29)",
@@ -139,6 +166,9 @@ const DEMO_PROFILES: DemoProfile[] = [
     conditions: "Leukemia",
     status: "RECRUITING",
     phase: "",
+    history: ["anemia"],
+    medications: ["cytarabine"],
+    procedures: ["bone marrow biopsy"],
   },
 ];
 
@@ -193,6 +223,9 @@ export default function MatchPage() {
   const [age, setAge] = useState("45");
   const [sex, setSex] = useState("female");
   const [conditions, setConditions] = useState("Leukemia");
+  const [demoHistory, setDemoHistory] = useState<string[]>([]);
+  const [demoMedications, setDemoMedications] = useState<string[]>([]);
+  const [demoProcedures, setDemoProcedures] = useState<string[]>([]);
   const [status, setStatus] = useState("");
   const [phase, setPhase] = useState("");
   const [topK, setTopK] = useState("10");
@@ -360,11 +393,17 @@ export default function MatchPage() {
   const applyDemo = (value: string) => {
     const selected = DEMO_PROFILES.find((profile) => profile.label === value);
     if (!selected) {
+      setDemoHistory([]);
+      setDemoMedications([]);
+      setDemoProcedures([]);
       return;
     }
     setAge(selected.age);
     setSex(selected.sex);
     setConditions(selected.conditions);
+    setDemoHistory(selected.history ?? []);
+    setDemoMedications(selected.medications ?? []);
+    setDemoProcedures(selected.procedures ?? []);
     setStatus(selected.status);
     setPhase(selected.phase);
     if (selected.topK) {
@@ -481,15 +520,26 @@ export default function MatchPage() {
     }
 
     try {
+      const profileJson: Record<string, unknown> = {
+        demographics: {
+          age: parsedAge,
+          sex,
+        },
+        conditions: conditionList,
+      };
+      if (demoHistory.length > 0) {
+        profileJson.history = demoHistory;
+      }
+      if (demoMedications.length > 0) {
+        profileJson.medications = demoMedications;
+      }
+      if (demoProcedures.length > 0) {
+        profileJson.procedures = demoProcedures;
+      }
+
       const { response: patientResponse, payload: patientPayload } =
         await postWithSessionRetry<CreatePatientResponse>(`${API_BASE}/api/patients`, {
-          profile_json: {
-            demographics: {
-              age: parsedAge,
-              sex,
-            },
-            conditions: conditionList,
-          },
+          profile_json: profileJson,
           source: "manual",
         });
       if (!patientResponse.ok || !patientPayload.ok || !patientPayload.data?.id) {
@@ -605,7 +655,11 @@ export default function MatchPage() {
             <Card className="match-card">
               <div className="match-card__title">Demographics</div>
               <div className="match-card__grid">
-                <Field label="Demo profile" htmlFor="demo" hint="Optional preset to get started quickly.">
+                <Field
+                  label="Demo profile"
+                  htmlFor="demo"
+                  hint="Optional preset to get started quickly. Presets include synthetic history, medication, and procedure context."
+                >
                   <Select
                     id="demo"
                     value={demo}
@@ -782,6 +836,30 @@ export default function MatchPage() {
                       )}
                     </div>
                   </div>
+                  {demoHistory.length > 0 ||
+                  demoMedications.length > 0 ||
+                  demoProcedures.length > 0 ? (
+                    <div className="match-review__block">
+                      <div className="match-review__label">Synthetic context</div>
+                      <div className="match-review__pills">
+                        {demoHistory.map((value) => (
+                          <Pill key={`history-${value}`} tone="info">
+                            history: {value}
+                          </Pill>
+                        ))}
+                        {demoMedications.map((value) => (
+                          <Pill key={`med-${value}`} tone="brand">
+                            medication: {value}
+                          </Pill>
+                        ))}
+                        {demoProcedures.map((value) => (
+                          <Pill key={`proc-${value}`} tone="neutral">
+                            procedure: {value}
+                          </Pill>
+                        ))}
+                      </div>
+                    </div>
+                  ) : null}
                   <div className="match-review__block">
                     <div className="match-review__label">Filters</div>
                     <div className="match-review__pills">
