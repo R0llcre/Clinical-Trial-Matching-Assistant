@@ -20,6 +20,7 @@ import { EmptyState } from "../../components/ui/EmptyState";
 import { Pill } from "../../components/ui/Pill";
 import { Skeleton } from "../../components/ui/Skeleton";
 import { Toast } from "../../components/ui/Toast";
+import { shortId } from "../../lib/format/ids";
 import { API_BASE } from "../../lib/http/client";
 import { narrateRule } from "../../lib/rules/ruleNarrator";
 import {
@@ -93,6 +94,30 @@ type MatchData = {
 type MatchResponse = {
   ok: boolean;
   data?: MatchData;
+  error?: {
+    code: string;
+    message: string;
+  };
+};
+
+type PatientData = {
+  id: string;
+  source?: string;
+  profile_json?: {
+    demographics?: {
+      age?: number;
+      sex?: string;
+      [key: string]: unknown;
+    };
+    conditions?: string[];
+    [key: string]: unknown;
+  };
+  [key: string]: unknown;
+};
+
+type PatientResponse = {
+  ok: boolean;
+  data?: PatientData;
   error?: {
     code: string;
     message: string;
@@ -281,10 +306,12 @@ const exportMatchPdf = async ({
   match,
   filters,
   summary,
+  patientLabel,
 }: {
   match: MatchData;
   filters: ActiveFilter[];
   summary: MatchSummary;
+  patientLabel?: string;
 }) => {
   const { jsPDF } = await import("jspdf");
   const doc = new jsPDF({ unit: "pt", format: "a4" });
@@ -335,7 +362,10 @@ const exportMatchPdf = async ({
   });
 
   writeText("Patient & filters", { size: 13, weight: "bold", spacingAfter: 6 });
-  writeText(`Patient profile ID: ${match.patient_profile_id}`, { spacingAfter: 6 });
+  if (patientLabel) {
+    writeText(`Patient: ${patientLabel}`, { spacingAfter: 6 });
+  }
+  writeText(`Patient ID: ${shortId(match.patient_profile_id)}`, { spacingAfter: 6 });
   if (filters.length === 0) {
     writeText("Filters: none", { spacingAfter: 14 });
   } else {
@@ -462,6 +492,69 @@ const whyFromReasonCode = (reasonCode?: string | null) => {
   return "Unable to evaluate this criterion.";
 };
 
+const patientSummaryLine = (patient: PatientData | null): string => {
+  if (!patient) {
+    return "";
+  }
+
+  const conditions = patient.profile_json?.conditions;
+  const primaryCondition = Array.isArray(conditions)
+    ? (conditions.find((entry) => typeof entry === "string" && entry.trim()) ?? "").trim()
+    : "";
+
+  const demographics = patient.profile_json?.demographics;
+  const sex =
+    typeof demographics?.sex === "string" ? demographics.sex.trim() : "";
+  const ageRaw = demographics?.age;
+  const age =
+    typeof ageRaw === "number" && Number.isFinite(ageRaw)
+      ? Math.trunc(ageRaw)
+      : null;
+
+  const parts = [
+    primaryCondition,
+    sex,
+    age !== null ? `${age}y` : "",
+  ].filter(Boolean);
+
+  return parts.join(" · ");
+};
+
+const patientPdfLabel = (patient: PatientData | null): string => {
+  if (!patient) {
+    return "";
+  }
+
+  const conditions = patient.profile_json?.conditions;
+  const primaryCondition = Array.isArray(conditions)
+    ? (conditions.find((entry) => typeof entry === "string" && entry.trim()) ?? "").trim()
+    : "";
+
+  const demographics = patient.profile_json?.demographics;
+  const sex =
+    typeof demographics?.sex === "string" ? demographics.sex.trim() : "";
+  const ageRaw = demographics?.age;
+  const age =
+    typeof ageRaw === "number" && Number.isFinite(ageRaw)
+      ? Math.trunc(ageRaw)
+      : null;
+
+  const suffixParts: string[] = [];
+  if (sex) {
+    suffixParts.push(sex);
+  }
+  if (age !== null) {
+    suffixParts.push(`${age}y`);
+  }
+
+  const base = primaryCondition || (suffixParts.length > 0 ? "Patient" : "");
+  if (!base) {
+    return "";
+  }
+
+  return suffixParts.length > 0 ? `${base} (${suffixParts.join(", ")})` : base;
+};
+
 export default function MatchResultsPage() {
   const router = useRouter();
   const { id } = router.query;
@@ -470,6 +563,7 @@ export default function MatchResultsPage() {
     process.env.NEXT_PUBLIC_DEV_JWT ?? ""
   );
   const [data, setData] = useState<MatchData | null>(null);
+  const [patient, setPatient] = useState<PatientData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [expandedByTrial, setExpandedByTrial] = useState<Record<string, boolean>>(
@@ -510,6 +604,7 @@ export default function MatchResultsPage() {
 
     setLoading(true);
     setError(null);
+    setPatient(null);
 
     const token = getSessionToken() || sessionToken.trim() || (await ensureSession());
 
@@ -562,6 +657,44 @@ export default function MatchResultsPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [router.isReady, id, sessionToken]);
 
+  useEffect(() => {
+    const patientId = data?.patient_profile_id;
+    if (!patientId) {
+      return;
+    }
+
+    let cancelled = false;
+    const loadPatient = async () => {
+      const token = getSessionToken() || sessionToken.trim();
+      if (!token) {
+        return;
+      }
+
+      try {
+        const response = await fetch(
+          `${API_BASE}/api/patients/${encodeURIComponent(patientId)}`,
+          {
+            headers: { Authorization: `Bearer ${token}` },
+          }
+        );
+        const payload = (await response.json()) as PatientResponse;
+        if (!response.ok || !payload.ok || !payload.data) {
+          return;
+        }
+        if (!cancelled) {
+          setPatient(payload.data);
+        }
+      } catch {
+        // Patient context is best-effort. Results should still render.
+      }
+    };
+
+    void loadPatient();
+    return () => {
+      cancelled = true;
+    };
+  }, [data?.patient_profile_id, sessionToken]);
+
   const tierCounts = useMemo(() => {
     const counts: Record<MatchTier, number> = {
       ELIGIBLE: 0,
@@ -578,6 +711,27 @@ export default function MatchResultsPage() {
   const filters = useMemo(() => {
     return pickFilters(data?.query_json?.filters);
   }, [data]);
+
+  const patientShort = useMemo(() => {
+    return shortId(data?.patient_profile_id ?? "");
+  }, [data?.patient_profile_id]);
+
+  const patientSummaryText = useMemo(() => {
+    const summary = patientSummaryLine(patient);
+    if (summary) {
+      return summary;
+    }
+    return patientShort ? `Patient ${patientShort}` : "";
+  }, [patient, patientShort]);
+
+  const patientPdfText = useMemo(() => {
+    return patientPdfLabel(patient);
+  }, [patient]);
+
+  const patientHref = useMemo(() => {
+    const idValue = (data?.patient_profile_id ?? "").trim();
+    return idValue ? `/patients/${encodeURIComponent(idValue)}` : "/patients";
+  }, [data?.patient_profile_id]);
 
   const groupedResults = useMemo(() => {
     const results = data?.results ?? [];
@@ -932,6 +1086,7 @@ export default function MatchResultsPage() {
         match: data,
         filters,
         summary: resultsSummary,
+        patientLabel: patientPdfText,
       });
     } catch {
       setExportPdfError(
@@ -1016,9 +1171,28 @@ export default function MatchResultsPage() {
             <div className="results-hero__grid">
               <div className="results-hero__meta">
                 <div className="results-hero__metaRow">
-                  <span className="results-hero__metaLabel">Patient profile</span>
-                  <span className="results-hero__metaValue">{data.patient_profile_id}</span>
+                  <span className="results-hero__metaLabel">Patient</span>
+                  <span className={styles.patientMetaRight}>
+                    <span className={`results-hero__metaValue ${styles.patientSummary}`}>
+                      {patientSummaryText}
+                    </span>
+                    <Link
+                      href={patientHref}
+                      className={`ui-button ui-button--ghost ui-button--sm ${styles.openPatient}`}
+                    >
+                      Open patient
+                    </Link>
+                  </span>
                 </div>
+                <div className="results-hero__metaRow">
+                  <span className="results-hero__metaLabel">Patient ID</span>
+                  <span className="results-hero__metaValue">{patientShort}</span>
+                </div>
+                {showDebug ? (
+                  <div className={styles.patientDebug}>
+                    patient_profile_id={data.patient_profile_id} match_id={data.id}
+                  </div>
+                ) : null}
                 {data.created_at ? (
                   <div className="results-hero__metaRow">
                     <span className="results-hero__metaLabel">Created</span>

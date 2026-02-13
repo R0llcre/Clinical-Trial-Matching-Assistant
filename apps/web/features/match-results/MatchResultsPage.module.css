@@ -46,6 +46,33 @@
   color: var(--muted);
 }
 
+.patientMetaRight {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+  flex: 1;
+  min-width: 0;
+  flex-wrap: wrap;
+}
+
+.patientSummary {
+  min-width: 0;
+}
+
+.openPatient {
+  white-space: nowrap;
+}
+
+.patientDebug {
+  margin-top: 2px;
+  font-size: 12px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas,
+    "Liberation Mono", "Courier New", monospace;
+  color: var(--muted);
+  padding: 0 2px;
+}
+
 @media (max-width: 720px) {
   .unknownRow {
     grid-template-columns: 1fr;

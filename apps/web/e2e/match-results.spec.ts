@@ -20,6 +20,11 @@ test.describe("Match and results flow", () => {
     await page.getByRole("button", { name: "Run match" }).click();
 
     await expect(page).toHaveURL(/\/matches\/match-demo-001$/);
+    await expect(page.getByText("Breast Cancer · female · 45y")).toBeVisible();
+    await expect(page.getByRole("link", { name: "Open patient" })).toHaveAttribute(
+      "href",
+      "/patients/patient-demo-001"
+    );
     await expect(
       page.getByRole("button", { name: /^Strong match/ })
     ).toBeVisible();
