@@ -5,7 +5,7 @@ from typing import Any, Dict, List, Optional, Tuple
 
 from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
-from sqlalchemy import create_engine, func, insert, select
+from sqlalchemy import create_engine, func, insert, select, update
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.engine import Engine
 from sqlalchemy.exc import SQLAlchemyError
@@ -177,6 +177,29 @@ def _get_patient(
     return _serialize_patient(dict(row))
 
 
+def _update_patient(
+    engine: Engine,
+    patient_id: str,
+    profile_json: Dict[str, Any],
+    source: str,
+    user_id: str,
+) -> Optional[Dict[str, Any]]:
+    now = dt.datetime.utcnow()
+
+    stmt = (
+        update(PATIENT_PROFILES_TABLE)
+        .where(PATIENT_PROFILES_TABLE.c.id == patient_id)
+        .where(PATIENT_PROFILES_TABLE.c.user_id == user_id)
+        .values(profile_json=profile_json, source=source, updated_at=now)
+    )
+    with engine.begin() as conn:
+        result = conn.execute(stmt)
+        if result.rowcount == 0:
+            return None
+
+    return _get_patient(engine, patient_id, user_id)
+
+
 def _list_patients(
     engine: Engine, page: int, page_size: int, user_id: str
 ) -> Tuple[List[Dict[str, Any]], int]:
@@ -234,6 +257,51 @@ def create_patient(payload: Dict[str, Any], request: Request):
         patient = _create_patient(engine, profile_json, source, user_id)
     except (SQLAlchemyError, RuntimeError) as exc:
         return _error("EXTERNAL_API_ERROR", f"Database unavailable: {exc}", 503)
+
+    return _ok(patient)
+
+
+@router.put("/api/patients/{patient_id}")
+def update_patient(patient_id: str, payload: Dict[str, Any], request: Request):
+    profile_json = payload.get("profile_json")
+    source = payload.get("source", "manual")
+
+    user_id = _user_id_from_request(request)
+    if not user_id:
+        return _error("UNAUTHORIZED", "invalid auth subject", 401)
+
+    try:
+        _validate_profile_json(profile_json)
+        if not isinstance(source, str) or not source.strip():
+            raise ValueError("source must be a non-empty string")
+        source = source.strip()
+    except (ValueError, TypeError) as exc:
+        return _error(
+            "VALIDATION_ERROR",
+            str(exc),
+            400,
+            {
+                "fields": [
+                    "profile_json.demographics.age",
+                    "profile_json.demographics.sex",
+                ]
+            },
+        )
+
+    try:
+        engine = _get_engine()
+        _ensure_patient_profiles_table(engine)
+        patient = _update_patient(engine, patient_id, profile_json, source, user_id)
+    except (SQLAlchemyError, RuntimeError) as exc:
+        return _error("EXTERNAL_API_ERROR", f"Database unavailable: {exc}", 503)
+
+    if not patient:
+        return _error(
+            "PATIENT_NOT_FOUND",
+            "patient profile not found",
+            404,
+            {"id": patient_id},
+        )
 
     return _ok(patient)
 

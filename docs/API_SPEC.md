@@ -90,6 +90,21 @@ GET /api/patients/{id}
 认证: 必填
 错误: PATIENT_NOT_FOUND
 
+PUT /api/patients/{id}
+目的: 更新患者画像
+认证: 必填
+输入
+- profile_json 必填
+- source 选填, manual 或 synthea（默认 manual）
+校验
+- demographics.age 必填
+- demographics.sex 必填
+输出
+- PatientProfile（更新后的记录）
+错误
+- VALIDATION_ERROR
+- PATIENT_NOT_FOUND
+
 **Matching**
 POST /api/match
 目的: 生成匹配结果
