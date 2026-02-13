@@ -1111,6 +1111,29 @@ textarea {
   flex-wrap: wrap;
 }
 
+.browse-results__activeFilters {
+  display: grid;
+  gap: 8px;
+  padding: 12px 14px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border);
+  background: rgba(255, 255, 255, 0.74);
+}
+
+.browse-results__activeFiltersLabel {
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: var(--muted);
+}
+
+.browse-results__activeFiltersPills {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+
 .browse-control {
   display: inline-flex;
   align-items: center;
