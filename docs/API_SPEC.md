@@ -83,9 +83,16 @@ POST /api/match
 输入
 - patient_profile_id 必填
 - filters 可选
+  - condition 可选
+  - status 可选
+  - phase 可选
+  - country 可选
+  - state 可选
+  - city 可选
 - top_k 默认 10
 校验
 - top_k 1-50
+- filters.* 若提供必须是字符串
 输出
 - match_id
 - results: MatchResultItem[]
@@ -97,6 +104,19 @@ GET /api/matches/{id}
 目的: 获取匹配详情
 认证: 必填
 错误: MATCH_NOT_FOUND
+
+**System**
+GET /api/system/dataset-meta
+目的: 返回当前数据集规模与解析覆盖概览
+输入: 无
+输出
+- trial_total
+- latest_fetched_at
+- criteria_coverage
+  - trials_with_criteria
+  - trials_without_criteria
+  - coverage_ratio
+- parser_source_breakdown
 
 **Admin**
 POST /api/admin/sync
@@ -203,6 +223,23 @@ MatchResultItem
 Checklist rule object
 - `rule_meta` and `evaluation_meta` are optional and may be absent for older data.
 - Clients should degrade gracefully when these fields are missing.
+
+DatasetMeta
+```json
+{
+  "trial_total": 17694,
+  "latest_fetched_at": "2026-02-13T01:58:00.000000",
+  "criteria_coverage": {
+    "trials_with_criteria": 14220,
+    "trials_without_criteria": 3474,
+    "coverage_ratio": 0.8036
+  },
+  "parser_source_breakdown": {
+    "rule_v1": 13002,
+    "llm_v1": 1218
+  }
+}
+```
 
 **示例请求**
 ```bash

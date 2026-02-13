@@ -649,6 +649,9 @@ def _load_trial_candidates(
     condition_filter: str = "",
     status_filter: str = "",
     phase_filter: str = "",
+    country_filter: str = "",
+    state_filter: str = "",
+    city_filter: str = "",
     recall_limit: int = 500,
 ) -> List[Dict[str, Any]]:
     filters = []
@@ -670,6 +673,39 @@ def _load_trial_candidates(
     if phase_filter:
         params["phase"] = phase_filter
         filters.append("t.phase = :phase")
+    if country_filter:
+        params["country"] = country_filter
+        filters.append(
+            """
+            EXISTS (
+              SELECT 1
+              FROM jsonb_array_elements(COALESCE(t.locations_json, '[]'::jsonb)) AS loc
+              WHERE lower(COALESCE(loc->>'country', '')) = lower(:country)
+            )
+            """
+        )
+    if state_filter:
+        params["state"] = state_filter
+        filters.append(
+            """
+            EXISTS (
+              SELECT 1
+              FROM jsonb_array_elements(COALESCE(t.locations_json, '[]'::jsonb)) AS loc
+              WHERE lower(COALESCE(loc->>'state', '')) = lower(:state)
+            )
+            """
+        )
+    if city_filter:
+        params["city"] = city_filter
+        filters.append(
+            """
+            EXISTS (
+              SELECT 1
+              FROM jsonb_array_elements(COALESCE(t.locations_json, '[]'::jsonb)) AS loc
+              WHERE lower(COALESCE(loc->>'city', '')) = lower(:city)
+            )
+            """
+        )
 
     where_clause = ""
     if filters:
@@ -715,12 +751,35 @@ def match_trials(
     condition_filter = str(filters.get("condition") or "").strip()
     status_filter = str(filters.get("status") or "").strip()
     phase_filter = str(filters.get("phase") or "").strip()
+    country_filter = str(filters.get("country") or "").strip()
+    state_filter = str(filters.get("state") or "").strip()
+    city_filter = str(filters.get("city") or "").strip()
+
+    has_search_filters = any(
+        [
+            condition_filter,
+            status_filter,
+            phase_filter,
+            country_filter,
+            state_filter,
+            city_filter,
+        ]
+    )
+    # Keep default recall narrow when unfiltered, but allow a larger cap
+    # for filtered queries so Browse and Match stay consistent.
+    recall_limit = 500
+    if has_search_filters:
+        recall_limit = min(5000, max(500, top_k * 400))
 
     candidates = _load_trial_candidates(
         engine,
         condition_filter=condition_filter,
         status_filter=status_filter,
         phase_filter=phase_filter,
+        country_filter=country_filter,
+        state_filter=state_filter,
+        city_filter=city_filter,
+        recall_limit=recall_limit,
     )
     results = [evaluate_trial(patient_profile, trial) for trial in candidates]
     results.sort(

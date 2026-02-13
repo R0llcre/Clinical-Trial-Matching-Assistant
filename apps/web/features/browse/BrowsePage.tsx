@@ -49,8 +49,41 @@ type TrialsResponse = {
   };
 };
 
+type DatasetMeta = {
+  trial_total: number;
+  latest_fetched_at?: string | null;
+  criteria_coverage?: {
+    trials_with_criteria: number;
+    trials_without_criteria: number;
+    coverage_ratio: number;
+  } | null;
+  parser_source_breakdown?: Record<string, number> | null;
+};
+
+type DatasetMetaResponse = {
+  ok: boolean;
+  data?: DatasetMeta;
+  error?: {
+    code: string;
+    message: string;
+  };
+};
+
 const API_BASE =
   process.env.NEXT_PUBLIC_API_BASE ?? "http://localhost:8000";
+
+const fetchDatasetMeta = async (): Promise<DatasetMeta | null> => {
+  try {
+    const response = await fetch(`${API_BASE}/api/system/dataset-meta`);
+    const payload = (await response.json()) as DatasetMetaResponse;
+    if (!response.ok || !payload.ok || !payload.data) {
+      return null;
+    }
+    return payload.data;
+  } catch {
+    return null;
+  }
+};
 
 const buildQueryKey = (input: {
   condition: string;
@@ -153,6 +186,7 @@ const formatFetchedDate = (value?: string | null) => {
 type HomeProps = {
   initialTrials: TrialSummary[];
   initialTotal: number;
+  initialDatasetMeta: DatasetMeta | null;
   initialPage: number;
   initialPageSize: number;
   initialCondition: string;
@@ -206,6 +240,7 @@ export const getServerSideProps: GetServerSideProps<HomeProps> = async (ctx) => 
   }
   params.set("page", String(safePage));
   params.set("page_size", String(safePageSize));
+  const initialDatasetMeta = await fetchDatasetMeta();
 
   try {
     const response = await fetch(`${API_BASE}/api/trials?${params.toString()}`);
@@ -215,6 +250,7 @@ export const getServerSideProps: GetServerSideProps<HomeProps> = async (ctx) => 
         props: {
           initialTrials: [],
           initialTotal: 0,
+          initialDatasetMeta,
           initialPage: safePage,
           initialPageSize: safePageSize,
           initialCondition: condition,
@@ -230,6 +266,7 @@ export const getServerSideProps: GetServerSideProps<HomeProps> = async (ctx) => 
       props: {
         initialTrials: payload.data.trials ?? [],
         initialTotal: payload.data.total ?? 0,
+        initialDatasetMeta,
         initialPage: payload.data.page ?? safePage,
         initialPageSize: payload.data.page_size ?? safePageSize,
         initialCondition: condition,
@@ -245,6 +282,7 @@ export const getServerSideProps: GetServerSideProps<HomeProps> = async (ctx) => 
       props: {
         initialTrials: [],
         initialTotal: 0,
+        initialDatasetMeta,
         initialPage: safePage,
         initialPageSize: safePageSize,
         initialCondition: condition,
@@ -270,6 +308,9 @@ export default function Home(props: HomeProps) {
   const [page, setPage] = useState(props.initialPage);
   const [pageSize, setPageSize] = useState(props.initialPageSize);
   const [total, setTotal] = useState(props.initialTotal);
+  const [datasetMeta, setDatasetMeta] = useState<DatasetMeta | null>(
+    props.initialDatasetMeta
+  );
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const abortRef = useRef<AbortController | null>(null);
@@ -299,6 +340,19 @@ export default function Home(props: HomeProps) {
     }
     return formatFetchedDate(latest);
   }, [trials]);
+
+  const datasetLatestSyncedDate = formatFetchedDate(
+    datasetMeta?.latest_fetched_at ?? null
+  );
+  const datasetTrialTotal =
+    typeof datasetMeta?.trial_total === "number"
+      ? datasetMeta.trial_total
+      : total;
+  const datasetCoverageRatio = datasetMeta?.criteria_coverage?.coverage_ratio;
+  const datasetCoverageLabel =
+    typeof datasetCoverageRatio === "number"
+      ? `${(datasetCoverageRatio * 100).toFixed(0)}%`
+      : "—";
 
   const totalPages = useMemo(() => {
     return total > 0 ? Math.ceil(total / pageSize) : 1;
@@ -344,6 +398,13 @@ export default function Home(props: HomeProps) {
       query.page_size = String(input.pageSizeValue);
     }
     return query;
+  };
+
+  const refreshDatasetMeta = async () => {
+    const next = await fetchDatasetMeta();
+    if (next) {
+      setDatasetMeta(next);
+    }
   };
 
   const fetchTrials = async (input: {
@@ -408,6 +469,7 @@ export default function Home(props: HomeProps) {
         page: payload.data?.page ?? input.pageValue,
         pageSize: payload.data?.page_size ?? input.pageSizeValue,
       });
+      void refreshDatasetMeta();
     } catch (err) {
       if (err instanceof DOMException && err.name === "AbortError") {
         return;
@@ -553,6 +615,7 @@ export default function Home(props: HomeProps) {
     setCity(props.initialCity);
     setTrials(props.initialTrials);
     setTotal(props.initialTotal);
+    setDatasetMeta(props.initialDatasetMeta);
     setPage(props.initialPage);
     setPageSize(props.initialPageSize);
     lastFetchedQueryKeyRef.current = buildQueryKey({
@@ -575,6 +638,7 @@ export default function Home(props: HomeProps) {
     props.initialPage,
     props.initialPageSize,
     props.initialTotal,
+    props.initialDatasetMeta,
     props.initialTrials,
   ]);
 
@@ -657,6 +721,14 @@ export default function Home(props: HomeProps) {
     props.initialPage,
     props.initialPageSize,
   ]);
+
+  useEffect(() => {
+    if (!router.isReady) {
+      return;
+    }
+    void refreshDatasetMeta();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [router.isReady]);
 
   return (
     <Shell
@@ -911,14 +983,28 @@ export default function Home(props: HomeProps) {
               <div className="browse-dataset__header">Dataset</div>
               <div className="browse-dataset__grid">
                 <div className="browse-dataset__stat">
-                  <div className="browse-dataset__value">{total || "—"}</div>
+                  <div className="browse-dataset__value">{datasetTrialTotal || "—"}</div>
                   <div className="browse-dataset__label">trials indexed</div>
                 </div>
                 <div className="browse-dataset__stat">
-                  <div className="browse-dataset__value">{lastSyncedDate || "—"}</div>
+                  <div className="browse-dataset__value">
+                    {datasetLatestSyncedDate || lastSyncedDate || "—"}
+                  </div>
                   <div className="browse-dataset__label">latest sync</div>
                 </div>
+                <div className="browse-dataset__stat">
+                  <div className="browse-dataset__value">{datasetCoverageLabel}</div>
+                  <div className="browse-dataset__label">criteria coverage</div>
+                </div>
               </div>
+              {datasetMeta?.parser_source_breakdown ? (
+                <div className="browse-dataset__hint">
+                  Parser mix:{" "}
+                  {Object.entries(datasetMeta.parser_source_breakdown)
+                    .map(([source, count]) => `${source} ${count}`)
+                    .join(" · ")}
+                </div>
+              ) : null}
               <div className="browse-dataset__hint">
                 Filters match exact location fields, so start broad then narrow.
               </div>
