@@ -116,12 +116,17 @@ def _build_dataset_meta(engine: Engine) -> Dict[str, Any]:
         WITH latest_criteria AS (
           SELECT DISTINCT ON (trial_id)
             trial_id,
-            parser_version
+            parser_version,
+            coverage_stats
           FROM trial_criteria
           ORDER BY trial_id, created_at DESC
         )
         SELECT
-          COALESCE(NULLIF(parser_version, ''), 'unknown') AS parser_source,
+          COALESCE(
+            NULLIF(coverage_stats->>'parser_source', ''),
+            NULLIF(parser_version, ''),
+            'unknown'
+          ) AS parser_source,
           COUNT(*)::BIGINT AS count
         FROM latest_criteria
         GROUP BY parser_source

@@ -50,10 +50,17 @@ export SYNC_INTERVAL_SECONDS=3600
 export SYNC_PROGRESSIVE_BACKFILL=0
 export SYNC_REFRESH_PAGES=1
 export SYNC_TARGET_TRIAL_TOTAL=0
-export SYNC_PARSER_VERSION=llm_v1
+export SYNC_PARSER_VERSION=rule_v1
 export LLM_PARSER_ENABLED=1
 export OPENAI_MODEL=gpt-4o-mini
-export LLM_DAILY_TOKEN_BUDGET=200000
+export LLM_DAILY_TOKEN_BUDGET=1000000
+export SYNC_LLM_SELECTIVE=1
+export SYNC_LLM_SELECTIVE_UNKNOWN_RATIO_THRESHOLD=0.4
+export SYNC_LLM_SELECTIVE_UNKNOWN_RULES_MIN=2
+export SYNC_LLM_SELECTIVE_MAX_LLM_CALLS_PER_RUN=10
+export SYNC_LLM_SELECTIVE_COOLDOWN_HOURS=168
+export SYNC_LLM_BACKFILL_ENABLED=1
+export SYNC_LLM_BACKFILL_LIMIT=20
 ```
 
 说明
@@ -62,6 +69,17 @@ export LLM_DAILY_TOKEN_BUDGET=200000
 - 首次部署后，worker 会按 `SYNC_*` 参数周期拉取试验数据。
 - 启用 LLM 解析时，建议把 `OPENAI_API_KEY` 配成 Container Apps secret，并通过 `secretref:` 注入 worker。
 - 当 LLM 不可用或预算命中时，worker 会自动回退到 `rule_v1`，同步不中断。
+
+Selective LLM 解析（推荐，省钱）
+- 默认仍用 `SYNC_PARSER_VERSION=rule_v1` 做快速解析（零 LLM 成本、吞吐最高）。
+- 当 `rule_v1` 的解析覆盖率过低（例如 UNKNOWN 占比过高）时，worker 才会对该 trial 触发一次 `llm_v1` 重解析。
+- 每轮与每日都有硬上限：
+  - `SYNC_LLM_SELECTIVE_MAX_LLM_CALLS_PER_RUN`：每轮最多触发多少条 LLM 重解析
+  - `LLM_DAILY_TOKEN_BUDGET`：每日 token 预算（命中后自动回退到 rule_v1）
+- 为避免同一试验反复消耗，使用 `SYNC_LLM_SELECTIVE_COOLDOWN_HOURS` 做冷却窗口。
+- 可选开启低覆盖回填（提升整体 coverage）：
+  - `SYNC_LLM_BACKFILL_ENABLED=1`
+  - `SYNC_LLM_BACKFILL_LIMIT=20`（每轮额外处理条数）
 
 数据扩容（可选）
 - 默认同步逻辑会从第一页开始抓取 `SYNC_PAGE_LIMIT` 页，长期可能反复更新同一批 studies，新增插入逐步变少。
