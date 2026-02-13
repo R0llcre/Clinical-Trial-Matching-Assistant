@@ -5,7 +5,7 @@ import logging
 import os
 import time
 import uuid
-from dataclasses import dataclass
+from dataclasses import dataclass, field as dataclass_field
 from typing import Any, Dict, Iterable, List, Optional, Sequence
 
 import httpx
@@ -31,6 +31,10 @@ class SyncStats:
     parse_success: int
     parse_failed: int
     parse_success_rate: float
+    parser_version: str = "rule_v1"
+    parser_source_breakdown: Dict[str, int] = dataclass_field(default_factory=dict)
+    fallback_reason_breakdown: Dict[str, int] = dataclass_field(default_factory=dict)
+    llm_budget_exceeded_count: int = 0
 
 
 @dataclass
@@ -41,6 +45,10 @@ class ParseStats:
     status: str
     rule_count: int
     unknown_count: int
+    parser_source: str = "rule_v1"
+    fallback_used: bool = False
+    fallback_reason: Optional[str] = None
+    llm_budget_exceeded: bool = False
 
 
 FIELD_MAP = {
@@ -465,6 +473,20 @@ def _read_llm_daily_token_budget() -> int:
         return 200000
 
 
+def _env_bool(name: str, default: bool = False) -> bool:
+    raw = os.getenv(name)
+    if raw is None:
+        return default
+    return raw.strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _default_sync_parser_version() -> str:
+    explicit = str(os.getenv("SYNC_PARSER_VERSION", "")).strip().lower()
+    if explicit in {"rule_v1", "llm_v1"}:
+        return explicit
+    return "llm_v1" if _env_bool("LLM_PARSER_ENABLED", False) else "rule_v1"
+
+
 def _daily_llm_token_usage(conn: psycopg.Connection, usage_date: dt.date) -> int:
     with conn.cursor() as cur:
         cur.execute(
@@ -552,6 +574,53 @@ def _compute_coverage_stats(criteria_json: List[Dict[str, Any]]) -> Dict[str, An
     }
 
 
+def _select_recent_trial_nct_ids(
+    conn: psycopg.Connection,
+    *,
+    lookback_hours: int,
+    limit: int,
+    condition: Optional[str] = None,
+    status: Optional[str] = None,
+) -> List[str]:
+    lookback_hours = max(1, int(lookback_hours))
+    limit = max(1, int(limit))
+    condition = (condition or "").strip()
+    status = (status or "").strip()
+    params: Dict[str, Any] = {
+        "lookback_hours": lookback_hours,
+        "limit": limit,
+        "status": status,
+    }
+    filters: List[str] = [
+        "t.fetched_at >= NOW() - make_interval(hours => %(lookback_hours)s)",
+    ]
+    if condition:
+        params["condition_like"] = f"%{condition}%"
+        filters.append(
+            "("
+            "t.title ILIKE %(condition_like)s OR "
+            "array_to_string(t.conditions, ',') ILIKE %(condition_like)s"
+            ")"
+        )
+    if status:
+        filters.append("t.status = %(status)s")
+    where_clause = " AND ".join(filters)
+
+    with conn.cursor() as cur:
+        cur.execute(
+            f"""
+            SELECT t.nct_id
+            FROM trials AS t
+            WHERE {where_clause}
+            ORDER BY t.fetched_at DESC
+            LIMIT %(limit)s
+            """,
+            params,
+        )
+        rows = cur.fetchall()
+    return [str(row[0]) for row in rows if row and row[0]]
+
+
 def sync_trials(
     condition: str,
     status: Optional[str] = None,
@@ -573,6 +642,10 @@ def sync_trials(
     inserted_nct_ids: List[str] = []
     parse_success = 0
     parse_failed = 0
+    parser_source_breakdown: Dict[str, int] = {}
+    fallback_reason_breakdown: Dict[str, int] = {}
+    llm_budget_exceeded_count = 0
+    parser_version = _default_sync_parser_version()
 
     LOGGER.info(
         "sync_trials started run_id=%s condition=%s status=%s",
@@ -653,14 +726,26 @@ def sync_trials(
 
     for nct_id in inserted_nct_ids:
         try:
-            parse_trial(nct_id=nct_id, parser_version="rule_v1")
+            parsed = parse_trial(nct_id=nct_id, parser_version=parser_version)
             parse_success += 1
+            if isinstance(parsed, ParseStats):
+                parser_source = parsed.parser_source or parser_version
+                parser_source_breakdown[parser_source] = (
+                    parser_source_breakdown.get(parser_source, 0) + 1
+                )
+                if parsed.fallback_reason:
+                    fallback_reason_breakdown[parsed.fallback_reason] = (
+                        fallback_reason_breakdown.get(parsed.fallback_reason, 0) + 1
+                    )
+                if parsed.llm_budget_exceeded:
+                    llm_budget_exceeded_count += 1
         except Exception:
             parse_failed += 1
             LOGGER.exception(
-                "auto parse failed run_id=%s nct_id=%s parser_version=rule_v1",
+                "auto parse failed run_id=%s nct_id=%s parser_version=%s",
                 run_id,
                 nct_id,
+                parser_version,
             )
 
     parse_total = parse_success + parse_failed
@@ -679,11 +764,17 @@ def sync_trials(
         parse_success=parse_success,
         parse_failed=parse_failed,
         parse_success_rate=parse_success_rate,
+        parser_version=parser_version,
+        parser_source_breakdown=parser_source_breakdown,
+        fallback_reason_breakdown=fallback_reason_breakdown,
+        llm_budget_exceeded_count=llm_budget_exceeded_count,
     )
     LOGGER.info(
         (
             "sync_trials completed run_id=%s pages=%s processed=%s inserted=%s "
-            "updated=%s parse_success=%s parse_failed=%s parse_success_rate=%s"
+            "updated=%s parse_success=%s parse_failed=%s parse_success_rate=%s "
+            "parser_version=%s parser_source_breakdown=%s "
+            "fallback_reason_breakdown=%s llm_budget_exceeded_count=%s"
         ),
         run_id,
         pages,
@@ -693,8 +784,80 @@ def sync_trials(
         parse_success,
         parse_failed,
         parse_success_rate,
+        parser_version,
+        parser_source_breakdown,
+        fallback_reason_breakdown,
+        llm_budget_exceeded_count,
     )
     return stats
+
+
+def reparse_recent_trials(
+    *,
+    parser_version: str = "llm_v1",
+    limit: int = 200,
+    lookback_hours: int = 168,
+    condition: Optional[str] = None,
+    status: Optional[str] = None,
+) -> Dict[str, Any]:
+    database_url = os.getenv("DATABASE_URL")
+    if not database_url:
+        raise RuntimeError("DATABASE_URL not set")
+
+    selected_nct_ids: List[str] = []
+    with psycopg.connect(database_url) as conn:
+        _ensure_tables(conn)
+        conn.commit()
+        selected_nct_ids = _select_recent_trial_nct_ids(
+            conn,
+            lookback_hours=lookback_hours,
+            limit=limit,
+            condition=condition,
+            status=status,
+        )
+
+    parser_source_breakdown: Dict[str, int] = {}
+    fallback_reason_breakdown: Dict[str, int] = {}
+    llm_budget_exceeded_count = 0
+    parsed = 0
+    failed = 0
+
+    for nct_id in selected_nct_ids:
+        try:
+            stats = parse_trial(nct_id=nct_id, parser_version=parser_version)
+            parsed += 1
+            parser_source = stats.parser_source or parser_version
+            parser_source_breakdown[parser_source] = (
+                parser_source_breakdown.get(parser_source, 0) + 1
+            )
+            if stats.fallback_reason:
+                fallback_reason_breakdown[stats.fallback_reason] = (
+                    fallback_reason_breakdown.get(stats.fallback_reason, 0) + 1
+                )
+            if stats.llm_budget_exceeded:
+                llm_budget_exceeded_count += 1
+        except Exception:
+            failed += 1
+            LOGGER.exception(
+                "reparse_recent_trials failed nct_id=%s parser_version=%s",
+                nct_id,
+                parser_version,
+            )
+
+    summary = {
+        "selected": len(selected_nct_ids),
+        "parsed_success": parsed,
+        "parsed_failed": failed,
+        "parser_version": parser_version,
+        "parser_source_breakdown": parser_source_breakdown,
+        "fallback_reason_breakdown": fallback_reason_breakdown,
+        "llm_budget_exceeded_count": llm_budget_exceeded_count,
+        "lookback_hours": max(1, int(lookback_hours)),
+        "condition": (condition or "").strip() or None,
+        "status": (status or "").strip() or None,
+    }
+    LOGGER.info("reparse_recent_trials summary=%s", summary)
+    return summary
 
 
 def parse_trial(
@@ -813,6 +976,14 @@ def parse_trial(
             )
             raise
 
+    parser_source = str(parser_metadata.get("parser_source") or parser_version)
+    fallback_used = bool(parser_metadata.get("fallback_used"))
+    fallback_reason = parser_metadata.get("fallback_reason")
+    llm_budget = parser_metadata.get("llm_budget")
+    llm_budget_exceeded = bool(
+        isinstance(llm_budget, dict) and llm_budget.get("budget_exceeded")
+    )
+
     stats = ParseStats(
         run_id=run_id,
         nct_id=nct_id,
@@ -820,12 +991,26 @@ def parse_trial(
         status="SUCCESS",
         rule_count=len(criteria_json),
         unknown_count=unknown_count,
+        parser_source=parser_source,
+        fallback_used=fallback_used,
+        fallback_reason=(
+            str(fallback_reason) if isinstance(fallback_reason, str) else None
+        ),
+        llm_budget_exceeded=llm_budget_exceeded,
     )
     LOGGER.info(
-        "parse_trial completed run_id=%s nct_id=%s parser_version=%s rules=%s unknown=%s",
+        (
+            "parse_trial completed run_id=%s nct_id=%s parser_version=%s "
+            "parser_source=%s fallback_used=%s fallback_reason=%s "
+            "llm_budget_exceeded=%s rules=%s unknown=%s"
+        ),
         run_id,
         nct_id,
         parser_version,
+        stats.parser_source,
+        stats.fallback_used,
+        stats.fallback_reason,
+        stats.llm_budget_exceeded,
         stats.rule_count,
         stats.unknown_count,
     )

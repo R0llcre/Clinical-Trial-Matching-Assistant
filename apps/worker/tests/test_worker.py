@@ -42,6 +42,10 @@ def test_main_logs_parse_success_rate(monkeypatch, caplog) -> None:
         parse_success=3,
         parse_failed=1,
         parse_success_rate=0.75,
+        parser_version="llm_v1",
+        parser_source_breakdown={"llm_v1": 2, "rule_v1": 1},
+        fallback_reason_breakdown={"llm parser disabled": 1},
+        llm_budget_exceeded_count=0,
     )
     monkeypatch.setattr(
         worker,
@@ -56,3 +60,4 @@ def test_main_logs_parse_success_rate(monkeypatch, caplog) -> None:
     assert "parse_success=3" in combined_logs
     assert "parse_failed=1" in combined_logs
     assert "parse_success_rate=0.75" in combined_logs
+    assert "parser_source_breakdown={'llm_v1': 2, 'rule_v1': 1}" in combined_logs
