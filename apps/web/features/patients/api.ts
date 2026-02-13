@@ -51,6 +51,23 @@ export async function createPatient(input: {
   });
 }
 
+export async function updatePatient(input: {
+  token: string;
+  patientId: string;
+  profileJson: PatientProfileJson;
+  source?: string;
+}): Promise<Patient> {
+  const id = encodeURIComponent(input.patientId);
+  return fetchOk<Patient>(`/api/patients/${id}`, {
+    method: "PUT",
+    headers: authHeaders(input.token),
+    body: {
+      profile_json: input.profileJson,
+      source: input.source ?? "manual",
+    },
+  });
+}
+
 export async function listMatches(input: {
   token: string;
   patientProfileId?: string;
@@ -84,4 +101,3 @@ export async function createMatch(input: {
     },
   });
 }
-

@@ -6,6 +6,7 @@ import {
   ChevronLeft,
   ChevronRight,
   History,
+  PencilLine,
   Play,
   UserRound,
 } from "lucide-react";
@@ -305,12 +306,25 @@ export default function PatientDetailPage() {
       title={patientTitle}
       subtitle="Review a patient profile, run matching with different filters, and revisit past match results."
       actions={
-        <Link href="/patients" className="ui-button ui-button--ghost ui-button--md">
-          <span className="ui-button__icon" aria-hidden="true">
-            <ChevronLeft size={18} />
-          </span>
-          <span className="ui-button__label">Patients</span>
-        </Link>
+        <>
+          <Link href="/patients" className="ui-button ui-button--ghost ui-button--md">
+            <span className="ui-button__icon" aria-hidden="true">
+              <ChevronLeft size={18} />
+            </span>
+            <span className="ui-button__label">Patients</span>
+          </Link>
+          {patientId ? (
+            <Link
+              href={`/patients/${encodeURIComponent(patientId)}/edit`}
+              className="ui-button ui-button--secondary ui-button--md"
+            >
+              <span className="ui-button__icon" aria-hidden="true">
+                <PencilLine size={18} />
+              </span>
+              <span className="ui-button__label">Edit patient</span>
+            </Link>
+          ) : null}
+        </>
       }
     >
       {sessionStatus === "unavailable" ? (
@@ -615,4 +629,3 @@ export default function PatientDetailPage() {
     </Shell>
   );
 }
-

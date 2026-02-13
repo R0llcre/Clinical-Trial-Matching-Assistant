@@ -799,6 +799,18 @@ export default function MatchResultsPage() {
         rule.verdict === "UNKNOWN" && item.checklist.missing_info.length > 0
           ? item.checklist.missing_info.join(", ")
           : "";
+      const focusValue =
+        (missingFieldRaw ||
+          (rule.verdict === "UNKNOWN"
+            ? item.checklist.missing_info[0] ?? ""
+            : "")
+        ).trim();
+      const patientEditHref =
+        rule.verdict === "UNKNOWN" && data?.patient_profile_id
+          ? `/patients/${encodeURIComponent(data.patient_profile_id)}/edit${
+              focusValue ? `?focus=${encodeURIComponent(focusValue)}` : ""
+            }`
+          : "";
       const missingText =
         friendlyMissingField(missingFieldRaw) ||
         friendlyMissingField(missingFallback) ||
@@ -849,6 +861,19 @@ export default function MatchResultsPage() {
                       {requiredAction.detail ? (
                         <div className={styles.unknownDetail}>{requiredAction.detail}</div>
                       ) : null}
+                    </div>
+                  </div>
+                ) : null}
+                {patientEditHref ? (
+                  <div className={styles.unknownRow}>
+                    <div className={styles.unknownLabel}>Action</div>
+                    <div className={styles.unknownValue}>
+                      <Link
+                        href={patientEditHref}
+                        className="ui-button ui-button--secondary ui-button--sm"
+                      >
+                        Update patient
+                      </Link>
                     </div>
                   </div>
                 ) : null}

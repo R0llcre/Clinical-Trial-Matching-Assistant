@@ -40,7 +40,7 @@ const sendJson = (res, statusCode, payload) => {
     "Content-Type": "application/json",
     "Access-Control-Allow-Origin": "*",
     "Access-Control-Allow-Headers": "Content-Type, Authorization",
-    "Access-Control-Allow-Methods": "GET,POST,OPTIONS",
+    "Access-Control-Allow-Methods": "GET,POST,PUT,OPTIONS",
   });
   res.end(JSON.stringify(payload));
 };
@@ -132,7 +132,7 @@ const server = createServer(async (req, res) => {
     res.writeHead(204, {
       "Access-Control-Allow-Origin": "*",
       "Access-Control-Allow-Headers": "Content-Type, Authorization",
-      "Access-Control-Allow-Methods": "GET,POST,OPTIONS",
+      "Access-Control-Allow-Methods": "GET,POST,PUT,OPTIONS",
     });
     res.end();
     return;
@@ -212,6 +212,35 @@ const server = createServer(async (req, res) => {
       sendJson(res, 404, status.error("NOT_FOUND", "Patient not found"));
       return;
     }
+    sendJson(res, 200, status.ok(patient));
+    return;
+  }
+
+  if (req.method === "PUT" && path.startsWith("/api/patients/")) {
+    const id = decodeURIComponent(path.slice("/api/patients/".length));
+    const patient = patientsById[id];
+    if (!patient) {
+      sendJson(res, 404, status.error("NOT_FOUND", "Patient not found"));
+      return;
+    }
+
+    const body = await readJsonBody(req);
+    if (!body || typeof body !== "object") {
+      sendJson(res, 400, status.error("BAD_REQUEST", "Invalid patient payload"));
+      return;
+    }
+
+    const profile = body.profile_json;
+    if (!profile || typeof profile !== "object") {
+      sendJson(res, 400, status.error("BAD_REQUEST", "Missing profile_json"));
+      return;
+    }
+
+    patient.profile_json = profile;
+    if (typeof body.source === "string" && body.source.trim()) {
+      patient.source = body.source.trim();
+    }
+    patient.updated_at = new Date().toISOString();
     sendJson(res, 200, status.ok(patient));
     return;
   }

@@ -43,6 +43,15 @@ test.describe("Match and results flow", () => {
     await expect(page.getByText("Add lab value: eosinophils")).toBeVisible();
     await expect(page.getByText("Include units and date measured.")).toBeVisible();
 
+    const updateLink = page.getByRole("link", { name: "Update patient" }).first();
+    await expect(updateLink).toHaveAttribute(
+      "href",
+      "/patients/patient-demo-001/edit?focus=eosinophils"
+    );
+    await updateLink.click();
+    await expect(page).toHaveURL(/\/patients\/patient-demo-001\/edit\?focus=eosinophils$/);
+    await expect(page.getByRole("heading", { name: "Edit patient" })).toBeVisible();
+
     await expect(page.getByText("c260529e-3104-47ac-95bd-4b7064be2a1f")).toHaveCount(0);
   });
 });
