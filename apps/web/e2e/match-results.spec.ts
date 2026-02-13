@@ -52,6 +52,9 @@ test.describe("Match and results flow", () => {
     await expect(page).toHaveURL(/\/patients\/patient-demo-001\/edit\?focus=eosinophils$/);
     await expect(page.getByRole("heading", { name: "Edit patient" })).toBeVisible();
 
+    await expect(page.getByLabel("Lab name")).toHaveValue("eosinophils");
+    await expect(page.getByLabel("Value")).toBeFocused();
+
     await expect(page.getByText("c260529e-3104-47ac-95bd-4b7064be2a1f")).toHaveCount(0);
   });
 });
