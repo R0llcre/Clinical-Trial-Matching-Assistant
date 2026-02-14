@@ -126,6 +126,14 @@
     grid-template-columns: 1fr;
   }
 
+  .workspaceRight {
+    display: none;
+  }
+
+  .workspaceLeft {
+    padding-bottom: calc(84px + env(safe-area-inset-bottom));
+  }
+
   .previewSticky {
     position: static;
     max-height: none;
