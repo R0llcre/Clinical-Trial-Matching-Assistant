@@ -96,6 +96,10 @@
   min-width: 0;
 }
 
+.workspaceRight {
+  align-self: stretch;
+}
+
 .previewSticky {
   position: sticky;
   top: 86px;
