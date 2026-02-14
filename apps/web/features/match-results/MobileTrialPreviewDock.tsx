@@ -1,4 +1,4 @@
-import { useEffect, useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { X } from "lucide-react";
 
 import { Pill } from "../../components/ui/Pill";
@@ -73,6 +73,46 @@ export function MobileTrialPreviewDock({
   onOpenChange,
   onShowChecklist,
 }: Props) {
+  const [isMobile, setIsMobile] = useState(() => {
+    if (typeof window === "undefined") {
+      return false;
+    }
+    return window.matchMedia("(max-width: 720px)").matches;
+  });
+
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+
+    const media = window.matchMedia("(max-width: 720px)");
+    const handler = () => setIsMobile(media.matches);
+    handler();
+
+    if (typeof media.addEventListener === "function") {
+      media.addEventListener("change", handler);
+      return () => {
+        media.removeEventListener("change", handler);
+      };
+    }
+
+    // Safari < 14 fallback
+    const legacy = media as unknown as {
+      addListener?: (cb: () => void) => void;
+      removeListener?: (cb: () => void) => void;
+    };
+    legacy.addListener?.(handler);
+    return () => {
+      legacy.removeListener?.(handler);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!isMobile && open) {
+      onOpenChange(false);
+    }
+  }, [isMobile, open, onOpenChange]);
+
   const nctId = selectedResult?.nct_id ?? "";
   const title = selectedResult?.title || nctId || "Trial preview";
 
@@ -86,7 +126,7 @@ export function MobileTrialPreviewDock({
   );
 
   useEffect(() => {
-    if (!open) {
+    if (!open || !isMobile) {
       return;
     }
     const previous = document.body.style.overflow;
@@ -94,10 +134,10 @@ export function MobileTrialPreviewDock({
     return () => {
       document.body.style.overflow = previous;
     };
-  }, [open]);
+  }, [open, isMobile]);
 
   useEffect(() => {
-    if (!open) {
+    if (!open || !isMobile) {
       return;
     }
     const onKeyDown = (event: KeyboardEvent) => {
@@ -109,9 +149,9 @@ export function MobileTrialPreviewDock({
     return () => {
       window.removeEventListener("keydown", onKeyDown);
     };
-  }, [open, onOpenChange]);
+  }, [open, isMobile, onOpenChange]);
 
-  if (!selectedResult) {
+  if (!isMobile || !selectedResult) {
     return null;
   }
 
@@ -180,4 +220,3 @@ export function MobileTrialPreviewDock({
     </>
   );
 }
-

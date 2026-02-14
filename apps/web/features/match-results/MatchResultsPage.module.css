@@ -119,9 +119,7 @@
     grid-template-columns: 1fr;
     gap: 6px;
   }
-}
 
-@media (max-width: 980px) {
   .workspace {
     grid-template-columns: 1fr;
   }
