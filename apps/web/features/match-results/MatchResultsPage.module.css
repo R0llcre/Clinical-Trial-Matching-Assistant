@@ -84,10 +84,52 @@
   line-height: 1.4;
 }
 
+.workspace {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(320px, 420px);
+  gap: 16px;
+  align-items: start;
+}
+
+.workspaceLeft,
+.workspaceRight {
+  min-width: 0;
+}
+
+.previewSticky {
+  position: sticky;
+  top: 86px;
+  max-height: calc(100vh - 110px);
+  overflow: auto;
+  padding: 2px;
+}
+
+.selectableCard {
+  cursor: pointer;
+}
+
+.selectedCard {
+  border-color: rgba(11, 114, 133, 0.4);
+  box-shadow: 0 42px 92px -80px rgba(11, 114, 133, 0.65);
+}
+
 @media (max-width: 720px) {
   .unknownRow {
     grid-template-columns: 1fr;
     gap: 6px;
+  }
+}
+
+@media (max-width: 980px) {
+  .workspace {
+    grid-template-columns: 1fr;
+  }
+
+  .previewSticky {
+    position: static;
+    max-height: none;
+    overflow: visible;
+    padding: 0;
   }
 }
 

@@ -35,6 +35,7 @@ import {
   withSessionRetry,
 } from "../../lib/session/session";
 import styles from "./MatchResultsPage.module.css";
+import { TrialPreviewPanel } from "./TrialPreviewPanel";
 
 type RuleMeta = {
   type?: "INCLUSION" | "EXCLUSION" | string | null;
@@ -585,6 +586,7 @@ export default function MatchResultsPage() {
   const [exportPdfError, setExportPdfError] = useState<string | null>(null);
   const [rerunning, setRerunning] = useState(false);
   const [rerunError, setRerunError] = useState<string | null>(null);
+  const [selectedNctId, setSelectedNctId] = useState<string>("");
 
   const showDebug = useMemo(() => {
     const envEnabled = process.env.NEXT_PUBLIC_SHOW_AUTH_DEBUG === "1";
@@ -767,12 +769,30 @@ export default function MatchResultsPage() {
     return results.filter((item) => tierFromItem(item) === tierFilter);
   }, [data, tierFilter]);
 
+  useEffect(() => {
+    if (visibleResults.length === 0) {
+      if (selectedNctId) {
+        setSelectedNctId("");
+      }
+      return;
+    }
+
+    const stillVisible = selectedNctId
+      ? visibleResults.some((item) => item.nct_id === selectedNctId)
+      : false;
+
+    if (!stillVisible) {
+      setSelectedNctId(visibleResults[0].nct_id);
+    }
+  }, [selectedNctId, visibleResults]);
+
   const renderTrialCard = (item: MatchResultItem) => {
     const tier = tierFromItem(item);
     const counts = computeCounts(item);
     const phaseText = phaseLabel(item.phase);
     const statusText = statusLabel(item.status);
     const isExpanded = Boolean(expandedByTrial[item.nct_id]);
+    const isSelected = item.nct_id === selectedNctId;
     const showInclusionPass = Boolean(
       showPassBySection[passSectionKey(item.nct_id, "inclusion")]
     );
@@ -783,11 +803,29 @@ export default function MatchResultsPage() {
     const inclusion = ruleGroups(item.checklist.inclusion);
     const exclusion = ruleGroups(item.checklist.exclusion);
 
-    const toggleExpanded = () =>
+    const selectTrial = () => setSelectedNctId(item.nct_id);
+
+    const toggleExpanded = () => {
+      selectTrial();
       setExpandedByTrial((prev) => ({
         ...prev,
         [item.nct_id]: !isExpanded,
       }));
+    };
+
+    const onCardClick = (event: { target: EventTarget | null }) => {
+      const target = event.target;
+      if (!(target instanceof HTMLElement)) {
+        selectTrial();
+        return;
+      }
+
+      const interactive = target.closest("a,button,input,select,textarea,summary");
+      if (interactive) {
+        return;
+      }
+      selectTrial();
+    };
 
     const toggleInclusionPass = () =>
       setShowPassBySection((prev) => ({
@@ -908,7 +946,13 @@ export default function MatchResultsPage() {
     const openTrialHref = `/trials/${encodeURIComponent(item.nct_id)}`;
 
     return (
-      <Card key={item.nct_id} className="result-card-v3">
+      <Card
+        key={item.nct_id}
+        className={`result-card-v3 ${styles.selectableCard} ${
+          isSelected ? styles.selectedCard : ""
+        }`}
+        onClick={onCardClick}
+      >
         <div className="result-card-v3__header">
           <div className="result-card-v3__title">
             <div className="result-card-v3__pills">
@@ -1454,34 +1498,42 @@ export default function MatchResultsPage() {
           ) : null}
 
           {data.results.length > 0 ? (
-            <div className="results-groups">
-              {groupedVisible?.map(({ tier, items }) => {
-                if (items.length === 0) {
-                  return null;
-                }
-                return (
-                  <section key={tier} className="results-group">
-                    {tierFilter === "ALL" ? (
-                      <header className="results-group__header">
-                        <div className="results-group__titleRow">
-                          <Pill tone={tierTone[tier]}>{tierLabel[tier]}</Pill>
-                          <div className="results-group__title">
-                            {tier === "ELIGIBLE"
-                              ? "Strong matches"
-                              : tier === "POTENTIAL"
-                                ? "Potential matches"
-                                : "Not eligible"}
-                          </div>
-                        </div>
-                        <div className="results-group__count">{items.length}</div>
-                      </header>
-                    ) : null}
-                    <div className="results-list">
-                      {items.map(renderTrialCard)}
-                    </div>
-                  </section>
-                );
-              })}
+            <div className={styles.workspace}>
+              <div className={styles.workspaceLeft}>
+                <div className="results-groups">
+                  {groupedVisible?.map(({ tier, items }) => {
+                    if (items.length === 0) {
+                      return null;
+                    }
+                    return (
+                      <section key={tier} className="results-group">
+                        {tierFilter === "ALL" ? (
+                          <header className="results-group__header">
+                            <div className="results-group__titleRow">
+                              <Pill tone={tierTone[tier]}>{tierLabel[tier]}</Pill>
+                              <div className="results-group__title">
+                                {tier === "ELIGIBLE"
+                                  ? "Strong matches"
+                                  : tier === "POTENTIAL"
+                                    ? "Potential matches"
+                                    : "Not eligible"}
+                              </div>
+                            </div>
+                            <div className="results-group__count">{items.length}</div>
+                          </header>
+                        ) : null}
+                        <div className="results-list">{items.map(renderTrialCard)}</div>
+                      </section>
+                    );
+                  })}
+                </div>
+              </div>
+
+              <aside className={styles.workspaceRight} aria-label="Trial preview">
+                <div className={styles.previewSticky}>
+                  <TrialPreviewPanel nctId={selectedNctId} />
+                </div>
+              </aside>
             </div>
           ) : null}
         </>

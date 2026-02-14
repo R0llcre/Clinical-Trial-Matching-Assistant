@@ -26,6 +26,15 @@ test.describe("Match and results flow", () => {
       "/patients/patient-demo-001"
     );
     await expect(
+      page.getByText(
+        "Phase 3 randomized study evaluating targeted therapy plus standard of care in adults with HER2-positive breast cancer."
+      )
+    ).toBeVisible();
+    await expect(page.getByRole("link", { name: "Open full trial" })).toHaveAttribute(
+      "href",
+      "/trials/NCT10000001"
+    );
+    await expect(
       page.getByRole("button", { name: /^Strong match/ })
     ).toBeVisible();
     await page.getByRole("button", { name: /Potential/ }).click();
