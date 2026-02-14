@@ -1,0 +1,169 @@
+.card {
+  display: grid;
+  gap: 14px;
+}
+
+.header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 14px;
+  flex-wrap: wrap;
+}
+
+.heading {
+  min-width: 0;
+  display: grid;
+  gap: 8px;
+}
+
+.kicker {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.18em;
+  color: var(--muted);
+}
+
+.title {
+  font-family: var(--font-display), ui-serif, Georgia, serif;
+  font-size: 20px;
+  line-height: 1.2;
+  color: var(--ink);
+  word-break: break-word;
+}
+
+.metaRow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+
+.smallMeta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.dot {
+  opacity: 0.6;
+}
+
+.loading {
+  display: grid;
+  gap: 10px;
+  padding: 4px 0;
+}
+
+.errorBox {
+  border: 1px solid rgba(180, 35, 24, 0.18);
+  background: rgba(180, 35, 24, 0.06);
+  border-radius: 14px;
+  padding: 12px;
+  display: grid;
+  gap: 10px;
+}
+
+.errorTitle {
+  font-weight: 900;
+  color: var(--ink);
+}
+
+.errorBody {
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--muted);
+}
+
+.body {
+  display: grid;
+  gap: 12px;
+}
+
+.section {
+  display: grid;
+  gap: 10px;
+}
+
+.summary {
+  font-size: 14px;
+  line-height: 1.6;
+  color: var(--ink);
+}
+
+.placeholder {
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--muted);
+}
+
+.eligibilityText {
+  white-space: pre-wrap;
+  font-size: 13px;
+  line-height: 1.55;
+  color: var(--ink);
+}
+
+.eligibilityCollapsed {
+  max-height: 220px;
+  overflow: hidden;
+  position: relative;
+}
+
+.eligibilityCollapsed::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    180deg,
+    rgba(255, 255, 255, 0) 0%,
+    var(--card) 92%
+  );
+  pointer-events: none;
+}
+
+.parsedStats {
+  border: 1px solid rgba(11, 18, 32, 0.08);
+  background: rgba(245, 247, 251, 0.72);
+  border-radius: 14px;
+  padding: 12px;
+  display: grid;
+  gap: 8px;
+}
+
+.statRow {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.statLabel {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+.statValue {
+  font-weight: 900;
+  color: var(--ink);
+  white-space: nowrap;
+}
+
+.fieldPills {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.parsedHint {
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--muted);
+}
+
