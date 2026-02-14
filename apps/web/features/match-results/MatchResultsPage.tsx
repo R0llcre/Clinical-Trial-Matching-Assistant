@@ -35,6 +35,7 @@ import {
   withSessionRetry,
 } from "../../lib/session/session";
 import styles from "./MatchResultsPage.module.css";
+import { MobileTrialPreviewDock } from "./MobileTrialPreviewDock";
 import { TrialPreviewPanel } from "./TrialPreviewPanel";
 import type {
   MatchResultItem,
@@ -545,6 +546,7 @@ export default function MatchResultsPage() {
   const [rerunning, setRerunning] = useState(false);
   const [rerunError, setRerunError] = useState<string | null>(null);
   const [selectedNctId, setSelectedNctId] = useState<string>("");
+  const [mobilePreviewOpen, setMobilePreviewOpen] = useState(false);
 
   const showDebug = useMemo(() => {
     const envEnabled = process.env.NEXT_PUBLIC_SHOW_AUTH_DEBUG === "1";
@@ -750,6 +752,18 @@ export default function MatchResultsPage() {
     }
     return data.results.find((item) => item.nct_id === selectedNctId) ?? null;
   }, [data, selectedNctId]);
+
+  const showChecklistForSelected = () => {
+    setMobilePreviewOpen(false);
+    if (!selectedNctId) {
+      return;
+    }
+    if (typeof window === "undefined") {
+      focusTrial(selectedNctId);
+      return;
+    }
+    window.setTimeout(() => focusTrial(selectedNctId), 0);
+  };
 
   const focusTrial = (nctId: string) => {
     const trimmed = nctId.trim();
@@ -1525,10 +1539,18 @@ export default function MatchResultsPage() {
                   <TrialPreviewPanel
                     selectedResult={selectedResult}
                     patientProfileId={data?.patient_profile_id ?? ""}
-                    onShowChecklist={() => focusTrial(selectedNctId)}
+                    onShowChecklist={showChecklistForSelected}
                   />
                 </div>
               </aside>
+
+              <MobileTrialPreviewDock
+                selectedResult={selectedResult}
+                patientProfileId={data?.patient_profile_id ?? ""}
+                open={mobilePreviewOpen}
+                onOpenChange={setMobilePreviewOpen}
+                onShowChecklist={showChecklistForSelected}
+              />
             </div>
           ) : null}
         </>
