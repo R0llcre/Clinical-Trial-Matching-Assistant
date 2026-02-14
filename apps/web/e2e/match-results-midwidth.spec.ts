@@ -26,9 +26,25 @@ test.describe("Match results midwidth layout", () => {
     expect(previewBox).not.toBeNull();
     expect(previewBox!.x).toBeGreaterThan(cardBox!.x + cardBox!.width / 2);
 
-    await firstCard.getByRole("button", { name: "Show details" }).click();
-    await page.evaluate(() => window.scrollBy(0, 1200));
-    await expect(preview).toBeVisible();
+    const cards = page.locator(".result-card-v3");
+    const cardCount = await cards.count();
+    for (let i = 0; i < cardCount; i += 1) {
+      await cards.nth(i).getByRole("button", { name: "Show details" }).click();
+    }
+
+    // Reset scroll so we can validate sticky behavior from a known position.
+    await page.evaluate(() => window.scrollTo(0, 0));
+    await page.waitForTimeout(100);
+
+    const sticky = page.locator('aside[aria-label="Trial preview"] > div').first();
+    await expect(sticky).toBeVisible();
+
+    await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
+    await page.waitForTimeout(100);
+    await expect(sticky).toBeVisible();
+    const afterScrollBox = await sticky.boundingBox();
+    expect(afterScrollBox).not.toBeNull();
+    // Sticky should pin the preview near the topbar offset instead of scrolling away.
+    expect(afterScrollBox!.y).toBeLessThan(140);
   });
 });
-
