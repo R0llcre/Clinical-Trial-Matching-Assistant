@@ -36,52 +36,11 @@ import {
 } from "../../lib/session/session";
 import styles from "./MatchResultsPage.module.css";
 import { TrialPreviewPanel } from "./TrialPreviewPanel";
-
-type RuleMeta = {
-  type?: "INCLUSION" | "EXCLUSION" | string | null;
-  field?: string | null;
-  operator?: string | null;
-  value?: string | number | string[] | null | Record<string, unknown>;
-  unit?: string | null;
-  time_window?: string | null;
-  certainty?: "high" | "medium" | "low" | string | null;
-};
-
-type EvaluationMeta = {
-  missing_field?: string | null;
-  reason?: string | null;
-  reason_code?: string | null;
-  required_action?: string | null;
-};
-
-type RuleVerdict = {
-  rule_id: string;
-  verdict: "PASS" | "FAIL" | "UNKNOWN";
-  evidence: string;
-  rule_meta?: RuleMeta;
-  evaluation_meta?: EvaluationMeta;
-};
-
-type MatchResultItem = {
-  nct_id: string;
-  title?: string;
-  status?: string;
-  phase?: string;
-  score: number;
-  certainty: number;
-  match_summary?: {
-    tier: "ELIGIBLE" | "POTENTIAL" | "INELIGIBLE";
-    pass: number;
-    fail: number;
-    unknown: number;
-    missing: number;
-  };
-  checklist: {
-    inclusion: RuleVerdict[];
-    exclusion: RuleVerdict[];
-    missing_info: string[];
-  };
-};
+import type {
+  MatchResultItem,
+  MatchTier,
+  RuleVerdict,
+} from "./types";
 
 type MatchData = {
   id: string;
@@ -129,7 +88,6 @@ type PatientResponse = {
   };
 };
 
-type MatchTier = "ELIGIBLE" | "POTENTIAL" | "INELIGIBLE";
 type TierFilter = "ALL" | MatchTier;
 
 const tierLabel: Record<MatchTier, string> = {
@@ -786,6 +744,38 @@ export default function MatchResultsPage() {
     }
   }, [selectedNctId, visibleResults]);
 
+  const selectedResult = useMemo(() => {
+    if (!data || !selectedNctId) {
+      return null;
+    }
+    return data.results.find((item) => item.nct_id === selectedNctId) ?? null;
+  }, [data, selectedNctId]);
+
+  const focusTrial = (nctId: string) => {
+    const trimmed = nctId.trim();
+    if (!trimmed) {
+      return;
+    }
+    setSelectedNctId(trimmed);
+    setExpandedByTrial((prev) => ({
+      ...prev,
+      [trimmed]: true,
+    }));
+
+    if (typeof window === "undefined") {
+      return;
+    }
+    const scroll = () => {
+      const element = document.getElementById(`result-${trimmed}`);
+      element?.scrollIntoView({ behavior: "smooth", block: "start" });
+    };
+    if (typeof window.requestAnimationFrame === "function") {
+      window.requestAnimationFrame(scroll);
+      return;
+    }
+    window.setTimeout(scroll, 0);
+  };
+
   const renderTrialCard = (item: MatchResultItem) => {
     const tier = tierFromItem(item);
     const counts = computeCounts(item);
@@ -948,6 +938,7 @@ export default function MatchResultsPage() {
     return (
       <Card
         key={item.nct_id}
+        id={`result-${item.nct_id}`}
         className={`result-card-v3 ${styles.selectableCard} ${
           isSelected ? styles.selectedCard : ""
         }`}
@@ -1531,7 +1522,11 @@ export default function MatchResultsPage() {
 
               <aside className={styles.workspaceRight} aria-label="Trial preview">
                 <div className={styles.previewSticky}>
-                  <TrialPreviewPanel nctId={selectedNctId} />
+                  <TrialPreviewPanel
+                    selectedResult={selectedResult}
+                    patientProfileId={data?.patient_profile_id ?? ""}
+                    onShowChecklist={() => focusTrial(selectedNctId)}
+                  />
                 </div>
               </aside>
             </div>

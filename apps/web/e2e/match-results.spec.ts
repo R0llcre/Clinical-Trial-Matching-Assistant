@@ -25,11 +25,6 @@ test.describe("Match and results flow", () => {
       "href",
       "/patients/patient-demo-001"
     );
-    await expect(
-      page.getByText(
-        "Phase 3 randomized study evaluating targeted therapy plus standard of care in adults with HER2-positive breast cancer."
-      )
-    ).toBeVisible();
     await expect(page.getByRole("link", { name: "Open full trial" })).toHaveAttribute(
       "href",
       "/trials/NCT10000001"
@@ -39,20 +34,12 @@ test.describe("Match and results flow", () => {
     ).toBeVisible();
     await page.getByRole("button", { name: /Potential/ }).click();
 
-    await page
-      .locator(".result-card-v3")
-      .first()
-      .getByRole("button", { name: "Show details" })
-      .click();
+    const preview = page.getByRole("complementary", { name: "Trial preview" });
+    await expect(preview.getByText("Key issues")).toBeVisible();
+    await expect(preview.getByText("Add lab value: eosinophils")).toBeVisible();
+    await expect(preview.getByText("Include units and date measured.")).toBeVisible();
 
-    await expect(
-      page.getByText("Requires lab value at least 150 cells/uL")
-    ).toBeVisible();
-    await expect(page.getByText("What to collect next")).toBeVisible();
-    await expect(page.getByText("Add lab value: eosinophils")).toBeVisible();
-    await expect(page.getByText("Include units and date measured.")).toBeVisible();
-
-    const updateLink = page.getByRole("link", { name: "Update patient" }).first();
+    const updateLink = preview.getByRole("link", { name: "Update patient" }).first();
     await expect(updateLink).toHaveAttribute(
       "href",
       "/patients/patient-demo-001/edit?focus=eosinophils"

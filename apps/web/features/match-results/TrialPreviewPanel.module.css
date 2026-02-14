@@ -24,6 +24,12 @@
   color: var(--muted);
 }
 
+.hint {
+  font-size: 13px;
+  line-height: 1.4;
+  color: var(--muted);
+}
+
 .title {
   font-family: var(--font-display), ui-serif, Georgia, serif;
   font-size: 20px;
@@ -39,6 +45,67 @@
   align-items: center;
 }
 
+.snapshot {
+  border: 1px solid rgba(11, 18, 32, 0.08);
+  background: rgba(245, 247, 251, 0.72);
+  border-radius: 16px;
+  padding: 12px;
+  display: grid;
+  gap: 10px;
+}
+
+.snapshotHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.snapshotTitle {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.16em;
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+.snapshotMetrics {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.metric {
+  border: 1px solid rgba(11, 18, 32, 0.08);
+  border-radius: 14px;
+  padding: 10px 10px;
+  display: grid;
+  gap: 6px;
+  background: var(--card);
+}
+
+.metricLabel {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+.metricValue {
+  font-size: 18px;
+  font-weight: 900;
+  color: var(--ink);
+  white-space: nowrap;
+}
+
+.snapshotCounts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
 .smallMeta {
   display: flex;
   flex-wrap: wrap;
@@ -52,27 +119,136 @@
   opacity: 0.6;
 }
 
+.issues {
+  display: grid;
+  gap: 10px;
+}
+
+.sectionTitle {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.16em;
+  color: var(--muted);
+}
+
+.issuesList {
+  display: grid;
+  gap: 10px;
+}
+
+.issueItem {
+  border: 1px solid rgba(11, 18, 32, 0.08);
+  border-radius: 16px;
+  padding: 12px;
+  background: var(--card);
+  display: grid;
+  gap: 10px;
+}
+
+.issueHeader {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+}
+
+.issueTitle {
+  font-size: 14px;
+  line-height: 1.4;
+  color: var(--ink);
+  min-width: 0;
+}
+
+.issueReason {
+  font-size: 13px;
+  line-height: 1.45;
+  color: var(--muted);
+}
+
+.unknownCallout {
+  border: 1px solid var(--border);
+  background: rgba(245, 158, 11, 0.08);
+  border-radius: 14px;
+  padding: 12px;
+  display: grid;
+  gap: 8px;
+}
+
+.calloutRow {
+  display: grid;
+  grid-template-columns: 160px 1fr;
+  gap: 10px;
+  align-items: start;
+}
+
+.calloutLabel {
+  font-size: 12px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin-top: 2px;
+}
+
+.calloutValue {
+  font-size: 13px;
+  color: var(--ink);
+  line-height: 1.45;
+}
+
+.calloutDetail {
+  margin-top: 4px;
+  color: var(--muted);
+}
+
+.calloutActions {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.okBox {
+  border: 1px solid rgba(11, 18, 32, 0.08);
+  background: rgba(16, 185, 129, 0.08);
+  border-radius: 16px;
+  padding: 12px;
+  display: grid;
+  gap: 10px;
+}
+
+.okTitle {
+  font-weight: 900;
+  color: var(--ink);
+}
+
+.okList {
+  margin: 0;
+  padding-left: 18px;
+  display: grid;
+  gap: 6px;
+  color: var(--ink);
+  font-size: 13px;
+  line-height: 1.45;
+}
+
 .loading {
   display: grid;
   gap: 10px;
   padding: 4px 0;
 }
 
-.errorBox {
-  border: 1px solid rgba(180, 35, 24, 0.18);
-  background: rgba(180, 35, 24, 0.06);
-  border-radius: 14px;
+.inlineError {
+  border: 1px solid rgba(11, 18, 32, 0.08);
+  background: rgba(245, 247, 251, 0.72);
+  border-radius: 16px;
   padding: 12px;
   display: grid;
   gap: 10px;
 }
 
-.errorTitle {
+.inlineErrorTitle {
   font-weight: 900;
   color: var(--ink);
 }
 
-.errorBody {
+.inlineErrorBody {
   font-size: 13px;
   line-height: 1.5;
   color: var(--muted);
@@ -167,3 +343,13 @@
   color: var(--muted);
 }
 
+@media (max-width: 720px) {
+  .calloutRow {
+    grid-template-columns: 1fr;
+    gap: 6px;
+  }
+
+  .snapshotMetrics {
+    grid-template-columns: 1fr;
+  }
+}
