@@ -16,6 +16,9 @@ test.describe("Topbar mobile navigation", () => {
     await menuButton.click();
 
     const drawer = page.getByRole("dialog", { name: "Navigation" });
+    const drawerBox = await drawer.boundingBox();
+    expect(drawerBox).not.toBeNull();
+    expect(drawerBox!.height).toBeGreaterThan(300);
     await expect(drawer.getByRole("link", { name: "Patients" })).toBeVisible();
     await drawer.getByRole("link", { name: "Patients" }).click();
 
@@ -28,4 +31,3 @@ test.describe("Topbar mobile navigation", () => {
     expect(overflowAfter).toBeLessThanOrEqual(1);
   });
 });
-

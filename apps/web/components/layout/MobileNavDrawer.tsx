@@ -2,6 +2,7 @@ import Link from "next/link";
 import { useRouter } from "next/router";
 import { Menu, X } from "lucide-react";
 import { useEffect, useId, useState } from "react";
+import { createPortal } from "react-dom";
 
 import styles from "./MobileNavDrawer.module.css";
 
@@ -20,12 +21,17 @@ export function MobileNavDrawer({ items }: Props) {
   const router = useRouter();
   const drawerId = useId();
   const [open, setOpen] = useState(false);
+  const [portalTarget, setPortalTarget] = useState<HTMLElement | null>(null);
   const [isMobile, setIsMobile] = useState(() => {
     if (typeof window === "undefined") {
       return false;
     }
     return window.matchMedia("(max-width: 720px)").matches;
   });
+
+  useEffect(() => {
+    setPortalTarget(document.body);
+  }, []);
 
   useEffect(() => {
     if (typeof window === "undefined") {
@@ -95,6 +101,7 @@ export function MobileNavDrawer({ items }: Props) {
   }, [router.events]);
 
   const showOverlay = open && isMobile;
+  const shouldRenderOverlay = showOverlay && portalTarget;
 
   return (
     <>
@@ -112,66 +119,70 @@ export function MobileNavDrawer({ items }: Props) {
         Menu
       </button>
 
-      {showOverlay ? (
-        <>
-          <div className={styles.backdrop} onClick={() => setOpen(false)} />
-          <aside
-            id={drawerId}
-            role="dialog"
-            aria-modal="true"
-            aria-label="Navigation"
-            className={styles.drawer}
-          >
-            <div className={styles.header}>
-              <div className={styles.title}>Navigation</div>
-              <button
-                type="button"
-                className="ui-button ui-button--ghost ui-button--sm"
-                aria-label="Close navigation"
-                onClick={() => setOpen(false)}
+      {shouldRenderOverlay
+        ? createPortal(
+            <>
+              <div className={styles.backdrop} onClick={() => setOpen(false)} />
+              <aside
+                id={drawerId}
+                role="dialog"
+                aria-modal="true"
+                aria-label="Navigation"
+                className={styles.drawer}
               >
-                <span className="ui-button__icon" aria-hidden="true">
-                  <X size={18} />
-                </span>
-                Close
-              </button>
-            </div>
-
-            <nav className={styles.body}>
-              {items.map((item) => {
-                const className = `${styles.link} ${item.active ? styles.linkActive : ""}`;
-                if (item.external) {
-                  return (
-                    <a
-                      key={item.label}
-                      className={className}
-                      href={item.href}
-                      target="_blank"
-                      rel="noreferrer"
-                      onClick={() => setOpen(false)}
-                    >
-                      {item.label}
-                    </a>
-                  );
-                }
-                return (
-                  <Link
-                    key={item.label}
-                    className={className}
-                    href={item.href}
+                <div className={styles.header}>
+                  <div className={styles.title}>Navigation</div>
+                  <button
+                    type="button"
+                    className="ui-button ui-button--ghost ui-button--sm"
+                    aria-label="Close navigation"
                     onClick={() => setOpen(false)}
                   >
-                    {item.label}
-                  </Link>
-                );
-              })}
-            </nav>
+                    <span className="ui-button__icon" aria-hidden="true">
+                      <X size={18} />
+                    </span>
+                    Close
+                  </button>
+                </div>
 
-            <div className={styles.footer} />
-          </aside>
-        </>
-      ) : null}
+                <nav className={styles.body}>
+                  {items.map((item) => {
+                    const className = `${styles.link} ${
+                      item.active ? styles.linkActive : ""
+                    }`;
+                    if (item.external) {
+                      return (
+                        <a
+                          key={item.label}
+                          className={className}
+                          href={item.href}
+                          target="_blank"
+                          rel="noreferrer"
+                          onClick={() => setOpen(false)}
+                        >
+                          {item.label}
+                        </a>
+                      );
+                    }
+                    return (
+                      <Link
+                        key={item.label}
+                        className={className}
+                        href={item.href}
+                        onClick={() => setOpen(false)}
+                      >
+                        {item.label}
+                      </Link>
+                    );
+                  })}
+                </nav>
+
+                <div className={styles.footer} />
+              </aside>
+            </>,
+            portalTarget
+          )
+        : null}
     </>
   );
 }
-
