@@ -3,6 +3,7 @@ import Link from "next/link";
 import { useRouter } from "next/router";
 import { Fraunces, Space_Grotesk } from "next/font/google";
 import "../styles/globals.css";
+import { MobileNavDrawer } from "../components/layout/MobileNavDrawer";
 
 const displayFont = Fraunces({
   subsets: ["latin"],
@@ -30,6 +31,14 @@ export default function App({ Component, pageProps }: AppProps) {
     router.pathname === "/match" || router.pathname.startsWith("/matches");
   const isAbout = router.pathname === "/about";
 
+  const navItems = [
+    { label: "Browse", href: "/", active: isBrowse },
+    { label: "Patients", href: "/patients", active: isPatients },
+    { label: "Match", href: "/match", active: isMatch },
+    { label: "About", href: "/about", active: isAbout },
+    { label: "API Docs", href: docsHref, external: true },
+  ];
+
   return (
     <div className={`${displayFont.variable} ${bodyFont.variable} app-root`}>
       <header className="topbar">
@@ -44,36 +53,32 @@ export default function App({ Component, pageProps }: AppProps) {
             </span>
           </Link>
           <nav className="topnav">
-            <Link href="/" className={`topnav-link ${isBrowse ? "active" : ""}`}>
-              Browse
-            </Link>
-            <Link
-              href="/patients"
-              className={`topnav-link ${isPatients ? "active" : ""}`}
-            >
-              Patients
-            </Link>
-            <Link
-              href="/match"
-              className={`topnav-link ${isMatch ? "active" : ""}`}
-            >
-              Match
-            </Link>
-            <Link
-              href="/about"
-              className={`topnav-link ${isAbout ? "active" : ""}`}
-            >
-              About
-            </Link>
-            <a
-              className="topnav-link"
-              href={docsHref}
-              target="_blank"
-              rel="noreferrer"
-            >
-              API Docs
-            </a>
+            {navItems.map((item) => {
+              if (item.external) {
+                return (
+                  <a
+                    key={item.label}
+                    className="topnav-link"
+                    href={item.href}
+                    target="_blank"
+                    rel="noreferrer"
+                  >
+                    {item.label}
+                  </a>
+                );
+              }
+              return (
+                <Link
+                  key={item.label}
+                  href={item.href}
+                  className={`topnav-link ${item.active ? "active" : ""}`}
+                >
+                  {item.label}
+                </Link>
+              );
+            })}
           </nav>
+          <MobileNavDrawer items={navItems} />
         </div>
       </header>
       <Component {...pageProps} />
