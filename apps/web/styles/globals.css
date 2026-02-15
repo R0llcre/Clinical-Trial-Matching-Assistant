@@ -154,6 +154,10 @@ body {
   gap: 10px;
 }
 
+.topnavToggle {
+  display: none;
+}
+
 .topnav-link {
   font-size: 14px;
   color: var(--muted);
@@ -173,6 +177,16 @@ body {
   color: var(--ink);
   background: rgba(255, 255, 255, 0.65);
   border-color: rgba(11, 114, 133, 0.22);
+}
+
+@media (max-width: 720px) {
+  .topnav {
+    display: none;
+  }
+
+  .topnavToggle {
+    display: inline-flex;
+  }
 }
 
 body::before {
