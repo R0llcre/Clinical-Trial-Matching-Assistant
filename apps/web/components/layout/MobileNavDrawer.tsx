@@ -1,7 +1,17 @@
 import Link from "next/link";
 import { useRouter } from "next/router";
-import { Menu, X } from "lucide-react";
-import { useEffect, useId, useState } from "react";
+import {
+  ArrowUpRight,
+  BookOpen,
+  ChevronRight,
+  Info,
+  Menu,
+  Search,
+  Sparkles,
+  Users,
+  X,
+} from "lucide-react";
+import { type ReactNode, useEffect, useId, useState } from "react";
 import { createPortal } from "react-dom";
 
 import styles from "./MobileNavDrawer.module.css";
@@ -15,6 +25,22 @@ type NavItem = {
 
 type Props = {
   items: NavItem[];
+};
+
+const itemDescriptions: Record<string, string> = {
+  Browse: "Explore synced trials and filters.",
+  Patients: "Save patient profiles and match history.",
+  Match: "Run a match with structured checks.",
+  About: "Data sources, limits, and safety notes.",
+  "API Docs": "OpenAPI / Swagger reference.",
+};
+
+const itemIcons: Record<string, ReactNode> = {
+  Browse: <Search size={18} />,
+  Patients: <Users size={18} />,
+  Match: <Sparkles size={18} />,
+  About: <Info size={18} />,
+  "API Docs": <BookOpen size={18} />,
 };
 
 export function MobileNavDrawer({ items }: Props) {
@@ -131,7 +157,15 @@ export function MobileNavDrawer({ items }: Props) {
                 className={styles.drawer}
               >
                 <div className={styles.header}>
-                  <div className={styles.title}>Navigation</div>
+                  <div className={styles.headerLeft}>
+                    <div className={styles.brandMark} aria-hidden="true">
+                      <div className={styles.brandDot} />
+                    </div>
+                    <div>
+                      <div className={styles.title}>CTMatch</div>
+                      <div className={styles.subtitle}>Menu</div>
+                    </div>
+                  </div>
                   <button
                     type="button"
                     className="ui-button ui-button--ghost ui-button--sm"
@@ -150,6 +184,13 @@ export function MobileNavDrawer({ items }: Props) {
                     const className = `${styles.link} ${
                       item.active ? styles.linkActive : ""
                     }`;
+                    const description = itemDescriptions[item.label] ?? "";
+                    const icon = itemIcons[item.label] ?? <ChevronRight size={18} />;
+                    const suffix = item.external ? (
+                      <ArrowUpRight size={16} />
+                    ) : (
+                      <ChevronRight size={16} />
+                    );
                     if (item.external) {
                       return (
                         <a
@@ -158,9 +199,23 @@ export function MobileNavDrawer({ items }: Props) {
                           href={item.href}
                           target="_blank"
                           rel="noreferrer"
+                          aria-label={item.label}
                           onClick={() => setOpen(false)}
                         >
-                          {item.label}
+                          <span className={styles.linkIcon} aria-hidden="true">
+                            {icon}
+                          </span>
+                          <span className={styles.linkText}>
+                            <span className={styles.linkLabel}>{item.label}</span>
+                            {description ? (
+                              <span className={styles.linkDescription} aria-hidden="true">
+                                {description}
+                              </span>
+                            ) : null}
+                          </span>
+                          <span className={styles.linkSuffix} aria-hidden="true">
+                            {suffix}
+                          </span>
                         </a>
                       );
                     }
@@ -169,9 +224,23 @@ export function MobileNavDrawer({ items }: Props) {
                         key={item.label}
                         className={className}
                         href={item.href}
+                        aria-label={item.label}
                         onClick={() => setOpen(false)}
                       >
-                        {item.label}
+                        <span className={styles.linkIcon} aria-hidden="true">
+                          {icon}
+                        </span>
+                        <span className={styles.linkText}>
+                          <span className={styles.linkLabel}>{item.label}</span>
+                          {description ? (
+                            <span className={styles.linkDescription} aria-hidden="true">
+                              {description}
+                            </span>
+                          ) : null}
+                        </span>
+                        <span className={styles.linkSuffix} aria-hidden="true">
+                          {suffix}
+                        </span>
                       </Link>
                     );
                   })}

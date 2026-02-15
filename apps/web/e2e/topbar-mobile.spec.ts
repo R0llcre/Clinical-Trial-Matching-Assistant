@@ -19,6 +19,8 @@ test.describe("Topbar mobile navigation", () => {
     const drawerBox = await drawer.boundingBox();
     expect(drawerBox).not.toBeNull();
     expect(drawerBox!.height).toBeGreaterThan(300);
+    const bgColor = await drawer.evaluate((el) => getComputedStyle(el).backgroundColor);
+    expect(bgColor).not.toBe("rgba(0, 0, 0, 0)");
     await expect(drawer.getByRole("link", { name: "Patients" })).toBeVisible();
     await drawer.getByRole("link", { name: "Patients" }).click();
 
